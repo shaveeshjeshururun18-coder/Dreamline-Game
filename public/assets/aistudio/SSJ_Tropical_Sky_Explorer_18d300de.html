@@ -1,0 +1,1892 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>SSJ Tropical Sky Explorer — Paradise Island</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@700;900&family=Chakra+Petch:ital,wght@0,500;0,700;1,700&family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+    <style>
+        * {
+            user-select: none;
+            -webkit-user-select: none;
+            box-sizing: border-box;
+        }
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #0b4f6c;
+            font-family: 'Inter', sans-serif;
+        }
+        #game-canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            cursor: grab;
+        }
+        #game-canvas:active {
+            cursor: grabbing;
+        }
+        .font-cinzel {
+            font-family: 'Cinzel', serif;
+        }
+        .font-speed {
+            font-family: 'Chakra Petch', sans-serif;
+        }
+        /* HUD Custom Styling matching Reference Image */
+        .ssj-panel {
+            background: linear-gradient(135deg, rgba(10, 28, 48, 0.88) 0%, rgba(7, 19, 34, 0.94) 100%);
+            border: 1.5px solid rgba(212, 175, 55, 0.55);
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45), inset 0 0 15px rgba(212, 175, 55, 0.12);
+            backdrop-filter: blur(6px);
+        }
+        .speed-dial {
+            background: radial-gradient(circle at center, rgba(10, 42, 68, 0.82) 0%, rgba(6, 24, 42, 0.92) 70%, rgba(0, 180, 255, 0.25) 100%);
+            border: 2px solid rgba(56, 189, 248, 0.65);
+            box-shadow: 0 0 25px rgba(14, 165, 233, 0.45), inset 0 0 20px rgba(14, 165, 233, 0.25);
+            backdrop-filter: blur(6px);
+        }
+        .minimap-ring {
+            border: 3px solid rgba(203, 213, 225, 0.7);
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5), inset 0 0 18px rgba(0, 0, 0, 0.6);
+            background: radial-gradient(circle, #0e7490 0%, #083344 100%);
+        }
+        .key-badge {
+            background: rgba(255, 255, 255, 0.92);
+            color: #0f172a;
+            font-weight: 800;
+            font-size: 0.75rem;
+            padding: 2px 8px;
+            border-radius: 4px;
+            box-shadow: 0 2px 0 #94a3b8, 0 3px 6px rgba(0,0,0,0.35);
+            min-width: 26px;
+            text-align: center;
+            display: inline-block;
+            transition: all 0.1s ease;
+        }
+        .key-badge.active {
+            background: #38bdf8;
+            color: #082f49;
+            transform: translateY(1px);
+            box-shadow: 0 1px 0 #0284c7;
+        }
+        .control-row {
+            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.85);
+            cursor: pointer;
+            transition: transform 0.1s ease;
+        }
+        .control-row:active {
+            transform: scale(0.96);
+        }
+        .gold-text {
+            background: linear-gradient(to bottom, #fde047 0%, #eab308 50%, #ca8a04 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            filter: drop-shadow(0 2px 3px rgba(0,0,0,0.6));
+        }
+    </style>
+</head>
+<body class="relative select-none">
+
+    <!-- 3D WebGL Canvas -->
+    <canvas id="game-canvas"></canvas>
+
+    <!-- ==================== HUD OVERLAY ==================== -->
+    <div class="fixed inset-0 pointer-events-none flex flex-col justify-between p-3 sm:p-5 z-10">
+
+        <!-- TOP BAR: Minimap (Left), Objectives/Camera Hint (Center), SSJ Brand Banner (Right) -->
+        <div class="flex justify-between items-start w-full">
+
+            <!-- TOP LEFT: Circular Radar Minimap -->
+            <div class="relative pointer-events-auto group">
+                <div class="w-28 h-28 sm:w-36 sm:h-36 rounded-full minimap-ring relative overflow-hidden">
+                    <canvas id="minimap-canvas" width="160" height="160" class="w-full h-full block"></canvas>
+                    <!-- Center Player Arrow -->
+                    <div id="minimap-player" class="absolute inset-0 flex items-center justify-center pointer-events-none">
+                        <svg class="w-5 h-5 text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)]" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M12 2L4.5 20.29l.71.71L12 18l6.79 3 .71-.71z"/>
+                        </svg>
+                    </div>
+                </div>
+                <!-- North Badge -->
+                <div class="absolute -top-2 left-1/2 -translate-x-1/2 bg-slate-900/90 text-white text-xs font-extrabold px-2 py-0.5 rounded border border-slate-500 shadow">
+                    N
+                </div>
+                <!-- Coordinates & Relics Pill -->
+                <div class="mt-2 bg-slate-900/80 backdrop-blur-md border border-amber-400/40 rounded-full px-3 py-1 text-[11px] text-amber-200 flex items-center justify-center gap-2 shadow-lg">
+                    <span>👑 Relics: <strong id="relic-count" class="text-amber-400">0/6</strong></span>
+                    <span class="text-slate-400">|</span>
+                    <span id="mode-indicator" class="text-cyan-300 font-semibold">FLYING</span>
+                </div>
+            </div>
+
+            <!-- TOP CENTER: Interactive Status / Camera & Sound Controls -->
+            <div class="hidden md:flex flex-col items-center gap-2 pointer-events-auto">
+                <div class="bg-slate-950/65 backdrop-blur-md border border-white/15 px-4 py-1.5 rounded-full text-xs text-slate-200 flex items-center gap-3 shadow-lg">
+                    <span>🖱️ Drag to Orbit Camera</span>
+                    <span class="text-slate-500">•</span>
+                    <button id="btn-reset-cam" class="text-cyan-300 hover:text-cyan-200 font-semibold underline">Auto-Follow</button>
+                    <span class="text-slate-500">•</span>
+                    <button id="btn-audio" class="text-amber-300 hover:text-amber-200 font-semibold">🔊 Sound: ON</button>
+                </div>
+                <!-- Dynamic Toast Notification -->
+                <div id="hud-toast" class="transition-all duration-300 opacity-0 transform -translate-y-2 bg-amber-500/90 text-slate-950 font-bold text-xs px-4 py-1.5 rounded-full shadow-lg">
+                    Welcome to Paradise Island!
+                </div>
+            </div>
+
+            <!-- TOP RIGHT: SSJ Explore • Discover • Conquer Crest -->
+            <div class="ssj-panel rounded-xl px-4 py-2 sm:px-6 sm:py-2.5 flex flex-col items-center pointer-events-auto">
+                <!-- Crown SVG -->
+                <svg class="w-7 h-5 sm:w-9 sm:h-6 text-amber-400 drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]" viewBox="0 0 64 40" fill="currentColor">
+                    <path d="M6 34L2 10l14 10L32 4l16 16 14-10-4 24H6zm4 4h44v4H10v-4z"/>
+                    <circle cx="2" cy="8" r="2.5"/>
+                    <circle cx="32" cy="2.5" r="3"/>
+                    <circle cx="62" cy="8" r="2.5"/>
+                </svg>
+                <div class="font-cinzel text-xl sm:text-2xl font-black tracking-widest gold-text leading-none mt-0.5">
+                    SSJ
+                </div>
+                <div class="text-[9px] sm:text-[10px] uppercase tracking-[0.18em] text-amber-200/90 font-semibold mt-0.5">
+                    Explore • Discover • Conquer
+                </div>
+            </div>
+        </div>
+
+        <!-- BOTTOM BAR: Speedometer (Left), Touch Joystick/Buttons on Mobile, Controls + Island Banner (Right) -->
+        <div class="flex justify-between items-end w-full">
+
+            <!-- BOTTOM LEFT: Circular Speedometer & Altitude Gauge -->
+            <div class="relative flex items-end gap-3 pointer-events-auto">
+                <div class="w-28 h-28 sm:w-36 sm:h-36 rounded-full speed-dial relative flex flex-col items-center justify-center p-2">
+                    <!-- SVG Arc Gauge -->
+                    <svg class="w-full h-full absolute inset-0 -rotate-90 p-1.5" viewBox="0 0 120 120">
+                        <circle cx="60" cy="60" r="52" fill="none" stroke="rgba(255,255,255,0.12)" stroke-width="7" stroke-dasharray="230 360" stroke-linecap="round"/>
+                        <circle id="speed-arc" cx="60" cy="60" r="52" fill="none" stroke="#38bdf8" stroke-width="7" stroke-dasharray="0 360" stroke-linecap="round"/>
+                    </svg>
+                    <div class="text-[10px] uppercase tracking-wider text-cyan-300/80 font-bold -mt-1">
+                        ALT <span id="alt-value">24</span>m
+                    </div>
+                    <div id="speed-value" class="font-speed text-3xl sm:text-4xl font-bold italic text-white leading-none tracking-tight drop-shadow-[0_0_10px_rgba(56,189,248,0.8)]">
+                        0
+                    </div>
+                    <div class="text-[10px] sm:text-xs font-bold text-cyan-200 tracking-widest mt-0.5">
+                        KM/H
+                    </div>
+                    <!-- Raft Buggy Silhouette Icon -->
+                    <svg class="w-8 h-4 text-cyan-300/90 mt-1" viewBox="0 0 64 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M10 16h44l4-6H6l4 6z"/>
+                        <path d="M22 10V4h20v6"/>
+                        <ellipse cx="14" cy="19" rx="6" ry="2"/>
+                        <ellipse cx="50" cy="19" rx="6" ry="2"/>
+                    </svg>
+                </div>
+
+                <!-- Quick Teleport / Island Tour Button -->
+                <div class="hidden sm:flex flex-col gap-1.5 mb-1">
+                    <button id="btn-land-beach" class="bg-slate-900/85 hover:bg-slate-800 text-amber-300 border border-amber-400/40 text-xs font-semibold px-3 py-1.5 rounded-lg shadow pointer-events-auto transition">
+                        🏖️ Harbor Dock
+                    </button>
+                    <button id="btn-fly-lighthouse" class="bg-slate-900/85 hover:bg-slate-800 text-cyan-300 border border-cyan-400/40 text-xs font-semibold px-3 py-1.5 rounded-lg shadow pointer-events-auto transition">
+                        🗼 Lighthouse Peak
+                    </button>
+                </div>
+            </div>
+
+            <!-- BOTTOM RIGHT: Control Keybindings & Location Banner -->
+            <div class="flex flex-col items-end gap-3 pointer-events-auto">
+
+                <!-- Keybind List (Clickable/Tappable as well as Keyboard) -->
+                <div class="flex flex-col items-end gap-1.5 text-white text-xs sm:text-sm font-semibold pr-1">
+                    <div class="control-row flex items-center gap-2.5" data-action="forward">
+                        <span>Move Forward</span>
+                        <span id="key-w" class="key-badge">W</span>
+                    </div>
+                    <div class="control-row flex items-center gap-2.5" data-action="backward">
+                        <span>Reverse / Brake</span>
+                        <span id="key-s" class="key-badge">S</span>
+                    </div>
+                    <div class="control-row flex items-center gap-2.5" data-action="up">
+                        <span>Fly Up (Ascend)</span>
+                        <span id="key-space" class="key-badge">Space</span>
+                    </div>
+                    <div class="control-row flex items-center gap-2.5" data-action="down">
+                        <span>Fly Down (Descend)</span>
+                        <span id="key-ctrl" class="key-badge">Ctrl</span>
+                    </div>
+                    <div class="control-row flex items-center gap-2.5" data-action="boost">
+                        <span>Boost Turbines</span>
+                        <span id="key-shift" class="key-badge">Shift</span>
+                    </div>
+                    <div class="control-row flex items-center gap-2.5" data-action="left">
+                        <span>Turn Left</span>
+                        <span id="key-a" class="key-badge">A</span>
+                    </div>
+                    <div class="control-row flex items-center gap-2.5" data-action="right">
+                        <span>Turn Right</span>
+                        <span id="key-d" class="key-badge">D</span>
+                    </div>
+                    <div class="control-row flex items-center gap-2.5" data-action="exit">
+                        <span id="exit-label">Exit Vehicle</span>
+                        <span id="key-e" class="key-badge">E</span>
+                    </div>
+                </div>
+
+                <!-- Location Banner ("Paradise Island - A New Adventure Awaits...") -->
+                <div class="ssj-panel rounded-xl px-4 py-2.5 sm:px-5 sm:py-3 flex items-center gap-3.5 min-w-[235px] sm:min-w-[280px]">
+                    <!-- Golden Palm Tree Icon -->
+                    <div class="w-9 h-9 sm:w-10 sm:h-10 rounded-lg bg-amber-500/15 border border-amber-400/40 flex items-center justify-center shrink-0">
+                        <svg class="w-6 h-6 text-amber-400" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M12 8c-2.21 0-4 1.79-4 4h2c0-1.1.9-2 2-2s2 .9 2 2v8h-4v2h10v-2h-4v-8c2.21 0 4 1.79 4 4h2c0-2.97-2.16-5.43-5-5.91C16.5 5.69 14.48 4 12 4S7.5 5.69 7 8.09C4.16 8.57 2 11.03 2 14h2c0-2.21 1.79-4 4-4 1.04 0 1.98.4 2.69 1.05A3.98 3.98 0 0 1 12 8z"/>
+                        </svg>
+                    </div>
+                    <div>
+                        <div id="zone-title" class="text-white font-extrabold text-sm sm:text-base leading-tight tracking-wide">
+                            Paradise Island
+                        </div>
+                        <div id="zone-subtitle" class="text-amber-400 text-[11px] sm:text-xs font-medium italic mt-0.5">
+                            A New Adventure Awaits...
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== GAME LOGIC & THREE.JS SCENE ==================== -->
+    <script>
+        window.onload = function () {
+            // ------------------------------------------------------------------
+            // 1. PROCEDURAL TEXTURE GENERATORS (Wood, Bamboo, Sail, SSJ Flag)
+            // ------------------------------------------------------------------
+            function createWoodTexture(baseHex, grainHex) {
+                const c = document.createElement('canvas');
+                c.width = 256;
+                c.height = 256;
+                const ctx = c.getContext('2d');
+                ctx.fillStyle = baseHex;
+                ctx.fillRect(0, 0, 256, 256);
+                ctx.fillStyle = grainHex;
+                for (let i = 0; i < 90; i++) {
+                    const y = Math.random() * 256;
+                    const h = 1 + Math.random() * 4;
+                    ctx.globalAlpha = 0.15 + Math.random() * 0.25;
+                    ctx.fillRect(0, y, 256, h);
+                }
+                // Plank divisions
+                ctx.globalAlpha = 0.45;
+                ctx.strokeStyle = '#1f1209';
+                ctx.lineWidth = 2;
+                for (let y = 0; y < 256; y += 32) {
+                    ctx.beginPath();
+                    ctx.moveTo(0, y);
+                    ctx.lineTo(256, y);
+                    ctx.stroke();
+                }
+                const tex = new THREE.CanvasTexture(c);
+                tex.wrapS = THREE.RepeatWrapping;
+                tex.wrapT = THREE.RepeatWrapping;
+                return tex;
+            }
+
+            function createBambooTexture() {
+                const c = document.createElement('canvas');
+                c.width = 128;
+                c.height = 256;
+                const ctx = c.getContext('2d');
+                const grad = ctx.createLinearGradient(0, 0, 128, 0);
+                grad.addColorStop(0, '#856031');
+                grad.addColorStop(0.5, '#b88c4a');
+                grad.addColorStop(1, '#6e4c23');
+                ctx.fillStyle = grad;
+                ctx.fillRect(0, 0, 128, 256);
+
+                // Bamboo vertical fibers
+                ctx.fillStyle = '#523716';
+                for (let i = 0; i < 60; i++) {
+                    ctx.globalAlpha = 0.12;
+                    ctx.fillRect(Math.random() * 128, 0, 2, 256);
+                }
+                // Bamboo nodes (rings)
+                ctx.globalAlpha = 0.7;
+                for (let y = 32; y < 256; y += 64) {
+                    ctx.fillStyle = '#3b260e';
+                    ctx.fillRect(0, y - 3, 128, 6);
+                    ctx.fillStyle = '#d4af6e';
+                    ctx.fillRect(0, y + 3, 128, 2);
+                }
+                const tex = new THREE.CanvasTexture(c);
+                tex.wrapS = THREE.RepeatWrapping;
+                tex.wrapT = THREE.RepeatWrapping;
+                return tex;
+            }
+
+            function createSailCanvasTexture() {
+                const c = document.createElement('canvas');
+                c.width = 256;
+                c.height = 256;
+                const ctx = c.getContext('2d');
+                ctx.fillStyle = '#dfd1b4';
+                ctx.fillRect(0, 0, 256, 256);
+
+                // Subtle fabric weave
+                ctx.strokeStyle = '#c7b595';
+                ctx.lineWidth = 1;
+                ctx.globalAlpha = 0.35;
+                for (let i = 0; i < 256; i += 6) {
+                    ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i, 256); ctx.stroke();
+                    ctx.beginPath(); ctx.moveTo(0, i); ctx.lineTo(256, i); ctx.stroke();
+                }
+
+                // Weathering & hand-stitched patch (matching reference image!)
+                ctx.globalAlpha = 0.85;
+                ctx.fillStyle = '#b59e7a';
+                ctx.fillRect(90, 120, 75, 65);
+                ctx.strokeStyle = '#4a3728';
+                ctx.lineWidth = 2;
+                ctx.setLineDash([4, 4]);
+                ctx.strokeRect(90, 120, 75, 65);
+
+                const tex = new THREE.CanvasTexture(c);
+                return tex;
+            }
+
+            function createSSJFlagTexture() {
+                const c = document.createElement('canvas');
+                c.width = 512;
+                c.height = 320;
+                const ctx = c.getContext('2d');
+
+                // Deep weathered explorer navy/charcoal cloth background
+                const grad = ctx.createLinearGradient(0, 0, 512, 320);
+                grad.addColorStop(0, '#13243a');
+                grad.addColorStop(0.5, '#1b314e');
+                grad.addColorStop(1, '#0f1c2e');
+                ctx.fillStyle = grad;
+                ctx.fillRect(0, 0, 512, 320);
+
+                // Cloth texture grain
+                ctx.fillStyle = '#ffffff';
+                ctx.globalAlpha = 0.04;
+                for (let i = 0; i < 80; i++) {
+                    ctx.fillRect(0, i * 4, 512, 1);
+                }
+                ctx.globalAlpha = 1.0;
+
+                // Gold border trim
+                ctx.strokeStyle = '#eab308';
+                ctx.lineWidth = 6;
+                ctx.strokeRect(12, 12, 488, 296);
+
+                // Golden Crown Emblem
+                ctx.fillStyle = '#facc15';
+                ctx.shadowColor = 'rgba(0,0,0,0.7)';
+                ctx.shadowBlur = 10;
+                ctx.beginPath();
+                ctx.moveTo(186, 150);
+                ctx.lineTo(170, 75);
+                ctx.lineTo(220, 115);
+                ctx.lineTo(256, 60);
+                ctx.lineTo(292, 115);
+                ctx.lineTo(342, 75);
+                ctx.lineTo(326, 150);
+                ctx.closePath();
+                ctx.fill();
+
+                // Crown base bar
+                ctx.fillRect(186, 158, 140, 14);
+
+                // SSJ Typography
+                ctx.font = '900 92px "Cinzel", Georgia, serif';
+                ctx.textAlign = 'center';
+                ctx.fillStyle = '#fde047';
+                ctx.fillText('SSJ', 256, 262);
+
+                const tex = new THREE.CanvasTexture(c);
+                return tex;
+            }
+
+            function createSSJWoodPlateTexture() {
+                const c = document.createElement('canvas');
+                c.width = 256;
+                c.height = 96;
+                const ctx = c.getContext('2d');
+                ctx.fillStyle = '#2d1a0e';
+                ctx.fillRect(0, 0, 256, 96);
+                ctx.strokeStyle = '#ca8a04';
+                ctx.lineWidth = 6;
+                ctx.strokeRect(6, 6, 244, 84);
+                ctx.font = '900 54px "Cinzel", Georgia, serif';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillStyle = '#facc15';
+                ctx.fillText('SSJ', 128, 52);
+                return new THREE.CanvasTexture(c);
+            }
+
+            // ------------------------------------------------------------------
+            // 2. SCENE, CAMERA, RENDERER & LIGHTING
+            // ------------------------------------------------------------------
+            const canvas = document.getElementById('game-canvas');
+            const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            renderer.toneMapping = THREE.ACESFilmicToneMapping;
+            renderer.toneMappingExposure = 1.1;
+
+            const scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x38bdf8);
+            scene.fog = new THREE.FogExp2(0x7dd3fc, 0.00075);
+
+            const camera = new THREE.PerspectiveCamera(58, window.innerWidth / window.innerHeight, 0.5, 2200);
+
+            // Sky Dome Gradient
+            const skyGeo = new THREE.SphereGeometry(1600, 32, 24);
+            const skyMat = new THREE.ShaderMaterial({
+                side: THREE.BackSide,
+                uniforms: {
+                    topColor: { value: new THREE.Color(0x0284c7) },
+                    midColor: { value: new THREE.Color(0x38bdf8) },
+                    bottomColor: { value: new THREE.Color(0xbae6fd) }
+                },
+                vertexShader: `
+                    varying vec3 vWorldPosition;
+                    void main() {
+                        vec4 worldPosition = modelMatrix * vec4(position, 1.0);
+                        vWorldPosition = worldPosition.xyz;
+                        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+                    }
+                `,
+                fragmentShader: `
+                    uniform vec3 topColor;
+                    uniform vec3 midColor;
+                    uniform vec3 bottomColor;
+                    varying vec3 vWorldPosition;
+                    void main() {
+                        float h = normalize(vWorldPosition).y;
+                        vec3 col = mix(bottomColor, midColor, smoothstep(0.0, 0.25, max(h, 0.0)));
+                        col = mix(col, topColor, smoothstep(0.25, 0.85, max(h, 0.0)));
+                        gl_FragColor = vec4(col, 1.0);
+                    }
+                `
+            });
+            scene.add(new THREE.Mesh(skyGeo, skyMat));
+
+            // Glowing Tropical Sun
+            const sunGroup = new THREE.Group();
+            const sunSphere = new THREE.Mesh(
+                new THREE.SphereGeometry(48, 24, 24),
+                new THREE.MeshBasicMaterial({ color: 0xfef9c3 })
+            );
+            const sunHalo = new THREE.Mesh(
+                new THREE.SphereGeometry(85, 24, 24),
+                new THREE.MeshBasicMaterial({ color: 0xfde047, transparent: true, opacity: 0.28 })
+            );
+            sunGroup.add(sunSphere, sunHalo);
+            sunGroup.position.set(-450, 380, -650);
+            scene.add(sunGroup);
+
+            // Lighting
+            const hemiLight = new THREE.HemisphereLight(0xe0f2fe, 0x0e7490, 0.85);
+            scene.add(hemiLight);
+
+            const dirLight = new THREE.DirectionalLight(0xfffbeb, 1.35);
+            dirLight.position.set(-220, 260, -240);
+            dirLight.castShadow = true;
+            dirLight.shadow.mapSize.width = 2048;
+            dirLight.shadow.mapSize.height = 2048;
+            dirLight.shadow.camera.near = 10;
+            dirLight.shadow.camera.far = 900;
+            const d = 260;
+            dirLight.shadow.camera.left = -d;
+            dirLight.shadow.camera.right = d;
+            dirLight.shadow.camera.top = d;
+            dirLight.shadow.camera.bottom = -d;
+            scene.add(dirLight);
+
+            // Shared Procedural Materials
+            const darkWoodTex = createWoodTexture('#4a2c16', '#2b1708');
+            const medWoodTex = createWoodTexture('#6e4423', '#3d2310');
+            const bambooTex = createBambooTexture();
+            const sailTex = createSailCanvasTexture();
+            const flagTex = createSSJFlagTexture();
+            const plateTex = createSSJWoodPlateTexture();
+
+            const logMat = new THREE.MeshStandardMaterial({ map: darkWoodTex, roughness: 0.78, metalness: 0.05 });
+            const plankMat = new THREE.MeshStandardMaterial({ map: medWoodTex, roughness: 0.7, metalness: 0.08 });
+            const bambooMat = new THREE.MeshStandardMaterial({ map: bambooTex, roughness: 0.55, metalness: 0.08 });
+            const ropeMat = new THREE.MeshStandardMaterial({ color: 0xc2a375, roughness: 0.9, metalness: 0.0 });
+            const bronzeMat = new THREE.MeshStandardMaterial({ color: 0x9a6b32, roughness: 0.35, metalness: 0.75 });
+            const darkIronMat = new THREE.MeshStandardMaterial({ color: 0x27272a, roughness: 0.45, metalness: 0.8 });
+
+            // ------------------------------------------------------------------
+            // 3. BUILD THE "SSJ TROPICAL SKY EXPLORER" BAMBOO RAFT FLYING CAR
+            // ------------------------------------------------------------------
+            const vehicleGroup = new THREE.Group();
+            const raftChassis = new THREE.Group(); // tilts with pitch & roll
+            vehicleGroup.add(raftChassis);
+
+            // 3A. Main Layered Log & Bamboo Raft Hull
+            const hullWidth = 4.6;
+            const hullLength = 6.8;
+
+            // Bottom longitudinal heavy timber logs (7 logs across)
+            for (let i = -3; i <= 3; i++) {
+                const logRadius = 0.34 + (Math.abs(i) % 2) * 0.03;
+                const logGeo = new THREE.CylinderGeometry(logRadius, logRadius * 0.96, hullLength, 12);
+                logGeo.rotateX(Math.PI / 2);
+                const logMesh = new THREE.Mesh(logGeo, logMat);
+                logMesh.position.set(i * 0.68, 0, 0);
+                logMesh.castShadow = true;
+                logMesh.receiveShadow = true;
+                raftChassis.add(logMesh);
+
+                // Dark bark end-caps
+                const capGeo = new THREE.CircleGeometry(logRadius * 0.9, 10);
+                const capMat = new THREE.MeshStandardMaterial({ color: 0x8c6239, roughness: 0.9 });
+                const frontCap = new THREE.Mesh(capGeo, capMat);
+                frontCap.position.set(i * 0.68, 0, hullLength / 2 + 0.01);
+                const backCap = new THREE.Mesh(capGeo, capMat);
+                backCap.rotation.y = Math.PI;
+                backCap.position.set(i * 0.68, 0, -hullLength / 2 - 0.01);
+                raftChassis.add(frontCap, backCap);
+            }
+
+            // Cross-beam bamboo/timber logs binding the hull
+            const crossZPositions = [-2.7, -0.9, 0.9, 2.7];
+            crossZPositions.forEach(zPos => {
+                const crossGeo = new THREE.CylinderGeometry(0.24, 0.24, hullWidth + 0.9, 12);
+                crossGeo.rotateZ(Math.PI / 2);
+                const crossLog = new THREE.Mesh(crossGeo, bambooMat);
+                crossLog.position.set(0, 0.36, zPos);
+                crossLog.castShadow = true;
+                raftChassis.add(crossLog);
+
+                // Thick Rope Bindings at joints
+                [-2.05, -0.7, 0.7, 2.05].forEach(xPos => {
+                    const ropeKnot = new THREE.Mesh(
+                        new THREE.TorusGeometry(0.32, 0.085, 8, 16),
+                        ropeMat
+                    );
+                    ropeKnot.position.set(xPos, 0.22, zPos);
+                    ropeKnot.rotation.y = Math.PI / 4;
+                    raftChassis.add(ropeKnot);
+
+                    const ropeKnot2 = ropeKnot.clone();
+                    ropeKnot2.rotation.y = -Math.PI / 4;
+                    raftChassis.add(ropeKnot2);
+                });
+            });
+
+            // Upper Side Bumper Logs (Raised rugged buggy side rails)
+            [-2.15, 2.15].forEach(sideX => {
+                const sideLogGeo = new THREE.CylinderGeometry(0.28, 0.28, hullLength - 0.4, 12);
+                sideLogGeo.rotateX(Math.PI / 2);
+                const sideLog = new THREE.Mesh(sideLogGeo, logMat);
+                sideLog.position.set(sideX, 0.68, 0);
+                sideLog.castShadow = true;
+                raftChassis.add(sideLog);
+
+                // Rope wraps along side rail
+                for (let rz = -2.4; rz <= 2.4; rz += 1.2) {
+                    const wrap = new THREE.Mesh(new THREE.TorusGeometry(0.30, 0.065, 8, 14), ropeMat);
+                    wrap.position.set(sideX, 0.68, rz);
+                    raftChassis.add(wrap);
+                }
+            });
+
+            // Rear & Front Bumper Logs + SSJ Branding Plates
+            [-3.15, 3.15].forEach((endZ, idx) => {
+                const endLogGeo = new THREE.CylinderGeometry(0.27, 0.27, hullWidth + 0.3, 12);
+                endLogGeo.rotateZ(Math.PI / 2);
+                const endLog = new THREE.Mesh(endLogGeo, logMat);
+                endLog.position.set(0, 0.68, endZ);
+                raftChassis.add(endLog);
+
+                // SSJ Carved Wood Plate on Rear & Front
+                const plate = new THREE.Mesh(
+                    new THREE.BoxGeometry(1.6, 0.55, 0.1),
+                    new THREE.MeshStandardMaterial({ map: plateTex, roughness: 0.5 })
+                );
+                plate.position.set(0, 0.52, endZ + (idx === 0 ? -0.26 : 0.26));
+                if (idx === 0) plate.rotation.y = Math.PI;
+                raftChassis.add(plate);
+            });
+
+            // Side SSJ Boards
+            [-2.44, 2.44].forEach((sx, idx) => {
+                const sidePlate = new THREE.Mesh(
+                    new THREE.BoxGeometry(0.08, 0.48, 1.4),
+                    new THREE.MeshStandardMaterial({ map: plateTex, roughness: 0.5 })
+                );
+                sidePlate.position.set(sx, 0.68, -0.4);
+                raftChassis.add(sidePlate);
+            });
+
+            // Wooden Plank Deck Floor
+            const deckFloor = new THREE.Mesh(
+                new THREE.BoxGeometry(hullWidth - 0.5, 0.16, hullLength - 0.8),
+                plankMat
+            );
+            deckFloor.position.set(0, 0.44, 0);
+            deckFloor.receiveShadow = true;
+            raftChassis.add(deckFloor);
+
+            // 3B. Four Outrigger Bamboo Arms + Wooden & Metal Propeller Lift Turbines
+            const propellers = [];
+            const thrusterCones = [];
+            const thrusterRings = [];
+
+            const cornerOffsets = [
+                { x: -2.95, z: 2.35 },  // Front-Left
+                { x: 2.95,  z: 2.35 },  // Front-Right
+                { x: -2.95, z: -2.35 }, // Rear-Left
+                { x: 2.95,  z: -2.35 }  // Rear-Right
+            ];
+
+            cornerOffsets.forEach((corner, index) => {
+                const unitGroup = new THREE.Group();
+                unitGroup.position.set(corner.x, 0.25, corner.z);
+
+                // Dual Bamboo Outrigger Struts connecting to hull
+                const strutLen = 1.45;
+                [-0.22, 0.22].forEach(zOff => {
+                    const strutGeo = new THREE.CylinderGeometry(0.11, 0.11, strutLen, 8);
+                    strutGeo.rotateZ(Math.PI / 2);
+                    const strut = new THREE.Mesh(strutGeo, bambooMat);
+                    strut.position.set(corner.x > 0 ? -0.55 : 0.55, 0.12, zOff);
+                    unitGroup.add(strut);
+                });
+
+                // Vertical Wooden & Bronze Turbine Housing Drum
+                const housing = new THREE.Mesh(
+                    new THREE.CylinderGeometry(0.46, 0.42, 1.25, 14),
+                    logMat
+                );
+                housing.castShadow = true;
+                unitGroup.add(housing);
+
+                // Bronze Reinforcement Bands around turbine
+                [-0.42, 0, 0.42].forEach(bandY => {
+                    const band = new THREE.Mesh(
+                        new THREE.CylinderGeometry(0.48, 0.48, 0.12, 16),
+                        bronzeMat
+                    );
+                    band.position.y = bandY;
+                    unitGroup.add(band);
+                });
+
+                // Rope Lashing around turbine mount
+                const lash = new THREE.Mesh(
+                    new THREE.TorusGeometry(0.49, 0.07, 8, 16),
+                    ropeMat
+                );
+                lash.rotation.x = Math.PI / 2;
+                lash.position.y = 0.18;
+                unitGroup.add(lash);
+
+                // Top Rotating Wooden Propeller Assembly
+                const propGroup = new THREE.Group();
+                propGroup.position.y = 0.72;
+
+                const hub = new THREE.Mesh(
+                    new THREE.CylinderGeometry(0.16, 0.18, 0.22, 12),
+                    bronzeMat
+                );
+                propGroup.add(hub);
+
+                // Two handcrafted wooden rotor blades
+                for (let b = 0; b < 2; b++) {
+                    const bladeGeo = new THREE.BoxGeometry(2.35, 0.04, 0.24);
+                    const blade = new THREE.Mesh(bladeGeo, plankMat);
+                    blade.rotation.y = b * (Math.PI / 2);
+                    blade.rotation.x = 0.15; // pitch angle
+                    blade.castShadow = true;
+                    propGroup.add(blade);
+                }
+                unitGroup.add(propGroup);
+                propellers.push({ group: propGroup, dir: index % 2 === 0 ? 1 : -1 });
+
+                // Downward-Facing Lift Turbine Nozzle + Glowing Blue-White Energy Core
+                const nozzle = new THREE.Mesh(
+                    new THREE.CylinderGeometry(0.38, 0.46, 0.26, 16),
+                    darkIronMat
+                );
+                nozzle.position.y = -0.68;
+                unitGroup.add(nozzle);
+
+                const glowCore = new THREE.Mesh(
+                    new THREE.CircleGeometry(0.38, 16),
+                    new THREE.MeshBasicMaterial({ color: 0xe0f2fe, side: THREE.DoubleSide })
+                );
+                glowCore.rotation.x = Math.PI / 2;
+                glowCore.position.y = -0.80;
+                unitGroup.add(glowCore);
+
+                // Outer Blue Energy Plume Cone
+                const coneGeo = new THREE.ConeGeometry(0.42, 2.4, 16, 1, true);
+                coneGeo.translate(0, -1.2, 0);
+                coneGeo.rotateX(Math.PI);
+                const coneMat = new THREE.MeshBasicMaterial({
+                    color: 0x38bdf8,
+                    transparent: true,
+                    opacity: 0.55,
+                    side: THREE.DoubleSide,
+                    depthWrite: false
+                });
+                const plumeCone = new THREE.Mesh(coneGeo, coneMat);
+                plumeCone.position.y = -3.15;
+                unitGroup.add(plumeCone);
+
+                // Inner Bright White-Cyan Energy Core Cone
+                const innerConeGeo = new THREE.ConeGeometry(0.22, 1.6, 12, 1, true);
+                innerConeGeo.translate(0, -0.8, 0);
+                innerConeGeo.rotateX(Math.PI);
+                const innerConeMat = new THREE.MeshBasicMaterial({
+                    color: 0xf0f9ff,
+                    transparent: true,
+                    opacity: 0.85,
+                    side: THREE.DoubleSide,
+                    depthWrite: false
+                });
+                const innerCone = new THREE.Mesh(innerConeGeo, innerConeMat);
+                innerCone.position.y = -2.35;
+                unitGroup.add(innerCone);
+
+                thrusterCones.push({ outer: plumeCone, inner: innerCone });
+
+                raftChassis.add(unitGroup);
+            });
+
+            // 3C. Handcrafted Wooden Dashboard, Steering Wheel, Control Levers & Two Rattan Seats
+            const dashboardGroup = new THREE.Group();
+            dashboardGroup.position.set(0, 0.95, 1.55);
+
+            const dashBox = new THREE.Mesh(
+                new THREE.BoxGeometry(3.2, 0.75, 0.65),
+                plankMat
+            );
+            dashBox.castShadow = true;
+            dashboardGroup.add(dashBox);
+
+            // Compass & Brass Gauges on Dashboard
+            [-0.4, 0.1, 0.55].forEach((gx, i) => {
+                const gauge = new THREE.Mesh(
+                    new THREE.CylinderGeometry(0.14, 0.14, 0.08, 12),
+                    bronzeMat
+                );
+                gauge.rotation.x = Math.PI / 2;
+                gauge.position.set(gx, 0.16, -0.33);
+                dashboardGroup.add(gauge);
+            });
+
+            // Handcrafted Wooden Steering Wheel (turns dynamically with A/D)
+            const steeringWheel = new THREE.Group();
+            steeringWheel.position.set(-0.75, 0.28, -0.45);
+            steeringWheel.rotation.x = -0.35;
+
+            const wheelRim = new THREE.Mesh(
+                new THREE.TorusGeometry(0.38, 0.048, 8, 20),
+                logMat
+            );
+            steeringWheel.add(wheelRim);
+
+            for (let s = 0; s < 4; s++) {
+                const spoke = new THREE.Mesh(
+                    new THREE.CylinderGeometry(0.025, 0.025, 0.74, 6),
+                    bambooMat
+                );
+                spoke.rotation.z = (s * Math.PI) / 2;
+                steeringWheel.add(spoke);
+            }
+            const wheelCenter = new THREE.Mesh(new THREE.SphereGeometry(0.08, 8, 8), bronzeMat);
+            steeringWheel.add(wheelCenter);
+            dashboardGroup.add(steeringWheel);
+
+            // Dual Handcrafted Throttle & Lift Levers
+            const throttleLever = new THREE.Group();
+            throttleLever.position.set(0.25, 0.35, -0.25);
+            const leverStick = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.55, 8), darkIronMat);
+            leverStick.position.y = 0.25;
+            const leverKnob = new THREE.Mesh(new THREE.SphereGeometry(0.08, 10, 10), logMat);
+            leverKnob.position.y = 0.52;
+            throttleLever.add(leverStick, leverKnob);
+            dashboardGroup.add(throttleLever);
+
+            raftChassis.add(dashboardGroup);
+
+            // Two Woven Rattan Seats (Driver Left, Passenger Right)
+            const wickerMat = new THREE.MeshStandardMaterial({ color: 0x9c7444, roughness: 0.85 });
+            [-0.78, 0.78].forEach(seatX => {
+                const seatGroup = new THREE.Group();
+                seatGroup.position.set(seatX, 0.65, 0.25);
+
+                const cushion = new THREE.Mesh(new THREE.BoxGeometry(1.05, 0.22, 1.05), wickerMat);
+                cushion.castShadow = true;
+                const backrest = new THREE.Mesh(new THREE.BoxGeometry(1.05, 1.15, 0.22), wickerMat);
+                backrest.position.set(0, 0.62, -0.44);
+                backrest.rotation.x = -0.12;
+                backrest.castShadow = true;
+
+                seatGroup.add(cushion, backrest);
+                raftChassis.add(seatGroup);
+            });
+
+            // 3D. Explorer Cargo: Wooden Crates, Burlap Sacks, Coiled Ropes in the Rear
+            const crate1 = new THREE.Mesh(new THREE.BoxGeometry(1.15, 0.85, 1.15), plankMat);
+            crate1.position.set(-1.05, 0.92, -1.75);
+            crate1.rotation.y = 0.12;
+            crate1.castShadow = true;
+            raftChassis.add(crate1);
+
+            const crate2 = new THREE.Mesh(new THREE.BoxGeometry(0.95, 0.7, 0.95), logMat);
+            crate2.position.set(0.15, 0.85, -1.95);
+            crate2.rotation.y = -0.18;
+            crate2.castShadow = true;
+            raftChassis.add(crate2);
+
+            // Coiled Rope Stack behind Driver Seat
+            for (let r = 0; r < 5; r++) {
+                const coil = new THREE.Mesh(new THREE.TorusGeometry(0.38 - r * 0.02, 0.08, 8, 16), ropeMat);
+                coil.rotation.x = Math.PI / 2;
+                coil.position.set(-1.35, 0.62 + r * 0.12, -0.65);
+                raftChassis.add(coil);
+            }
+
+            // 3E. Overhead Bamboo Support Frame & Beige Canvas Canopy Sail
+            const canopyGroup = new THREE.Group();
+            // Four angled bamboo poles holding the canopy high and clear of view
+            const polePositions = [
+                { x: -1.75, z: 1.9, tiltX: -0.18 },
+                { x: 1.75,  z: 1.9, tiltX: -0.18 },
+                { x: -1.75, z: -0.35, tiltX: 0.22 },
+                { x: 1.75,  z: -0.35, tiltX: 0.22 }
+            ];
+            polePositions.forEach(p => {
+                const poleGeo = new THREE.CylinderGeometry(0.085, 0.105, 3.05, 8);
+                const pole = new THREE.Mesh(poleGeo, bambooMat);
+                pole.position.set(p.x, 1.95, p.z);
+                pole.rotation.x = p.tiltX;
+                pole.castShadow = true;
+                canopyGroup.add(pole);
+            });
+
+            // Top Bamboo Crossbars
+            [-1.75, 1.75].forEach(sideX => {
+                const sideBarGeo = new THREE.CylinderGeometry(0.075, 0.075, 2.6, 8);
+                sideBarGeo.rotateX(Math.PI / 2);
+                const sideBar = new THREE.Mesh(sideBarGeo, bambooMat);
+                sideBar.position.set(sideX, 3.35, 0.78);
+                canopyGroup.add(sideBar);
+            });
+            [-0.45, 2.0].forEach(endZ => {
+                const frontBarGeo = new THREE.CylinderGeometry(0.08, 0.08, 3.8, 8);
+                frontBarGeo.rotateZ(Math.PI / 2);
+                const frontBar = new THREE.Mesh(frontBarGeo, bambooMat);
+                frontBar.position.set(0, 3.38, endZ);
+                canopyGroup.add(frontBar);
+            });
+
+            // Beige Canvas Sail Canopy with dynamic cloth wave vertices
+            const sailGeo = new THREE.PlaneGeometry(3.45, 2.45, 14, 14);
+            sailGeo.rotateX(-Math.PI / 2);
+            const sailPosAttr = sailGeo.attributes.position;
+            const sailBaseY = [];
+            for (let i = 0; i < sailPosAttr.count; i++) {
+                const vx = sailPosAttr.getX(i);
+                const vz = sailPosAttr.getZ(i);
+                // Natural sag/billow curve
+                const arch = Math.cos((vx / 1.75) * (Math.PI / 2)) * Math.cos(((vz) / 1.25) * (Math.PI / 2)) * 0.28;
+                sailPosAttr.setY(i, arch);
+                sailBaseY.push(arch);
+            }
+            sailGeo.computeVertexNormals();
+
+            const sailMesh = new THREE.Mesh(
+                sailGeo,
+                new THREE.MeshStandardMaterial({
+                    map: sailTex,
+                    side: THREE.DoubleSide,
+                    roughness: 0.85
+                })
+            );
+            sailMesh.position.set(0, 3.36, 0.78);
+            sailMesh.castShadow = true;
+            canopyGroup.add(sailMesh);
+
+            raftChassis.add(canopyGroup);
+
+            // 3F. Tall Bamboo Flag Mast & Waving SSJ Crown Flag
+            const mastGeo = new THREE.CylinderGeometry(0.09, 0.13, 4.8, 10);
+            const mast = new THREE.Mesh(mastGeo, bambooMat);
+            mast.position.set(-1.05, 2.85, -1.15);
+            mast.castShadow = true;
+            raftChassis.add(mast);
+
+            const flagGeo = new THREE.PlaneGeometry(2.35, 1.48, 18, 10);
+            // Shift geometry so left edge (x=0) attaches to mast
+            flagGeo.translate(-1.175, 0, 0);
+            const flagMesh = new THREE.Mesh(
+                flagGeo,
+                new THREE.MeshStandardMaterial({
+                    map: flagTex,
+                    side: THREE.DoubleSide,
+                    roughness: 0.65
+                })
+            );
+            flagMesh.position.set(-1.05, 4.35, -1.15);
+            flagMesh.rotation.y = Math.PI / 2; // Trail backward along Z
+            flagMesh.castShadow = true;
+            raftChassis.add(flagMesh);
+
+            // ------------------------------------------------------------------
+            // 4. ISLAND EXPLORER PLAYER CHARACTER (Seated + On-Foot Mode)
+            // ------------------------------------------------------------------
+            function createExplorerCharacter() {
+                const charGroup = new THREE.Group();
+
+                const skinMat = new THREE.MeshStandardMaterial({ color: 0xd99b72, roughness: 0.6 });
+                const shirtMat = new THREE.MeshStandardMaterial({ color: 0x5c6b48, roughness: 0.8 }); // Tropical olive explorer tunic
+                const vestMat = new THREE.MeshStandardMaterial({ color: 0x4a3520, roughness: 0.75 });
+                const hairMat = new THREE.MeshStandardMaterial({ color: 0x1e1510, roughness: 0.8 });
+                const pantsMat = new THREE.MeshStandardMaterial({ color: 0x3b2f26, roughness: 0.8 });
+
+                // Torso
+                const torso = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.78, 0.36), shirtMat);
+                torso.position.y = 0.55;
+                torso.castShadow = true;
+                charGroup.add(torso);
+
+                // Explorer Vest
+                const vest = new THREE.Mesh(new THREE.BoxGeometry(0.66, 0.72, 0.39), vestMat);
+                vest.position.y = 0.55;
+                charGroup.add(vest);
+
+                // Head
+                const head = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.44, 0.42), skinMat);
+                head.position.y = 1.22;
+                head.castShadow = true;
+                charGroup.add(head);
+
+                // tousled explorer hair
+                const hair = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.24, 0.46), hairMat);
+                hair.position.set(0, 1.38, -0.02);
+                charGroup.add(hair);
+
+                // Left & Right Arms reaching toward steering wheel
+                const leftArm = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.08, 0.68, 8), shirtMat);
+                leftArm.position.set(-0.38, 0.72, 0.28);
+                leftArm.rotation.x = Math.PI / 2.3;
+                leftArm.rotation.z = -0.2;
+
+                const rightArm = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.08, 0.68, 8), shirtMat);
+                rightArm.position.set(0.38, 0.72, 0.28);
+                rightArm.rotation.x = Math.PI / 2.3;
+                rightArm.rotation.z = 0.2;
+
+                // Legs
+                const leftLeg = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.1, 0.65, 8), pantsMat);
+                leftLeg.position.set(-0.18, 0.18, 0.25);
+                leftLeg.rotation.x = Math.PI / 2;
+
+                const rightLeg = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.1, 0.65, 8), pantsMat);
+                rightLeg.position.set(0.18, 0.18, 0.25);
+                rightLeg.rotation.x = Math.PI / 2;
+
+                charGroup.add(leftArm, rightArm, leftLeg, rightLeg);
+                charGroup.userData = { leftLeg, rightLeg, leftArm, rightArm };
+                return charGroup;
+            }
+
+            const seatedDriver = createExplorerCharacter();
+            seatedDriver.position.set(-0.75, 0.68, 0.28);
+            raftChassis.add(seatedDriver);
+
+            // On-Foot Explorer Character (when player presses E to exit vehicle)
+            const footExplorer = createExplorerCharacter();
+            footExplorer.visible = false;
+            footExplorer.userData.leftLeg.rotation.x = 0;
+            footExplorer.userData.rightLeg.rotation.x = 0;
+            footExplorer.userData.leftLeg.position.set(-0.18, -0.15, 0);
+            footExplorer.userData.rightLeg.position.set(0.18, -0.15, 0);
+            footExplorer.userData.leftArm.rotation.x = 0;
+            footExplorer.userData.rightArm.rotation.x = 0;
+            footExplorer.userData.leftArm.position.set(-0.42, 0.55, 0);
+            footExplorer.userData.rightArm.position.set(0.42, 0.55, 0);
+            scene.add(footExplorer);
+
+            // Spawn vehicle in the air overlooking Paradise Island (exact camera composition as reference!)
+            vehicleGroup.position.set(-38, 22, -95);
+            vehicleGroup.rotation.y = Math.PI * 0.12;
+            scene.add(vehicleGroup);
+
+            // ------------------------------------------------------------------
+            // 5. TROPICAL OCEAN, PARADISE ISLAND, LIGHTHOUSE, ROCK ARCH & PALMS
+            // ------------------------------------------------------------------
+            // 5A. Turquoise Ocean with dynamic waves
+            const waterGeo = new THREE.PlaneGeometry(2400, 2400, 90, 90);
+            waterGeo.rotateX(-Math.PI / 2);
+            const waterMat = new THREE.MeshStandardMaterial({
+                color: 0x06b6d4,
+                emissive: 0x083344,
+                emissiveIntensity: 0.25,
+                roughness: 0.18,
+                metalness: 0.35,
+                transparent: true,
+                opacity: 0.92
+            });
+            const oceanMesh = new THREE.Mesh(waterGeo, waterMat);
+            oceanMesh.receiveShadow = true;
+            scene.add(oceanMesh);
+
+            // Deep seabed under shallow turquoise lagoons
+            const seaBed = new THREE.Mesh(
+                new THREE.PlaneGeometry(2400, 2400),
+                new THREE.MeshBasicMaterial({ color: 0x042f40 })
+            );
+            seaBed.rotation.x = -Math.PI / 2;
+            seaBed.position.y = -5;
+            scene.add(seaBed);
+
+            // Helper: Palm Tree Generator
+            const sandMat = new THREE.MeshStandardMaterial({ color: 0xfde68a, roughness: 0.88 });
+            const grassMat = new THREE.MeshStandardMaterial({ color: 0x4d7c0f, roughness: 0.82 });
+            const rockMat = new THREE.MeshStandardMaterial({ color: 0x78716c, roughness: 0.88, flatShading: true });
+            const frondMat = new THREE.MeshStandardMaterial({ color: 0x65a30d, roughness: 0.6, side: THREE.DoubleSide });
+            const trunkMat = new THREE.MeshStandardMaterial({ color: 0x78553a, roughness: 0.9 });
+
+            function createPalmTree(x, y, z, scale = 1.0, lean = 0.18) {
+                const palm = new THREE.Group();
+                palm.position.set(x, y, z);
+                palm.scale.setScalar(scale);
+                palm.rotation.y = Math.random() * Math.PI * 2;
+
+                // Curved segmented trunk
+                const segments = 5;
+                let curY = 0;
+                let curZ = 0;
+                for (let s = 0; s < segments; s++) {
+                    const segGeo = new THREE.CylinderGeometry(0.32 - s * 0.04, 0.38 - s * 0.04, 1.9, 7);
+                    const seg = new THREE.Mesh(segGeo, trunkMat);
+                    seg.position.set(0, curY + 0.9, curZ);
+                    seg.rotation.x = s * (lean / segments);
+                    seg.castShadow = true;
+                    palm.add(seg);
+                    curY += Math.cos(s * (lean / segments)) * 1.82;
+                    curZ += Math.sin(s * (lean / segments)) * 1.82;
+                }
+
+                // Crown of 7 lush palm fronds
+                const crown = new THREE.Group();
+                crown.position.set(0, curY, curZ);
+                for (let f = 0; f < 7; f++) {
+                    const frondGeo = new THREE.ConeGeometry(0.85, 4.4, 4);
+                    frondGeo.scale(1, 1, 0.18);
+                    frondGeo.translate(0, 2.1, 0);
+                    frondGeo.rotateX(Math.PI / 2.5);
+                    const frond = new THREE.Mesh(frondGeo, frondMat);
+                    frond.rotation.y = (f * Math.PI * 2) / 7;
+                    frond.castShadow = true;
+                    crown.add(frond);
+                }
+                palm.add(crown);
+                scene.add(palm);
+            }
+
+            // Helper: Island & Terrain Height Collision List
+            const islandColliders = []; // { x, z, r, height, name, subtitle }
+
+            // 5B. MAIN PARADISE ISLAND (Right-Center with Cliff, Red-White Lighthouse, Harbor Village, Watchtower)
+            const mainIsland = new THREE.Group();
+            const mainPos = { x: 85, z: 65 };
+            mainIsland.position.set(mainPos.x, 0, mainPos.z);
+
+            // White Foam Ring around Main Island
+            const foamRing = new THREE.Mesh(
+                new THREE.RingGeometry(94, 102, 48),
+                new THREE.MeshBasicMaterial({ color: 0xe0f2fe, transparent: true, opacity: 0.65, side: THREE.DoubleSide })
+            );
+            foamRing.rotation.x = -Math.PI / 2;
+            foamRing.position.y = 0.25;
+            mainIsland.add(foamRing);
+
+            // Shallow Turquoise Lagoon Shelf
+            const lagoonShelf = new THREE.Mesh(
+                new THREE.CylinderGeometry(96, 112, 2.2, 40),
+                new THREE.MeshBasicMaterial({ color: 0x22d3ee, transparent: true, opacity: 0.45 })
+            );
+            lagoonShelf.position.y = -0.9;
+            mainIsland.add(lagoonShelf);
+
+            // Sandy Beach Base
+            const beachBase = new THREE.Mesh(new THREE.CylinderGeometry(78, 92, 5.5, 36), sandMat);
+            beachBase.position.y = 1.6;
+            beachBase.receiveShadow = true;
+            mainIsland.add(beachBase);
+
+            // Lush Green Island Mid-Tier
+            const greenTier = new THREE.Mesh(new THREE.CylinderGeometry(58, 74, 11, 28), grassMat);
+            greenTier.position.set(6, 7.5, 8);
+            greenTier.receiveShadow = true;
+            greenTier.castShadow = true;
+            mainIsland.add(greenTier);
+
+            // Dramatic Craggy Mountain Cliff for Lighthouse
+            const cliffPeak = new THREE.Mesh(new THREE.CylinderGeometry(22, 46, 38, 16), rockMat);
+            cliffPeak.position.set(14, 28, 18);
+            cliffPeak.castShadow = true;
+            cliffPeak.receiveShadow = true;
+            mainIsland.add(cliffPeak);
+
+            const cliffCap = new THREE.Mesh(new THREE.CylinderGeometry(21, 23, 3, 16), grassMat);
+            cliffCap.position.set(14, 47.5, 18);
+            mainIsland.add(cliffCap);
+
+            // Iconic Red-and-White Lighthouse at Peak
+            const lighthouse = new THREE.Group();
+            lighthouse.position.set(14, 48.5, 18);
+
+            const lhBody = new THREE.Mesh(
+                new THREE.CylinderGeometry(4.2, 6.2, 24, 16),
+                new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.5 })
+            );
+            lhBody.position.y = 12;
+            lhBody.castShadow = true;
+            lighthouse.add(lhBody);
+
+            const lhRedBand = new THREE.Mesh(
+                new THREE.CylinderGeometry(4.4, 4.9, 6, 16),
+                new THREE.MeshStandardMaterial({ color: 0xdc2626, roughness: 0.5 })
+            );
+            lhRedBand.position.y = 20;
+            lighthouse.add(lhRedBand);
+
+            const lhGallery = new THREE.Mesh(new THREE.CylinderGeometry(5.5, 5.5, 1.2, 16), darkIronMat);
+            lhGallery.position.y = 24.5;
+            lighthouse.add(lhGallery);
+
+            const lhLantern = new THREE.Mesh(
+                new THREE.CylinderGeometry(3.5, 3.5, 4.5, 12),
+                new THREE.MeshBasicMaterial({ color: 0xfef08a })
+            );
+            lhLantern.position.y = 27;
+            lighthouse.add(lhLantern);
+
+            const lhRoof = new THREE.Mesh(
+                new THREE.ConeGeometry(4.8, 4.5, 16),
+                new THREE.MeshStandardMaterial({ color: 0xb91c1c, roughness: 0.5 })
+            );
+            lhRoof.position.y = 31;
+            lighthouse.add(lhRoof);
+
+            mainIsland.add(lighthouse);
+
+            // Coastal Explorer Village Huts, Wooden Watchtower & Harbor Piers
+            const hutPositions = [
+                { x: -32, y: 12.5, z: -22, rot: 0.4 },
+                { x: -16, y: 12.5, z: -34, rot: -0.2 },
+                { x: -45, y: 5.2,  z: -38, rot: 0.8 },
+                { x: -8,  y: 5.2,  z: -56, rot: 0.1 }
+            ];
+            hutPositions.forEach(hp => {
+                const hut = new THREE.Group();
+                hut.position.set(hp.x, hp.y, hp.z);
+                hut.rotation.y = hp.rot;
+                const walls = new THREE.Mesh(new THREE.BoxGeometry(8, 5.5, 6.5), plankMat);
+                walls.position.y = 2.75;
+                walls.castShadow = true;
+                const roof = new THREE.Mesh(new THREE.ConeGeometry(6.8, 4.5, 4), bambooMat);
+                roof.position.y = 7.5;
+                roof.rotation.y = Math.PI / 4;
+                roof.castShadow = true;
+                hut.add(walls, roof);
+                mainIsland.add(hut);
+            });
+
+            // Tall Wooden Watchtower on the Beach (matching reference screenshot!)
+            const watchtower = new THREE.Group();
+            watchtower.position.set(-22, 4.2, -62);
+            [[-2.5, -2.5], [2.5, -2.5], [-2.5, 2.5], [2.5, 2.5]].forEach(([lx, lz]) => {
+                const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.4, 16, 8), logMat);
+                leg.position.set(lx, 8, lz);
+                watchtower.add(leg);
+            });
+            const wtDeck = new THREE.Mesh(new THREE.BoxGeometry(7.2, 0.8, 7.2), plankMat);
+            wtDeck.position.y = 15;
+            const wtRoof = new THREE.Mesh(new THREE.ConeGeometry(5.8, 4.2, 4), bambooMat);
+            wtRoof.position.y = 20.5;
+            wtRoof.rotation.y = Math.PI / 4;
+            watchtower.add(wtDeck, wtRoof);
+            mainIsland.add(watchtower);
+
+            // Wooden Harbor Pier / Landing Dock extending into turquoise bay
+            const pier = new THREE.Group();
+            pier.position.set(-38, 2.6, -78);
+            pier.rotation.y = -0.35;
+            const pierDeck = new THREE.Mesh(new THREE.BoxGeometry(8, 0.5, 34), plankMat);
+            pierDeck.receiveShadow = true;
+            pier.add(pierDeck);
+            for (let pz = -15; pz <= 15; pz += 6) {
+                [-3.4, 3.4].forEach(px => {
+                    const post = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.28, 6, 8), logMat);
+                    post.position.set(px, -1.5, pz);
+                    pier.add(post);
+                });
+            }
+            mainIsland.add(pier);
+
+            scene.add(mainIsland);
+
+            // Register Main Island Colliders
+            islandColliders.push(
+                { x: mainPos.x + 14, z: mainPos.z + 18, r: 24, height: 49.0, name: 'Lighthouse Peak', subtitle: 'Beacon of the SSJ Archipelago' },
+                { x: mainPos.x + 6,  z: mainPos.z + 8,  r: 58, height: 13.0, name: 'Paradise Highlands', subtitle: 'Lush Tropical Ridge' },
+                { x: mainPos.x,      z: mainPos.z,      r: 86, height: 4.4,  name: 'Paradise Island Harbor', subtitle: 'A New Adventure Awaits...' }
+            );
+
+            // Scatter Palm Trees on Main Island
+            for (let i = 0; i < 32; i++) {
+                const angle = Math.random() * Math.PI * 2;
+                const dist = 28 + Math.random() * 52;
+                const px = mainPos.x + Math.cos(angle) * dist;
+                const pz = mainPos.z + Math.sin(angle) * dist;
+                const py = dist < 54 ? 12.8 : 4.2;
+                createPalmTree(px, py, pz, 0.85 + Math.random() * 0.55);
+            }
+
+            // 5C. NATURAL STONE ARCH ISLAND (Left Background, matching reference image!)
+            const archIsland = new THREE.Group();
+            const archPos = { x: -165, z: 95 };
+            archIsland.position.set(archPos.x, 0, archPos.z);
+
+            const archBeach = new THREE.Mesh(new THREE.CylinderGeometry(48, 58, 4.5, 28), sandMat);
+            archBeach.position.y = 1.4;
+            archIsland.add(archBeach);
+
+            // Left & Right Pillars + Natural Stone Bridge Arch
+            const leftPillar = new THREE.Mesh(new THREE.CylinderGeometry(14, 22, 36, 12), rockMat);
+            leftPillar.position.set(-18, 18, 0);
+            const rightPillar = new THREE.Mesh(new THREE.CylinderGeometry(12, 20, 32, 12), rockMat);
+            rightPillar.position.set(18, 16, 0);
+            const archBridge = new THREE.Mesh(new THREE.BoxGeometry(44, 11, 18), rockMat);
+            archBridge.position.set(0, 31, 0);
+            const archTopGrass = new THREE.Mesh(new THREE.BoxGeometry(40, 3, 15), grassMat);
+            archTopGrass.position.set(0, 37, 0);
+
+            archIsland.add(leftPillar, rightPillar, archBridge, archTopGrass);
+            scene.add(archIsland);
+
+            islandColliders.push({
+                x: archPos.x, z: archPos.z, r: 52, height: 3.8,
+                name: 'Arch Rock Atoll', subtitle: 'Fly Through the Ancient Sea Arch!'
+            });
+            for (let i = 0; i < 10; i++) {
+                const a = Math.random() * Math.PI * 2;
+                createPalmTree(archPos.x + Math.cos(a) * 32, 3.6, archPos.z + Math.sin(a) * 32, 0.9);
+            }
+
+            // 5D. FOREGROUND COVE & DISTANT TROPICAL ISLANDS
+            const extraIslands = [
+                { x: 25,   z: -145, r: 28, h: 8,  name: 'Palm Cay', subtitle: 'Southern Lookout Outpost' },
+                { x: -120, z: -85,  r: 36, h: 14, name: 'Emerald Lagoon', subtitle: 'Crystal Shallow Waters' },
+                { x: 240,  z: 210,  r: 65, h: 42, name: 'Crown Mountain', subtitle: 'Uncharted Eastern Frontier' }
+            ];
+            extraIslands.forEach(isl => {
+                const g = new THREE.Group();
+                g.position.set(isl.x, 0, isl.z);
+                const sand = new THREE.Mesh(new THREE.CylinderGeometry(isl.r, isl.r * 1.2, 4, 24), sandMat);
+                sand.position.y = 1.2;
+                const hill = new THREE.Mesh(new THREE.ConeGeometry(isl.r * 0.75, isl.h, 16), grassMat);
+                hill.position.y = 3 + isl.h / 2;
+                g.add(sand, hill);
+                scene.add(g);
+
+                islandColliders.push({
+                    x: isl.x, z: isl.z, r: isl.r, height: 3.4,
+                    name: isl.name, subtitle: isl.subtitle
+                });
+
+                for (let p = 0; p < 7; p++) {
+                    const ang = (p / 7) * Math.PI * 2;
+                    createPalmTree(isl.x + Math.cos(ang) * (isl.r * 0.65), 3.2, isl.z + Math.sin(ang) * (isl.r * 0.65), 0.85);
+                }
+            });
+
+            // ------------------------------------------------------------------
+            // 6. VOLUMETRIC CLOUDS, CIRCLING SEAGULLS, SAILBOATS & RELIC RINGS
+            // ------------------------------------------------------------------
+            // Fluffy White Clouds
+            const cloudMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.95, emissive: 0xe0f2fe, emissiveIntensity: 0.18 });
+            const clouds = [];
+            for (let c = 0; c < 22; c++) {
+                const cg = new THREE.Group();
+                const puffs = 4 + Math.floor(Math.random() * 4);
+                for (let p = 0; p < puffs; p++) {
+                    const puff = new THREE.Mesh(new THREE.SphereGeometry(14 + Math.random() * 14, 12, 12), cloudMat);
+                    puff.position.set((p - puffs / 2) * 14, (Math.random() - 0.5) * 6, (Math.random() - 0.5) * 12);
+                    puff.scale.y = 0.65;
+                    cg.add(puff);
+                }
+                cg.position.set(
+                    (Math.random() - 0.5) * 1100,
+                    115 + Math.random() * 95,
+                    (Math.random() - 0.5) * 1100
+                );
+                scene.add(cg);
+                clouds.push(cg);
+            }
+
+            // Animated Seagulls in the Sky
+            const seagulls = [];
+            const gullMat = new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide });
+            for (let g = 0; g < 12; g++) {
+                const gull = new THREE.Group();
+                const leftWing = new THREE.Mesh(new THREE.PlaneGeometry(1.4, 0.45), gullMat);
+                leftWing.position.x = -0.7;
+                const rightWing = new THREE.Mesh(new THREE.PlaneGeometry(1.4, 0.45), gullMat);
+                rightWing.position.x = 0.7;
+                gull.add(leftWing, rightWing);
+                const centerX = (Math.random() - 0.5) * 260;
+                const centerZ = (Math.random() - 0.5) * 260;
+                const alt = 32 + Math.random() * 45;
+                scene.add(gull);
+                seagulls.push({
+                    group: gull, leftWing, rightWing,
+                    cx: centerX, cz: centerZ, y: alt,
+                    radius: 25 + Math.random() * 35,
+                    angle: Math.random() * Math.PI * 2,
+                    speed: 0.4 + Math.random() * 0.35
+                });
+            }
+
+            // Collectible Golden SSJ Sky Relics (Floating Crown Rings)
+            const relics = [];
+            const relicLocations = [
+                { x: -12, y: 24, z: -35 },  // Approach to Harbor
+                { x: -165, y: 18, z: 95 },  // Inside the Natural Stone Arch!
+                { x: 99, y: 86, z: 83 },    // Above the Lighthouse Peak
+                { x: 25, y: 18, z: -145 },  // Over Palm Cay
+                { x: 18, y: 12, z: -15 },   // Over the Harbor Pier
+                { x: -120, y: 25, z: -85 }  // Over Emerald Lagoon
+            ];
+            let collectedRelics = 0;
+
+            relicLocations.forEach(loc => {
+                const rGroup = new THREE.Group();
+                rGroup.position.set(loc.x, loc.y, loc.z);
+                const ring = new THREE.Mesh(
+                    new THREE.TorusGeometry(3.6, 0.32, 12, 28),
+                    new THREE.MeshStandardMaterial({ color: 0xfacc15, emissive: 0xca8a04, emissiveIntensity: 0.45, metalness: 0.8, roughness: 0.2 })
+                );
+                const innerStar = new THREE.Mesh(
+                    new THREE.OctahedronGeometry(1.3, 0),
+                    new THREE.MeshBasicMaterial({ color: 0xfef08a })
+                );
+                rGroup.add(ring, innerStar);
+                scene.add(rGroup);
+                relics.push({ group: rGroup, collected: false });
+            });
+
+            // ------------------------------------------------------------------
+            // 7. WEB AUDIO SYNTHESIS (Gentle Propeller Hum & Tropical Breeze)
+            // ------------------------------------------------------------------
+            let audioCtx = null;
+            let propGain = null;
+            let propOsc = null;
+            let soundEnabled = true;
+
+            function initAudio() {
+                if (audioCtx) return;
+                try {
+                    const AudioContext = window.AudioContext || window.webkitAudioContext;
+                    audioCtx = new AudioContext();
+                    propOsc = audioCtx.createOscillator();
+                    const filter = audioCtx.createBiquadFilter();
+                    propGain = audioCtx.createGain();
+
+                    propOsc.type = 'sawtooth';
+                    propOsc.frequency.value = 48;
+                    filter.type = 'lowpass';
+                    filter.frequency.value = 140;
+                    propGain.gain.value = 0.04;
+
+                    propOsc.connect(filter);
+                    filter.connect(propGain);
+                    propGain.connect(audioCtx.destination);
+                    propOsc.start();
+                } catch (e) {
+                    // Ignore audio restriction if blocked
+                }
+            }
+
+            function playChime() {
+                if (!audioCtx || !soundEnabled) return;
+                try {
+                    const osc = audioCtx.createOscillator();
+                    const g = audioCtx.createGain();
+                    osc.type = 'triangle';
+                    osc.frequency.setValueAtTime(523.25, audioCtx.currentTime);
+                    osc.frequency.exponentialRampToValueAtTime(1046.5, audioCtx.currentTime + 0.35);
+                    g.gain.setValueAtTime(0.15, audioCtx.currentTime);
+                    g.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.4);
+                    osc.connect(g);
+                    g.connect(audioCtx.destination);
+                    osc.start();
+                    osc.stop(audioCtx.currentTime + 0.4);
+                } catch (e) {}
+            }
+
+            // ------------------------------------------------------------------
+            // 8. INPUT CONTROLS (Keyboard + Click/Touch HUD + Camera Drag)
+            // ------------------------------------------------------------------
+            const keys = {
+                forward: false,
+                backward: false,
+                left: false,
+                right: false,
+                up: false,
+                down: false,
+                boost: false
+            };
+
+            let playerMode = 'FLYING'; // 'FLYING' or 'ON_FOOT'
+
+            function showToast(msg) {
+                const toast = document.getElementById('hud-toast');
+                toast.textContent = msg;
+                toast.classList.remove('opacity-0', '-translate-y-2');
+                toast.classList.add('opacity-100', 'translate-y-0');
+                clearTimeout(toast.timer);
+                toast.timer = setTimeout(() => {
+                    toast.classList.remove('opacity-100', 'translate-y-0');
+                    toast.classList.add('opacity-0', '-translate-y-2');
+                }, 2600);
+            }
+
+            function toggleExitEnterVehicle() {
+                initAudio();
+                if (playerMode === 'FLYING') {
+                    // Switch to On-Foot Explorer mode
+                    playerMode = 'ON_FOOT';
+                    seatedDriver.visible = false;
+                    footExplorer.visible = true;
+                    const groundH = getTerrainHeight(vehicleGroup.position.x, vehicleGroup.position.z);
+                    footExplorer.position.set(
+                        vehicleGroup.position.x - Math.cos(vehicleGroup.rotation.y) * 4.2,
+                        Math.max(groundH, 1.2),
+                        vehicleGroup.position.z + Math.sin(vehicleGroup.rotation.y) * 4.2
+                    );
+                    footExplorer.rotation.y = vehicleGroup.rotation.y;
+                    document.getElementById('mode-indicator').textContent = 'ON FOOT';
+                    document.getElementById('exit-label').textContent = 'Board Vehicle';
+                    showToast('Exited Vehicle — Explore on foot or press E to board!');
+                } else {
+                    // Return to Flying Raft Vehicle
+                    playerMode = 'FLYING';
+                    seatedDriver.visible = true;
+                    footExplorer.visible = false;
+                    document.getElementById('mode-indicator').textContent = 'FLYING';
+                    document.getElementById('exit-label').textContent = 'Exit Vehicle';
+                    showToast('Boarded SSJ Tropical Sky Explorer!');
+                }
+            }
+
+            window.addEventListener('keydown', (e) => {
+                initAudio();
+                const code = e.code;
+                if (code === 'KeyW' || code === 'ArrowUp') keys.forward = true;
+                if (code === 'KeyS' || code === 'ArrowDown') keys.backward = true;
+                if (code === 'KeyA' || code === 'ArrowLeft') keys.left = true;
+                if (code === 'KeyD' || code === 'ArrowRight') keys.right = true;
+                if (code === 'Space') { keys.up = true; e.preventDefault(); }
+                if (code === 'ControlLeft' || code === 'ControlRight' || code === 'KeyC') { keys.down = true; e.preventDefault(); }
+                if (code === 'ShiftLeft' || code === 'ShiftRight') keys.boost = true;
+                if (code === 'KeyE' && !e.repeat) toggleExitEnterVehicle();
+                updateKeyBadges();
+            });
+
+            window.addEventListener('keyup', (e) => {
+                const code = e.code;
+                if (code === 'KeyW' || code === 'ArrowUp') keys.forward = false;
+                if (code === 'KeyS' || code === 'ArrowDown') keys.backward = false;
+                if (code === 'KeyA' || code === 'ArrowLeft') keys.left = false;
+                if (code === 'KeyD' || code === 'ArrowRight') keys.right = false;
+                if (code === 'Space') keys.up = false;
+                if (code === 'ControlLeft' || code === 'ControlRight' || code === 'KeyC') keys.down = false;
+                if (code === 'ShiftLeft' || code === 'ShiftRight') keys.boost = false;
+                updateKeyBadges();
+            });
+
+            function updateKeyBadges() {
+                document.getElementById('key-w').classList.toggle('active', keys.forward);
+                document.getElementById('key-s').classList.toggle('active', keys.backward);
+                document.getElementById('key-space').classList.toggle('active', keys.up);
+                document.getElementById('key-ctrl').classList.toggle('active', keys.down);
+                document.getElementById('key-shift').classList.toggle('active', keys.boost);
+                document.getElementById('key-a').classList.toggle('active', keys.left);
+                document.getElementById('key-d').classList.toggle('active', keys.right);
+            }
+
+            // Interactive On-Screen HUD Control Rows (Support Mouse & Touch Hold)
+            document.querySelectorAll('.control-row').forEach(row => {
+                const action = row.getAttribute('data-action');
+                if (action === 'exit') {
+                    row.addEventListener('click', toggleExitEnterVehicle);
+                } else {
+                    const startAct = (ev) => { ev.preventDefault(); initAudio(); keys[action] = true; updateKeyBadges(); };
+                    const endAct = (ev) => { ev.preventDefault(); keys[action] = false; updateKeyBadges(); };
+                    row.addEventListener('mousedown', startAct);
+                    row.addEventListener('mouseup', endAct);
+                    row.addEventListener('mouseleave', endAct);
+                    row.addEventListener('touchstart', startAct, { passive: false });
+                    row.addEventListener('touchend', endAct, { passive: false });
+                }
+            });
+
+            // Quick Teleport Buttons for Instant Sightseeing
+            document.getElementById('btn-land-beach').addEventListener('click', () => {
+                playerMode = 'FLYING';
+                seatedDriver.visible = true;
+                footExplorer.visible = false;
+                vehicleGroup.position.set(47, 5.2, -13);
+                vehicleGroup.rotation.y = 0.25;
+                velocity.set(0, 0, 0);
+                showToast('Landed at Paradise Harbor Pier!');
+            });
+
+            document.getElementById('btn-fly-lighthouse').addEventListener('click', () => {
+                playerMode = 'FLYING';
+                seatedDriver.visible = true;
+                footExplorer.visible = false;
+                vehicleGroup.position.set(70, 68, 45);
+                vehicleGroup.rotation.y = 0.6;
+                velocity.set(0, 0, 0);
+                showToast('Soaring by the Lighthouse Peak!');
+            });
+
+            // Sound Toggle & Camera Reset
+            document.getElementById('btn-audio').addEventListener('click', (e) => {
+                initAudio();
+                soundEnabled = !soundEnabled;
+                if (propGain) propGain.gain.value = soundEnabled ? 0.04 : 0;
+                e.target.textContent = soundEnabled ? '🔊 Sound: ON' : '🔇 Sound: OFF';
+            });
+
+            let camYawOffset = 0;
+            let camPitchOffset = 0.22;
+            let isDraggingCam = false;
+            let prevMouse = { x: 0, y: 0 };
+
+            document.getElementById('btn-reset-cam').addEventListener('click', () => {
+                camYawOffset = 0;
+                camPitchOffset = 0.22;
+                showToast('Camera reset behind vehicle');
+            });
+
+            canvas.addEventListener('mousedown', (e) => {
+                isDraggingCam = true;
+                prevMouse.x = e.clientX;
+                prevMouse.y = e.clientY;
+            });
+            window.addEventListener('mousemove', (e) => {
+                if (!isDraggingCam) return;
+                const dx = e.clientX - prevMouse.x;
+                const dy = e.clientY - prevMouse.y;
+                prevMouse.x = e.clientX;
+                prevMouse.y = e.clientY;
+                camYawOffset -= dx * 0.006;
+                camPitchOffset = Math.max(-0.15, Math.min(1.05, camPitchOffset + dy * 0.005));
+            });
+            window.addEventListener('mouseup', () => { isDraggingCam = false; });
+
+            // ------------------------------------------------------------------
+            // 9. TERRAIN HEIGHT & RADAR MINIMAP RENDERING
+            // ------------------------------------------------------------------
+            function getTerrainHeight(x, z) {
+                let maxH = 1.4; // Ocean water surface hover height
+                let currentZone = { name: 'Paradise Island', subtitle: 'A New Adventure Awaits...' };
+                for (let i = 0; i < islandColliders.length; i++) {
+                    const col = islandColliders[i];
+                    const dist = Math.hypot(x - col.x, z - col.z);
+                    if (dist < col.r) {
+                        // Smooth edge falloff
+                        const edgeFactor = Math.min(1, (col.r - dist) / 8);
+                        const h = 1.4 + (col.height - 1.4) * edgeFactor;
+                        if (h > maxH) {
+                            maxH = h;
+                        }
+                    }
+                    if (dist < col.r + 35) {
+                        currentZone = col;
+                    }
+                }
+                return { height: maxH, zone: currentZone };
+            }
+
+            const minimapCanvas = document.getElementById('minimap-canvas');
+            const mCtx = minimapCanvas.getContext('2d');
+
+            function drawMinimap(px, pz, pyaw) {
+                mCtx.clearRect(0, 0, 160, 160);
+                mCtx.save();
+                mCtx.translate(80, 80);
+
+                const scale = 0.24;
+
+                // Draw Islands on Radar
+                islandColliders.forEach(isl => {
+                    const dx = (isl.x - px) * scale;
+                    const dz = -(isl.z - pz) * scale;
+                    // Beach ring
+                    mCtx.beginPath();
+                    mCtx.arc(dx, dz, isl.r * scale, 0, Math.PI * 2);
+                    mCtx.fillStyle = '#fde047';
+                    mCtx.fill();
+                    // Green interior
+                    mCtx.beginPath();
+                    mCtx.arc(dx, dz, isl.r * scale * 0.78, 0, Math.PI * 2);
+                    mCtx.fillStyle = '#4d7c0f';
+                    mCtx.fill();
+                });
+
+                // Draw Uncollected Golden Relics on Radar
+                relics.forEach(r => {
+                    if (r.collected) return;
+                    const rx = (r.group.position.x - px) * scale;
+                    const rz = -(r.group.position.z - pz) * scale;
+                    mCtx.fillStyle = '#facc15';
+                    mCtx.beginPath();
+                    mCtx.arc(rx, rz, 3.5, 0, Math.PI * 2);
+                    mCtx.fill();
+                    mCtx.strokeStyle = '#000';
+                    mCtx.lineWidth = 1;
+                    mCtx.stroke();
+                });
+
+                mCtx.restore();
+
+                // Rotate center player arrow
+                const playerArrow = document.getElementById('minimap-player');
+                playerArrow.style.transform = `rotate(${-pyaw * (180 / Math.PI)}deg)`;
+            }
+
+            // ------------------------------------------------------------------
+            // 10. PHYSICS & MAIN ANIMATION LOOP
+            // ------------------------------------------------------------------
+            const velocity = new THREE.Vector3();
+            let forwardSpeed = 0;
+            let verticalSpeed = 0;
+            let yawRate = 0;
+            let currentRoll = 0;
+            let currentPitch = 0;
+            const clock = new THREE.Clock();
+
+            function animate() {
+                requestAnimationFrame(animate);
+                const dt = Math.min(clock.getDelta(), 0.05);
+                const elapsed = clock.getElapsedTime();
+
+                if (playerMode === 'FLYING') {
+                    // ---- FLYING RAFT PHYSICS ----
+                    const maxSpd = keys.boost ? 56 : 34;
+                    const accel = keys.boost ? 32 : 18;
+
+                    if (keys.forward) {
+                        forwardSpeed = THREE.MathUtils.lerp(forwardSpeed, maxSpd, dt * 2.2);
+                    } else if (keys.backward) {
+                        forwardSpeed = THREE.MathUtils.lerp(forwardSpeed, -16, dt * 2.5);
+                    } else {
+                        forwardSpeed = THREE.MathUtils.lerp(forwardSpeed, 0, dt * 1.8);
+                    }
+
+                    // Turn Rate (A / D)
+                    const targetYawRate = (keys.left ? 1 : 0) - (keys.right ? 1 : 0);
+                    yawRate = THREE.MathUtils.lerp(yawRate, targetYawRate * 1.45, dt * 5);
+                    vehicleGroup.rotation.y += yawRate * dt;
+
+                    // Vertical Ascend / Descend (Space / Ctrl)
+                    const targetVert = ((keys.up ? 1 : 0) - (keys.down ? 1 : 0)) * (keys.boost ? 22 : 14);
+                    verticalSpeed = THREE.MathUtils.lerp(verticalSpeed, targetVert, dt * 4);
+
+                    // Move Vehicle
+                    const dirX = Math.sin(vehicleGroup.rotation.y);
+                    const dirZ = Math.cos(vehicleGroup.rotation.y);
+                    vehicleGroup.position.x += dirX * forwardSpeed * dt;
+                    vehicleGroup.position.z += dirZ * forwardSpeed * dt;
+                    vehicleGroup.position.y += verticalSpeed * dt;
+
+                    // Gentle Hovering Bob & Ground/Beach Landing Collision
+                    const terrainInfo = getTerrainHeight(vehicleGroup.position.x, vehicleGroup.position.z);
+                    const minHoverHeight = terrainInfo.height + Math.sin(elapsed * 2.6) * 0.22;
+
+                    if (vehicleGroup.position.y < minHoverHeight) {
+                        vehicleGroup.position.y = minHoverHeight;
+                        if (verticalSpeed < 0) verticalSpeed = 0;
+                    } else if (!keys.up && !keys.down) {
+                        // Gentle stationary hover oscillation in mid-air
+                        vehicleGroup.position.y += Math.sin(elapsed * 2.8) * 0.018;
+                    }
+                    vehicleGroup.position.y = Math.min(vehicleGroup.position.y, 185);
+
+                    // Natural Banking (Roll on Turn, Pitch on Acceleration)
+                    const targetRoll = -yawRate * 0.28;
+                    const targetPitch = (forwardSpeed / maxSpd) * 0.14 - (verticalSpeed * 0.008);
+                    currentRoll = THREE.MathUtils.lerp(currentRoll, targetRoll, dt * 6);
+                    currentPitch = THREE.MathUtils.lerp(currentPitch, targetPitch, dt * 5);
+
+                    raftChassis.rotation.z = currentRoll;
+                    raftChassis.rotation.x = currentPitch;
+
+                    // Animate Dashboard Steering Wheel & Throttle Lever
+                    steeringWheel.rotation.z = -yawRate * 0.65;
+                    throttleLever.rotation.x = (forwardSpeed / maxSpd) * 0.45;
+
+                    // Update Zone Banner
+                    document.getElementById('zone-title').textContent = terrainInfo.zone.name;
+                    document.getElementById('zone-subtitle').textContent = terrainInfo.zone.subtitle;
+
+                } else {
+                    // ---- ON-FOOT EXPLORER WALKING MODE ----
+                    forwardSpeed = THREE.MathUtils.lerp(forwardSpeed, 0, dt * 3);
+                    const walkSpeed = keys.boost ? 14 : 8.5;
+                    const turnInput = (keys.left ? 1 : 0) - (keys.right ? 1 : 0);
+                    footExplorer.rotation.y += turnInput * 2.4 * dt;
+
+                    let moveStep = 0;
+                    if (keys.forward) moveStep = walkSpeed;
+                    if (keys.backward) moveStep = -walkSpeed * 0.6;
+
+                    footExplorer.position.x += Math.sin(footExplorer.rotation.y) * moveStep * dt;
+                    footExplorer.position.z += Math.cos(footExplorer.rotation.y) * moveStep * dt;
+
+                    const footTerrain = getTerrainHeight(footExplorer.position.x, footExplorer.position.z);
+                    footExplorer.position.y = THREE.MathUtils.lerp(footExplorer.position.y, footTerrain.height, dt * 10);
+
+                    // Swing legs while walking
+                    const swing = Math.abs(moveStep) > 0.1 ? Math.sin(elapsed * 10) * 0.55 : 0;
+                    footExplorer.userData.leftLeg.rotation.x = swing;
+                    footExplorer.userData.rightLeg.rotation.x = -swing;
+                }
+
+                // ---- ANIMATE ROTATING WOODEN PROPELLERS & ENERGY TURBINE CONES ----
+                const thrustFactor = 1 + Math.abs(forwardSpeed) * 0.06 + (keys.up ? 0.6 : 0) + (keys.boost ? 0.8 : 0);
+                propellers.forEach(p => {
+                    p.group.rotation.y += p.dir * dt * 18 * thrustFactor;
+                });
+
+                thrusterCones.forEach((tc, i) => {
+                    const pulse = 0.82 + Math.sin(elapsed * 24 + i * 1.5) * 0.18;
+                    const scaleLen = Math.min(1.65, (0.65 + thrustFactor * 0.35) * pulse);
+                    tc.outer.scale.set(pulse, scaleLen, pulse);
+                    tc.inner.scale.set(pulse, scaleLen * 0.9, pulse);
+                });
+
+                // Update Web Audio Propeller Pitch
+                if (propOsc && soundEnabled) {
+                    propOsc.frequency.value = 44 + Math.abs(forwardSpeed) * 1.3 + (keys.boost ? 25 : 0);
+                }
+
+                // ---- ANIMATE WAVING SSJ FLAG & BEIGE CANVAS CANOPY ----
+                const windSpeed = 6 + Math.abs(forwardSpeed) * 0.35;
+                const flagPos = flagGeo.attributes.position;
+                for (let i = 0; i < flagPos.count; i++) {
+                    const fx = flagPos.getX(i); // 0 at mast, -2.35 at tip
+                    const distFromMast = Math.abs(fx);
+                    const waveZ = Math.sin(elapsed * windSpeed - distFromMast * 2.8) * (distFromMast * 0.14);
+                    flagPos.setZ(i, waveZ);
+                }
+                flagPos.needsUpdate = true;
+
+                // Subtle canvas canopy ripple
+                for (let i = 0; i < sailPosAttr.count; i++) {
+                    const sx = sailPosAttr.getX(i);
+                    const sz = sailPosAttr.getZ(i);
+                    const ripple = Math.sin(elapsed * (windSpeed * 0.7) + sx * 2 + sz * 2) * 0.035;
+                    sailPosAttr.setY(i, sailBaseY[i] + ripple);
+                }
+                sailPosAttr.needsUpdate = true;
+
+                // ---- ANIMATE SEAGULLS & RELIC COLLECTION ----
+                seagulls.forEach(g => {
+                    g.angle += g.speed * dt;
+                    g.group.position.set(
+                        g.cx + Math.cos(g.angle) * g.radius,
+                        g.y + Math.sin(elapsed * 2 + g.angle) * 1.5,
+                        g.cz + Math.sin(g.angle) * g.radius
+                    );
+                    g.group.rotation.y = -g.angle;
+                    const flap = Math.sin(elapsed * 9 + g.angle) * 0.45;
+                    g.leftWing.rotation.z = flap;
+                    g.rightWing.rotation.z = -flap;
+                });
+
+                const activeTarget = playerMode === 'FLYING' ? vehicleGroup.position : footExplorer.position;
+                relics.forEach(r => {
+                    if (r.collected) return;
+                    r.group.rotation.y += dt * 1.8;
+                    r.group.position.y += Math.sin(elapsed * 3) * 0.015;
+                    if (activeTarget.distanceTo(r.group.position) < 6.5) {
+                        r.collected = true;
+                        r.group.visible = false;
+                        collectedRelics++;
+                        document.getElementById('relic-count').textContent = `${collectedRelics}/${relics.length}`;
+                        playChime();
+                        showToast(`👑 Collected SSJ Sky Relic (${collectedRelics}/${relics.length})!`);
+                    }
+                });
+
+                // ---- SMOOTH THIRD-PERSON FOLLOW CAMERA ----
+                const targetObj = playerMode === 'FLYING' ? vehicleGroup : footExplorer;
+                const camDist = playerMode === 'FLYING' ? 13.5 : 8.5;
+                const camHeight = playerMode === 'FLYING' ? 4.8 + camPitchOffset * 7 : 3.2 + camPitchOffset * 4;
+                const totalYaw = targetObj.rotation.y + camYawOffset;
+
+                const desiredCamX = targetObj.position.x - Math.sin(totalYaw) * camDist;
+                const desiredCamZ = targetObj.position.z - Math.cos(totalYaw) * camDist;
+                const desiredCamY = Math.max(2.2, targetObj.position.y + camHeight);
+
+                camera.position.x = THREE.MathUtils.lerp(camera.position.x, desiredCamX, dt * 6.5);
+                camera.position.y = THREE.MathUtils.lerp(camera.position.y, desiredCamY, dt * 6.5);
+                camera.position.z = THREE.MathUtils.lerp(camera.position.z, desiredCamZ, dt * 6.5);
+
+                const lookAtPos = new THREE.Vector3(
+                    targetObj.position.x + Math.sin(targetObj.rotation.y) * 4,
+                    targetObj.position.y + 1.8,
+                    targetObj.position.z + Math.cos(targetObj.rotation.y) * 4
+                );
+                camera.lookAt(lookAtPos);
+
+                // ---- UPDATE HUD SPEEDOMETER, ALTITUDE & MINIMAP ----
+                const displayKmh = Math.round(Math.abs(forwardSpeed) * 3.2 + (keys.up || keys.down ? 14 : 0));
+                document.getElementById('speed-value').textContent = displayKmh;
+                document.getElementById('alt-value').textContent = Math.max(0, Math.round(targetObj.position.y - 1.4));
+
+                const maxArc = 230;
+                const arcFill = Math.min(maxArc, (displayKmh / 180) * maxArc);
+                document.getElementById('speed-arc').setAttribute('stroke-dasharray', `${arcFill} 360`);
+
+                drawMinimap(targetObj.position.x, targetObj.position.z, targetObj.rotation.y);
+
+                renderer.render(scene, camera);
+            }
+
+            window.addEventListener('resize', () => {
+                camera.aspect = window.innerWidth / window.innerHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(window.innerWidth, window.innerHeight);
+            });
+
+            // Start the 3D Game Loop
+            animate();
+            setTimeout(() => showToast('Fly with W/S/A/D, Space/Ctrl to Ascend/Descend, Shift to Boost!'), 600);
+        };
+    </script>
+</body>
+</html>

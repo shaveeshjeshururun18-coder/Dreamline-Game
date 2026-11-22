@@ -1,0 +1,6 @@
+{
+  "name": "DREAMLINE — A Peaceful Railway Journey",
+  "description": "A tranquil 3D Japanese countryside railway exploration game with dynamic skies, scenic local passenger trains, lakeside vistas, and atmospheric soundscapes.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

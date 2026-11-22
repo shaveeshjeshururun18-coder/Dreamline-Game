@@ -1,0 +1,70 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --font-display: 'Shippori Mincho', 'Noto Serif Tamil', Georgia, serif;
+    --font-sans: 'Plus Jakarta Sans', 'Noto Sans Tamil', system-ui, -apple-system, sans-serif;
+    --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+  }
+
+  html,
+  body,
+  #root {
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    font-family: var(--font-sans);
+    background-color: #171324;
+    color: #f7f3ee;
+    -webkit-font-smoothing: antialiased;
+  }
+}
+
+.font-display {
+  font-family: var(--font-display);
+}
+
+.font-mono-tabular {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.text-shadow-soft {
+  text-shadow: 0 2px 14px rgba(15, 11, 28, 0.72), 0 1px 3px rgba(15, 11, 28, 0.85);
+}
+
+.text-shadow-subtle {
+  text-shadow: 0 1px 6px rgba(15, 11, 28, 0.65);
+}
+
+/* Custom minimal range input matching warm railway palette */
+input[type='range'].dreamline-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 4px;
+  border-radius: 9999px;
+  background: rgba(247, 243, 238, 0.22);
+  outline: none;
+}
+
+input[type='range'].dreamline-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 9999px;
+  background: #f4b898;
+  border: 2px solid #231c36;
+  cursor: pointer;
+}
+
+input[type='range'].dreamline-slider::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 9999px;
+  background: #f4b898;
+  border: 2px solid #231c36;
+  cursor: pointer;
+}

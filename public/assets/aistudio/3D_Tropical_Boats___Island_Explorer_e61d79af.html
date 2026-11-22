@@ -1,0 +1,2275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Tropical Boats — Interactive Showcase & Island Explorer</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        * {
+            box-sizing: border-box;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            font-family: 'Outfit', sans-serif;
+            background: #072235;
+        }
+        #canvas-container {
+            width: 100%;
+            height: 100%;
+            position: relative;
+        }
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            cursor: grab;
+        }
+        canvas:active {
+            cursor: grabbing;
+        }
+        .glass-panel {
+            background: rgba(10, 28, 44, 0.76);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.16);
+            box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
+        }
+        .btn-boat {
+            transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        .btn-boat:hover {
+            transform: translateY(-2px);
+        }
+        .btn-boat.active {
+            background: linear-gradient(135deg, #06b6d4, #10b981);
+            color: #ffffff;
+            border-color: rgba(255, 255, 255, 0.45);
+            box-shadow: 0 0 20px rgba(6, 182, 212, 0.45);
+        }
+        .cam-pill.active {
+            background: rgba(255, 255, 255, 0.22);
+            color: #38bdf8;
+            border-color: #38bdf8;
+        }
+        /* Survival HUD styling for 1st person view */
+        .diamond-stat {
+            width: 36px;
+            height: 36px;
+            transform: rotate(45deg);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(255, 255, 255, 0.9);
+            border: 2px solid #1e293b;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+        }
+        .diamond-stat span {
+            transform: rotate(-45deg);
+            font-size: 15px;
+        }
+        /* Massive Island Arrival Banner & Teleport Warp Animations */
+        @keyframes bannerPulse {
+            0%, 100% { transform: translate(-50%, 0) scale(1); filter: drop-shadow(0 0 25px rgba(250, 204, 21, 0.7)); }
+            50% { transform: translate(-50%, 0) scale(1.04); filter: drop-shadow(0 0 45px rgba(6, 182, 212, 0.95)); }
+        }
+        .epic-banner-active {
+            animation: bannerPulse 2.4s infinite ease-in-out;
+        }
+        #warp-flash {
+            transition: opacity 0.45s ease-out;
+        }
+    </style>
+</head>
+<body class="text-white">
+
+    <!-- 3D Viewport Container -->
+    <div id="canvas-container"></div>
+
+    <!-- Fullscreen Dimensional Teleport Flash Overlay -->
+    <div id="warp-flash" class="fixed inset-0 z-50 pointer-events-none opacity-0 bg-gradient-to-br from-cyan-300 via-white to-fuchsia-500"></div>
+
+    <!-- MASSIVE GRAND ISLAND ARRIVAL BANNER OVERLAY -->
+    <div id="grand-island-banner" class="fixed top-24 left-1/2 -translate-x-1/2 z-30 pointer-events-none opacity-0 transition-all duration-700 transform -translate-y-8 w-[92%] max-w-2xl">
+        <div class="relative overflow-hidden rounded-3xl border-2 border-amber-300/80 bg-gradient-to-r from-slate-950/90 via-cyan-950/95 to-slate-950/90 px-6 py-4 text-center shadow-[0_0_60px_rgba(6,182,212,0.75)] backdrop-blur-xl">
+            <div class="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(250,204,21,0.22),transparent_70%)]"></div>
+            <div class="relative z-10 flex items-center justify-center gap-2 text-xs font-extrabold uppercase tracking-[0.3em] text-amber-300">
+                <span>🎆</span>
+                <span id="banner-subtitle">SEISMIC AWAKENING • FIREWORKS LAUNCHED</span>
+                <span>🎆</span>
+            </div>
+            <h2 id="banner-main-title" class="relative z-10 mt-1 bg-gradient-to-r from-amber-200 via-white to-cyan-300 bg-clip-text text-2xl sm:text-4xl font-black tracking-tight text-transparent">
+                ISLAND SANCTUARY DISCOVERED!
+            </h2>
+            <p id="banner-instructions" class="relative z-10 mt-1 text-xs sm:text-sm font-semibold text-cyan-200">
+                The ground has fractured! Sail straight into the swirling <span class="text-amber-300 underline">3D Teleport Portal</span> ahead to warp realms!
+            </p>
+        </div>
+    </div>
+
+    <!-- Top Header & Boat Switcher Bar -->
+    <div class="fixed top-3 left-3 right-3 z-20 flex flex-wrap items-center justify-between gap-3 pointer-events-none">
+        <!-- Brand / Title -->
+        <div class="glass-panel px-4 py-2.5 rounded-2xl pointer-events-auto flex items-center gap-3">
+            <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-400 to-emerald-500 flex items-center justify-center shadow-lg">
+                <svg class="w-6 h-6 text-slate-950" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M3 17h18M5 14l7-11 6 11H5zm7 0v3"/>
+                </svg>
+            </div>
+            <div>
+                <h1 class="text-base sm:text-lg font-extrabold tracking-tight leading-none text-white">TROPICAL 3D BOAT STUDIO</h1>
+                <p class="text-xs text-cyan-200/80 mt-0.5">2 Custom Handcrafted 3D Boats • Sail & Inspect</p>
+            </div>
+        </div>
+
+        <!-- Boat Selector Buttons -->
+        <div class="glass-panel p-1.5 rounded-2xl pointer-events-auto flex flex-wrap items-center gap-1.5">
+            <button id="select-boat-1" onclick="setBoatMode('catamaran')" class="btn-boat active px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold border border-transparent flex items-center gap-2">
+                <span>⛵</span>
+                <span>Boat 1: Bamboo Sail Raft</span>
+            </button>
+            <button id="select-boat-2" onclick="setBoatMode('outrigger')" class="btn-boat px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold text-slate-200 hover:bg-white/10 border border-transparent flex items-center gap-2">
+                <span>🛶</span>
+                <span>Boat 2: Tribal Outrigger Canoe</span>
+            </button>
+            <button id="select-both" onclick="setBoatMode('both')" class="btn-boat px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold text-slate-200 hover:bg-white/10 border border-transparent flex items-center gap-2">
+                <span>⚓</span>
+                <span>Compare Both Side-by-Side</span>
+            </button>
+        </div>
+
+        <!-- Camera & Export Controls -->
+        <div class="glass-panel p-1.5 rounded-2xl pointer-events-auto flex items-center gap-1.5">
+            <button id="cam-chase" onclick="setCameraMode('chase')" class="cam-pill active px-3 py-1.5 rounded-xl text-xs font-semibold border border-transparent transition">
+                3rd-Person View
+            </button>
+            <button id="cam-fpv" onclick="setCameraMode('fpv')" class="cam-pill px-3 py-1.5 rounded-xl text-xs font-semibold border border-transparent transition">
+                1st-Person Bow POV
+            </button>
+            <button id="cam-orbit" onclick="setCameraMode('inspect')" class="cam-pill px-3 py-1.5 rounded-xl text-xs font-semibold border border-transparent transition">
+                Close-Up Inspect
+            </button>
+            <button onclick="exportActiveBoatOBJ()" title="Download 3D .OBJ File for Game Engines" class="ml-1 px-3 py-1.5 rounded-xl text-xs font-bold bg-amber-400 hover:bg-amber-300 text-slate-950 transition flex items-center gap-1 shadow">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5m0 0l5-5m-5 5V4"/>
+                </svg>
+                <span>Export .OBJ</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- Top Compass Bar (Horizon Style) + Island Distance Tracker -->
+    <div class="fixed top-20 left-1/2 -translate-x-1/2 z-10 pointer-events-none hidden sm:flex flex-col items-center gap-1.5">
+        <div class="w-80 h-6 rounded-full bg-slate-950/55 backdrop-blur-md border border-white/15 px-4 flex items-center justify-between text-[11px] font-bold tracking-widest text-cyan-100/90">
+            <span>NW</span>
+            <span class="text-white/40">•</span>
+            <span id="compass-heading" class="text-amber-300 flex items-center gap-1">◆ N</span>
+            <span class="text-white/40">•</span>
+            <span id="island-dist-badge" class="text-emerald-300">🏝️ 34m to Island</span>
+        </div>
+    </div>
+
+    <!-- Boat Specs Card (Left Side) -->
+    <div id="specs-panel" class="fixed left-4 bottom-24 sm:bottom-6 z-20 max-w-xs glass-panel rounded-2xl p-4 pointer-events-auto transition-all">
+        <div class="flex items-center justify-between mb-1.5">
+            <span id="boat-badge" class="text-[11px] uppercase tracking-wider font-extrabold px-2.5 py-0.5 rounded-full bg-cyan-400/20 text-cyan-300 border border-cyan-400/30">
+                Polynesian Craft
+            </span>
+            <span id="speed-readout" class="text-xs font-mono text-emerald-300 font-bold">0.0 kts</span>
+        </div>
+        <h2 id="boat-title" class="text-base font-extrabold text-white">Bamboo Catamaran Sail Raft</h2>
+        <p id="boat-desc" class="text-xs text-slate-300 mt-1 leading-relaxed">
+            Twin ocean-blue pontoons lashed to a 14-pole bamboo deck with hemp bindings, woven pandanus leaf mat, steering oar, and a wind-billowing triangular sail topped with an island crest flag.
+        </p>
+
+        <!-- Environment & Wave Controls -->
+        <div class="mt-3 pt-3 border-t border-white/10 grid grid-cols-2 gap-2 text-xs">
+            <button onclick="toggleWind()" id="wind-btn" class="px-2.5 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 font-semibold text-left flex items-center justify-between">
+                <span>💨 Wind</span>
+                <span id="wind-val" class="text-cyan-300 font-bold">Breezy</span>
+            </button>
+            <button onclick="cycleTimeOfDay()" class="px-2.5 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 font-semibold text-left flex items-center justify-between">
+                <span>☀️ Light</span>
+                <span id="light-val" class="text-amber-300 font-bold">Tropical Noon</span>
+            </button>
+        </div>
+
+        <!-- Instant Island Event & Portal Controls -->
+        <div class="mt-2.5 pt-2.5 border-t border-white/10 flex flex-col gap-1.5">
+            <button onclick="sailToIslandAndTrigger()" class="w-full py-2 px-3 rounded-xl bg-gradient-to-r from-amber-500 via-orange-500 to-pink-500 hover:from-amber-400 hover:to-pink-400 text-slate-950 font-extrabold text-xs shadow-lg flex items-center justify-center gap-1.5 transition transform active:scale-95">
+                <span>🎆</span>
+                <span>Enter Island: Fireworks & Portal!</span>
+            </button>
+            <button id="btn-warp-portal" onclick="triggerPortalTeleport()" class="hidden w-full py-2 px-3 rounded-xl bg-gradient-to-r from-cyan-400 via-fuchsia-500 to-indigo-500 hover:opacity-95 text-white font-extrabold text-xs shadow-[0_0_20px_rgba(217,70,239,0.6)] items-center justify-center gap-1.5 transition">
+                <span>🌀</span>
+                <span>Warp Through Teleport Portal</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- Survival Style HUD Icons (Shown in 1st-Person View like Reference Image 3) -->
+    <div id="fpv-survival-hud" class="fixed left-5 bottom-6 z-10 hidden pointer-events-none items-center gap-3">
+        <div class="diamond-stat" style="width:44px;height:44px;">
+            <span>🤍</span>
+        </div>
+        <div class="diamond-stat">
+            <span>🍖</span>
+        </div>
+        <div class="diamond-stat">
+            <span>💧</span>
+        </div>
+        <div class="diamond-stat">
+            <span>⚡</span>
+        </div>
+    </div>
+
+    <!-- Right-side Sailing Controls (Touch + Keyboard Guide) -->
+    <div class="fixed right-4 bottom-4 z-20 flex flex-col items-end gap-2 pointer-events-auto">
+        <div class="glass-panel px-3.5 py-2.5 rounded-2xl text-xs text-slate-200 hidden md:block">
+            <div class="font-bold text-cyan-300 mb-1">Controls</div>
+            <div class="flex items-center gap-2"><kbd class="px-1.5 py-0.5 bg-white/15 rounded text-[11px] font-bold">W</kbd><kbd class="px-1.5 py-0.5 bg-white/15 rounded text-[11px] font-bold">S</kbd> Sail Forward / Reverse</div>
+            <div class="flex items-center gap-2 mt-1"><kbd class="px-1.5 py-0.5 bg-white/15 rounded text-[11px] font-bold">A</kbd><kbd class="px-1.5 py-0.5 bg-white/15 rounded text-[11px] font-bold">D</kbd> Steer Rudder Left / Right</div>
+            <div class="text-[11px] text-slate-400 mt-1">Drag mouse to orbit • Scroll to zoom</div>
+        </div>
+
+        <!-- On-Screen Touch D-Pad for Mobile / Quick Click Sailing -->
+        <div class="glass-panel p-2 rounded-2xl grid grid-cols-3 gap-1.5 w-36">
+            <div></div>
+            <button id="btn-up" class="h-10 rounded-xl bg-white/10 active:bg-cyan-500/60 hover:bg-white/20 flex items-center justify-center font-bold text-base">▲</button>
+            <div></div>
+            <button id="btn-left" class="h-10 rounded-xl bg-white/10 active:bg-cyan-500/60 hover:bg-white/20 flex items-center justify-center font-bold text-base">◀</button>
+            <button id="btn-down" class="h-10 rounded-xl bg-white/10 active:bg-cyan-500/60 hover:bg-white/20 flex items-center justify-center font-bold text-base">▼</button>
+            <button id="btn-right" class="h-10 rounded-xl bg-white/10 active:bg-cyan-500/60 hover:bg-white/20 flex items-center justify-center font-bold text-base">▶</button>
+        </div>
+    </div>
+
+    <!-- Notification Toast for Export / Mode Changes -->
+    <div id="toast-msg" class="fixed bottom-6 left-1/2 -translate-x-1/2 z-30 glass-panel px-4 py-2 rounded-xl text-xs font-bold text-emerald-300 opacity-0 pointer-events-none transition-opacity duration-300">
+        Exported 3D Model!
+    </div>
+
+    <script>
+        // ============================================================================
+        // GLOBAL SCENE, STATE & CONFIGURATION
+        // ============================================================================
+        let scene, camera, renderer, clock;
+        let waterMesh, waterGeometry, skyDome, sunLight, ambientLight;
+        let catamaranGroup, outriggerGroup;
+        let sailMesh, sailGeometry, flagMesh, flagGeometry;
+        let outriggerWheel, outriggerAxeGroup;
+        let wakeParticles = [];
+        let cloudsGroup;
+
+        // Island Arrival, Ground-Breaking Cataclysm, Fireworks & Teleport Portal globals
+        let islandGroupRef, monolithGroupRef;
+        let skyBannerGroup, skyBannerMesh, skyBannerGeo;
+        let portalGroup, portalRing1, portalRing2, portalRing3, portalCoreMesh, portalBeamMesh, portalLight;
+        let groundFissuresGroup, arrivalBeaconRing;
+        let floatingBoulders = [];
+        let shockwaveRings = [];
+        let fireworks = [];
+        let fireworkLight;
+
+        // Current interactive state
+        const state = {
+            boatMode: 'catamaran', // 'catamaran' | 'outrigger' | 'both'
+            cameraMode: 'chase',   // 'chase' | 'fpv' | 'inspect'
+            windStrength: 1.0,     // 0.4, 1.0, 1.8
+            timeOfDay: 0,          // 0: Noon, 1: Golden Sunset, 2: Morning Mist
+            // Physics / movement of the controlled craft
+            pos: new THREE.Vector3(0, 0, 28),
+            heading: 0,            // radians, 0 = facing -Z (towards the island)
+            speed: 0,
+            turnRate: 0,
+            keys: { forward: false, backward: false, left: false, right: false },
+            // Camera orbit angles
+            camYaw: 0.35,
+            camPitch: 0.28,
+            camDist: 16,
+            isDragging: false,
+            prevMouse: { x: 0, y: 0 },
+            // Island Event & Portal State
+            islandEventActive: false,
+            islandEventTimer: 0,
+            shakeIntensity: 0,
+            portalRiseProgress: 0,
+            portalCooldown: 0,
+            realmIndex: 0 // 0: Tropical Lagoon, 1: Bioluminescent Aether, 2: Volcanic Gold
+        };
+
+        // ============================================================================
+        // PROCEDURAL TEXTURE GENERATORS (No external URLs required)
+        // ============================================================================
+        function createFlagTexture() {
+            const c = document.createElement('canvas');
+            c.width = 256;
+            c.height = 128;
+            const ctx = c.getContext('2d');
+
+            // Vibrant tropical green base (matching Reference Image 1)
+            ctx.fillStyle = '#2eab27';
+            ctx.fillRect(0, 0, 256, 128);
+
+            // Golden yellow central sun/emblem
+            ctx.fillStyle = '#facc15';
+            ctx.beginPath();
+            ctx.arc(115, 64, 38, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Stylized crimson/red island bird/totem motif inside
+            ctx.fillStyle = '#dc2626';
+            ctx.beginPath();
+            ctx.moveTo(85, 76);
+            ctx.quadraticCurveTo(115, 35, 148, 56);
+            ctx.quadraticCurveTo(125, 88, 85, 76);
+            ctx.fill();
+
+            const tex = new THREE.CanvasTexture(c);
+            tex.needsUpdate = true;
+            return tex;
+        }
+
+        function createWoodPlankTexture(baseHex, stripeHex) {
+            const c = document.createElement('canvas');
+            c.width = 256;
+            c.height = 256;
+            const ctx = c.getContext('2d');
+            ctx.fillStyle = baseHex;
+            ctx.fillRect(0, 0, 256, 256);
+
+            // Wood grain lines & plank seams
+            ctx.strokeStyle = stripeHex;
+            for (let i = 0; i < 60; i++) {
+                ctx.lineWidth = 1 + Math.random() * 2;
+                ctx.beginPath();
+                const x = Math.random() * 256;
+                ctx.moveTo(x, 0);
+                ctx.bezierCurveTo(x + (Math.random() - 0.5) * 14, 85, x + (Math.random() - 0.5) * 14, 170, x, 256);
+                ctx.stroke();
+            }
+
+            // Dark plank grooves (like Reference Image 3 floor planks)
+            ctx.fillStyle = 'rgba(20, 12, 5, 0.55)';
+            for (let p = 64; p < 256; p += 64) {
+                ctx.fillRect(p - 2, 0, 3, 256);
+            }
+
+            const tex = new THREE.CanvasTexture(c);
+            tex.wrapS = THREE.RepeatWrapping;
+            tex.wrapT = THREE.RepeatWrapping;
+            return tex;
+        }
+
+        function createWovenMatTexture() {
+            const c = document.createElement('canvas');
+            c.width = 128;
+            c.height = 128;
+            const ctx = c.getContext('2d');
+            ctx.fillStyle = '#3f7d20';
+            ctx.fillRect(0, 0, 128, 128);
+            ctx.fillStyle = '#539e2b';
+            for (let y = 0; y < 128; y += 8) {
+                for (let x = 0; x < 128; x += 8) {
+                    if ((x + y) % 16 === 0) {
+                        ctx.fillRect(x, y, 7, 4);
+                    } else {
+                        ctx.fillRect(x, y, 4, 7);
+                    }
+                }
+            }
+            return new THREE.CanvasTexture(c);
+        }
+
+        function createGrandSkyBannerTexture() {
+            const c = document.createElement('canvas');
+            c.width = 1024;
+            c.height = 256;
+            const ctx = c.getContext('2d');
+
+            // Rich royal festive gradient background
+            const grad = ctx.createLinearGradient(0, 0, 1024, 256);
+            grad.addColorStop(0, '#0f172a');
+            grad.addColorStop(0.25, '#0369a1');
+            grad.addColorStop(0.5, '#7e22ce');
+            grad.addColorStop(0.75, '#b45309');
+            grad.addColorStop(1, '#0f172a');
+            ctx.fillStyle = grad;
+            ctx.fillRect(0, 0, 1024, 256);
+
+            // Glowing golden tribal border
+            ctx.strokeStyle = '#facc15';
+            ctx.lineWidth = 14;
+            ctx.strokeRect(12, 12, 1000, 232);
+
+            ctx.strokeStyle = '#38bdf8';
+            ctx.lineWidth = 4;
+            ctx.strokeRect(26, 26, 972, 204);
+
+            // Festive stars & emblem accents
+            ctx.fillStyle = '#fde047';
+            ctx.font = 'bold 34px Outfit, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText('★  SEISMIC AWAKENING  •  GRAND ISLAND FESTIVAL  ★', 512, 78);
+
+            ctx.fillStyle = '#ffffff';
+            ctx.shadowColor = '#38bdf8';
+            ctx.shadowBlur = 22;
+            ctx.font = '900 68px Outfit, sans-serif';
+            ctx.fillText('WELCOME TO PARADISE', 512, 160);
+
+            ctx.shadowBlur = 0;
+            ctx.fillStyle = '#67e8f9';
+            ctx.font = 'bold 28px Outfit, sans-serif';
+            ctx.fillText('SAIL INTO THE TELEPORT PORTAL BELOW TO WARP REALMS', 512, 212);
+
+            const tex = new THREE.CanvasTexture(c);
+            tex.needsUpdate = true;
+            return tex;
+        }
+
+        function createPortalVortexTexture() {
+            const c = document.createElement('canvas');
+            c.width = 512;
+            c.height = 512;
+            const ctx = c.getContext('2d');
+            const cx = 256, cy = 256;
+
+            const radGrad = ctx.createRadialGradient(cx, cy, 8, cx, cy, 250);
+            radGrad.addColorStop(0, '#ffffff');
+            radGrad.addColorStop(0.22, '#38bdf8');
+            radGrad.addColorStop(0.55, '#c026d3');
+            radGrad.addColorStop(0.85, '#311068');
+            radGrad.addColorStop(1, 'rgba(15, 23, 42, 0)');
+            ctx.fillStyle = radGrad;
+            ctx.fillRect(0, 0, 512, 512);
+
+            // Spiral energy arms
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.7)';
+            for (let arm = 0; arm < 8; arm++) {
+                ctx.beginPath();
+                ctx.lineWidth = 4;
+                const baseAngle = (arm / 8) * Math.PI * 2;
+                for (let r = 10; r < 235; r += 6) {
+                    const a = baseAngle + r * 0.032;
+                    const x = cx + Math.cos(a) * r;
+                    const y = cy + Math.sin(a) * r;
+                    if (r === 10) ctx.moveTo(x, y);
+                    else ctx.lineTo(x, y);
+                }
+                ctx.stroke();
+            }
+
+            const tex = new THREE.CanvasTexture(c);
+            tex.needsUpdate = true;
+            return tex;
+        }
+
+        // ============================================================================
+        // BOAT 1 BUILDER: BAMBOO CATAMARAN SAIL RAFT (Reference Image 1 Style)
+        // ============================================================================
+        function buildBambooCatamaran() {
+            const root = new THREE.Group();
+            root.name = "Bamboo_Catamaran_Sail_Raft";
+
+            // Shared crafted materials
+            const bambooMat = new THREE.MeshStandardMaterial({
+                color: 0xa67038,
+                roughness: 0.72,
+                metalness: 0.05
+            });
+            const darkWoodMat = new THREE.MeshStandardMaterial({
+                color: 0x5c3818,
+                roughness: 0.8
+            });
+            const ropeMat = new THREE.MeshStandardMaterial({
+                color: 0xd6b57c,
+                roughness: 0.9
+            });
+            const bluePontoonMat = new THREE.MeshStandardMaterial({
+                color: 0x1d5bbf,
+                roughness: 0.45,
+                metalness: 0.08
+            });
+            const pontoonTipMat = new THREE.MeshStandardMaterial({
+                color: 0xe2e8f0,
+                roughness: 0.6
+            });
+
+            // 1. Twin Blue Curved Pontoons (Left & Right Hulls)
+            [-2.25, 2.25].forEach((xOffset) => {
+                const pontoonGroup = new THREE.Group();
+                pontoonGroup.position.set(xOffset, 0.08, 0);
+
+                // Main cylindrical hull body
+                const bodyGeo = new THREE.CylinderGeometry(0.36, 0.36, 6.6, 16);
+                bodyGeo.rotateX(Math.PI / 2);
+                const bodyMesh = new THREE.Mesh(bodyGeo, bluePontoonMat);
+                bodyMesh.castShadow = true;
+                bodyMesh.receiveShadow = true;
+                pontoonGroup.add(bodyMesh);
+
+                // Tapered upturned bow cone
+                const bowGeo = new THREE.ConeGeometry(0.36, 1.5, 16);
+                bowGeo.rotateX(-Math.PI / 2);
+                const bowMesh = new THREE.Mesh(bowGeo, bluePontoonMat);
+                bowMesh.position.set(0, 0.12, -3.95);
+                bowMesh.rotation.x = 0.18;
+                bowMesh.castShadow = true;
+                pontoonGroup.add(bowMesh);
+
+                // Tapered stern cone
+                const sternGeo = new THREE.ConeGeometry(0.36, 1.2, 16);
+                sternGeo.rotateX(Math.PI / 2);
+                const sternMesh = new THREE.Mesh(sternGeo, bluePontoonMat);
+                sternMesh.position.set(0, 0.06, 3.85);
+                sternMesh.rotation.x = -0.12;
+                sternMesh.castShadow = true;
+                pontoonGroup.add(sternMesh);
+
+                // White weathered waterline stripe ring accents
+                [-2.2, 0, 2.2].forEach((zPos) => {
+                    const bandGeo = new THREE.TorusGeometry(0.365, 0.035, 8, 20);
+                    const band = new THREE.Mesh(bandGeo, pontoonTipMat);
+                    band.position.z = zPos;
+                    pontoonGroup.add(band);
+                });
+
+                root.add(pontoonGroup);
+            });
+
+            // 2. Four Sturdy Crossbeams (Akas) + Rope Lashings
+            const crossZ = [-2.6, -0.9, 0.9, 2.6];
+            crossZ.forEach((zPos) => {
+                const beamGeo = new THREE.CylinderGeometry(0.11, 0.11, 5.2, 10);
+                beamGeo.rotateZ(Math.PI / 2);
+                const beam = new THREE.Mesh(beamGeo, darkWoodMat);
+                beam.position.set(0, 0.42, zPos);
+                beam.castShadow = true;
+                root.add(beam);
+
+                // Vertical wooden struts connecting pontoon to crossbeam
+                [-2.25, 2.25].forEach((xPos) => {
+                    const strutGeo = new THREE.CylinderGeometry(0.09, 0.1, 0.45, 8);
+                    const strut = new THREE.Mesh(strutGeo, darkWoodMat);
+                    strut.position.set(xPos, 0.24, zPos);
+                    root.add(strut);
+
+                    // Hemp rope lashing knot
+                    const knotGeo = new THREE.TorusGeometry(0.14, 0.045, 8, 14);
+                    knotGeo.rotateY(Math.PI / 4);
+                    const knot = new THREE.Mesh(knotGeo, ropeMat);
+                    knot.position.set(xPos, 0.42, zPos);
+                    root.add(knot);
+                });
+            });
+
+            // 3. Bamboo Pole Deck (15 longitudinal poles with organic slight offsets)
+            const numPoles = 15;
+            for (let i = 0; i < numPoles; i++) {
+                const xPos = -1.96 + (i * (3.92 / (numPoles - 1)));
+                const poleLen = 6.2 + Math.sin(i * 1.7) * 0.25;
+                const radius = 0.095 + (i % 3) * 0.01;
+                const poleGeo = new THREE.CylinderGeometry(radius, radius, poleLen, 10);
+                poleGeo.rotateX(Math.PI / 2);
+                const pole = new THREE.Mesh(poleGeo, bambooMat);
+                pole.position.set(xPos, 0.56, 0);
+                pole.castShadow = true;
+                pole.receiveShadow = true;
+                root.add(pole);
+
+                // Rope lashings across each bamboo pole
+                crossZ.forEach((zPos) => {
+                    if (i % 2 === 0) {
+                        const wrapGeo = new THREE.TorusGeometry(radius + 0.015, 0.022, 6, 10);
+                        wrapGeo.rotateY(Math.PI / 2);
+                        const wrap = new THREE.Mesh(wrapGeo, ropeMat);
+                        wrap.position.set(xPos, 0.55, zPos);
+                        root.add(wrap);
+                    }
+                });
+            }
+
+            // 4. Woven Green Pandanus Leaf Mat & Raised Stern Timber Box (from Image 1)
+            const matTex = createWovenMatTexture();
+            const leafMat = new THREE.MeshStandardMaterial({
+                map: matTex,
+                roughness: 0.85
+            });
+            const greenMatGeo = new THREE.BoxGeometry(1.75, 0.05, 1.55);
+            const greenMatMesh = new THREE.Mesh(greenMatGeo, leafMat);
+            greenMatMesh.position.set(0.65, 0.66, 2.05);
+            greenMatMesh.rotation.y = -0.06;
+            greenMatMesh.receiveShadow = true;
+            root.add(greenMatMesh);
+
+            // Draping green mat edge over the stern
+            const drapeGeo = new THREE.BoxGeometry(1.2, 0.35, 0.08);
+            const drapeMesh = new THREE.Mesh(drapeGeo, leafMat);
+            drapeMesh.position.set(0.75, 0.5, 2.84);
+            drapeMesh.rotation.x = 0.35;
+            root.add(drapeMesh);
+
+            // Stern heavy timber bench block
+            const sternBoxGeo = new THREE.BoxGeometry(1.9, 0.28, 0.62);
+            const sternBox = new THREE.Mesh(sternBoxGeo, darkWoodMat);
+            sternBox.position.set(1.35, 0.72, 2.55);
+            sternBox.castShadow = true;
+            root.add(sternBox);
+
+            // 5. Long Wooden Steering Oar / Rudder at the Stern
+            const oarGroup = new THREE.Group();
+            oarGroup.position.set(1.45, 0.75, 2.75);
+            const shaftGeo = new THREE.CylinderGeometry(0.045, 0.055, 3.2, 8);
+            const shaft = new THREE.Mesh(shaftGeo, darkWoodMat);
+            shaft.rotation.x = 0.72;
+            shaft.rotation.z = -0.15;
+            oarGroup.add(shaft);
+
+            const bladeGeo = new THREE.BoxGeometry(0.18, 0.95, 0.04);
+            const blade = new THREE.Mesh(bladeGeo, darkWoodMat);
+            blade.position.set(0.15, -0.95, 1.05);
+            blade.rotation.x = 0.72;
+            oarGroup.add(blade);
+            root.add(oarGroup);
+
+            // 6. Tall Wooden Mast, Coiled Rope Base & Rigging Stays
+            const mastHeight = 6.6;
+            const mastGeo = new THREE.CylinderGeometry(0.07, 0.14, mastHeight, 12);
+            const mast = new THREE.Mesh(mastGeo, darkWoodMat);
+            mast.position.set(0, 0.56 + mastHeight / 2, -0.65);
+            mast.rotation.z = -0.03;
+            mast.castShadow = true;
+            root.add(mast);
+
+            // Coiled rope collar at mast base
+            for (let c = 0; c < 4; c++) {
+                const coilGeo = new THREE.TorusGeometry(0.24 - c * 0.02, 0.045, 8, 16);
+                coilGeo.rotateX(Math.PI / 2);
+                const coil = new THREE.Mesh(coilGeo, ropeMat);
+                coil.position.set(0, 0.64 + c * 0.06, -0.65);
+                root.add(coil);
+            }
+
+            // Diagonal bamboo boom & yard holding the triangular sail
+            const boomGeo = new THREE.CylinderGeometry(0.045, 0.06, 3.8, 8);
+            boomGeo.rotateX(Math.PI / 2);
+            const boom = new THREE.Mesh(boomGeo, bambooMat);
+            boom.position.set(0, 1.55, 1.05);
+            boom.rotation.x = -0.22;
+            root.add(boom);
+
+            // 7. Dynamic Triangular Cream Sail (Animated vertices in main loop)
+            sailGeometry = new THREE.PlaneGeometry(3.4, 5.2, 12, 16);
+            // Taper the plane into a classic Polynesian triangular/lateen sail shape
+            const posAttr = sailGeometry.attributes.position;
+            for (let i = 0; i < posAttr.count; i++) {
+                const y = posAttr.getY(i); // -2.6 to +2.6
+                const normY = (y + 2.6) / 5.2; // 0 at bottom, 1 at top
+                let x = posAttr.getX(i); // -1.7 to +1.7
+                // Make left edge follow the mast (x = 0) and right edge taper towards mast top
+                const widthAtY = 3.3 * (1.0 - normY * 0.88);
+                const u = (x + 1.7) / 3.4; // 0 to 1
+                const newX = u * widthAtY;
+                const newY = y + u * (1.0 - normY) * 0.55; // Slight upward rake on boom
+                posAttr.setXYZ(i, newX, newY, 0);
+            }
+            sailGeometry.computeVertexNormals();
+
+            const sailMat = new THREE.MeshStandardMaterial({
+                color: 0xf5ebd6,
+                roughness: 0.65,
+                side: THREE.DoubleSide
+            });
+            sailMesh = new THREE.Mesh(sailGeometry, sailMat);
+            // Rotate so X extends backward (+Z) along the boat's centerline
+            sailMesh.rotation.y = -Math.PI / 2;
+            sailMesh.position.set(0, 3.65, -0.62);
+            sailMesh.castShadow = true;
+            root.add(sailMesh);
+
+            // 8. Waving Green & Gold Emblem Flag at the Mast Peak (Reference Image 1)
+            flagGeometry = new THREE.PlaneGeometry(1.35, 0.72, 10, 5);
+            // Shift vertices so X=0 is attached to the mast
+            const fPos = flagGeometry.attributes.position;
+            for (let i = 0; i < fPos.count; i++) {
+                fPos.setX(i, fPos.getX(i) + 0.675);
+            }
+            flagGeometry.computeVertexNormals();
+
+            const flagMat = new THREE.MeshStandardMaterial({
+                map: createFlagTexture(),
+                roughness: 0.5,
+                side: THREE.DoubleSide
+            });
+            flagMesh = new THREE.Mesh(flagGeometry, flagMat);
+            flagMesh.rotation.y = -Math.PI / 2;
+            flagMesh.position.set(0, 6.72, -0.65);
+            root.add(flagMesh);
+
+            // 9. Taut Rigging Rope Stays (Mast top to bow & stern corners)
+            const mastTop = new THREE.Vector3(0, 6.3, -0.65);
+            const anchorPoints = [
+                new THREE.Vector3(-2.1, 0.58, -2.55),
+                new THREE.Vector3(2.1, 0.58, -2.55),
+                new THREE.Vector3(0, 1.95, 2.75)
+            ];
+            anchorPoints.forEach((pt) => {
+                const dist = mastTop.distanceTo(pt);
+                const ropeGeo = new THREE.CylinderGeometry(0.016, 0.016, dist, 6);
+                const rope = new THREE.Mesh(ropeGeo, ropeMat);
+                rope.position.copy(mastTop).add(pt).multiplyScalar(0.5);
+                rope.lookAt(pt);
+                rope.rotateX(Math.PI / 2);
+                root.add(rope);
+            });
+
+            return root;
+        }
+
+        // ============================================================================
+        // BOAT 2 BUILDER: TRIBAL SURVIVAL OUTRIGGER CANOE (Reference Images 2 & 3)
+        // ============================================================================
+        function buildTribalOutrigger() {
+            const root = new THREE.Group();
+            root.name = "Tribal_Survival_Outrigger_Canoe";
+
+            const plankTex = createWoodPlankTexture('#8c6239', '#593a1e');
+            const hullWoodMat = new THREE.MeshStandardMaterial({
+                map: plankTex,
+                roughness: 0.78
+            });
+            const weatheredTimberMat = new THREE.MeshStandardMaterial({
+                color: 0x6e4b2a,
+                roughness: 0.85
+            });
+            const darkRopeMat = new THREE.MeshStandardMaterial({
+                color: 0x3b2818,
+                roughness: 0.92
+            });
+            const ironMat = new THREE.MeshStandardMaterial({
+                color: 0x64748b,
+                roughness: 0.35,
+                metalness: 0.82
+            });
+            const tribalAccentMat = new THREE.MeshStandardMaterial({
+                color: 0xd97706,
+                roughness: 0.6
+            });
+            const sackMat = new THREE.MeshStandardMaterial({
+                color: 0x9ca38f,
+                roughness: 0.9
+            });
+
+            // 1. Pointed Planked Canoe Hull (Custom shaped hull with flared gunwales & sharp bow)
+            const hullLength = 8.4;
+            const segZ = 24;
+            const segX = 12;
+            const hullGeo = new THREE.PlaneGeometry(2.4, hullLength, segX, segZ);
+            hullGeo.rotateX(-Math.PI / 2);
+
+            const hPos = hullGeo.attributes.position;
+            for (let i = 0; i < hPos.count; i++) {
+                const x = hPos.getX(i); // -1.2 to +1.2
+                const z = hPos.getZ(i); // -4.2 (bow) to +4.2 (stern)
+                const normZ = z / 4.2;  // -1 at bow, +1 at stern
+
+                // Narrow sharply towards the bow (-1) and moderately at the stern (+1)
+                let widthFactor = 1.0 - Math.pow(Math.abs(normZ), 1.65);
+                if (normZ < 0) widthFactor = Math.pow(1.0 + normZ, 0.85); // Sharp pointed bow like Image 3
+                widthFactor = Math.max(0.03, widthFactor);
+
+                const shapedX = x * widthFactor;
+                // Cross-section U-curve: edges (|x| near 1.2) rise up to form gunwales, center forms floor
+                const edgeRatio = Math.abs(x) / 1.2;
+                let y = Math.pow(edgeRatio, 2.2) * 0.82;
+
+                // Raise the prow & stern sheer line (rocker)
+                const sheerLift = Math.pow(Math.abs(normZ), 2.4) * 0.55;
+                y += sheerLift * 0.7;
+
+                hPos.setXYZ(i, shapedX, y, z);
+            }
+            hullGeo.computeVertexNormals();
+
+            const hullMat = new THREE.MeshStandardMaterial({
+                map: plankTex,
+                roughness: 0.75,
+                side: THREE.DoubleSide
+            });
+            const hullMesh = new THREE.Mesh(hullGeo, hullMat);
+            hullMesh.position.y = 0.05;
+            hullMesh.castShadow = true;
+            hullMesh.receiveShadow = true;
+            root.add(hullMesh);
+
+            // 2. Flat Slatted Wooden Floorboards Inside the Hull (Directly matching Image 3 POV)
+            const floorGeo = new THREE.PlaneGeometry(1.5, 5.8, 8, 16);
+            floorGeo.rotateX(-Math.PI / 2);
+            const flPos = floorGeo.attributes.position;
+            for (let i = 0; i < flPos.count; i++) {
+                const x = flPos.getX(i);
+                const z = flPos.getZ(i);
+                const normZ = z / 3.4;
+                const taper = Math.max(0.08, 1.0 - Math.pow(Math.abs(normZ), 1.4));
+                flPos.setX(i, x * taper);
+            }
+            floorGeo.computeVertexNormals();
+            const floorMesh = new THREE.Mesh(floorGeo, hullWoodMat);
+            floorMesh.position.set(0, 0.34, 0.15);
+            floorMesh.receiveShadow = true;
+            root.add(floorMesh);
+
+            // 3. Thick Carved Gunwale Rails Running Along Left & Right Edges
+            [-1, 1].forEach((side) => {
+                const points = [];
+                for (let s = 0; s <= 16; s++) {
+                    const t = s / 16; // 0 (bow) to 1 (stern)
+                    const z = -4.15 + t * 8.3;
+                    const normZ = z / 4.2;
+                    let wf = 1.0 - Math.pow(Math.abs(normZ), 1.65);
+                    if (normZ < 0) wf = Math.pow(1.0 + normZ, 0.85);
+                    const x = side * 1.18 * Math.max(0.02, wf);
+                    const y = 0.85 + Math.pow(Math.abs(normZ), 2.4) * 0.38;
+                    points.push(new THREE.Vector3(x, y, z));
+                }
+                const curve = new THREE.CatmullRomCurve3(points);
+                const railGeo = new THREE.TubeGeometry(curve, 24, 0.085, 8, false);
+                const railMesh = new THREE.Mesh(railGeo, weatheredTimberMat);
+                railMesh.castShadow = true;
+                root.add(railMesh);
+            });
+
+            // 4. Forward Wooden Thwart Seat Bench (From Image 3 POV)
+            const benchGroup = new THREE.Group();
+            benchGroup.position.set(0, 0.68, -1.85);
+            const seatPlankGeo = new THREE.BoxGeometry(1.12, 0.09, 0.42);
+            const seatPlank = new THREE.Mesh(seatPlankGeo, hullWoodMat);
+            seatPlank.castShadow = true;
+            benchGroup.add(seatPlank);
+
+            [-0.42, 0.42].forEach((xLeg) => {
+                const legGeo = new THREE.CylinderGeometry(0.04, 0.04, 0.34, 8);
+                const leg = new THREE.Mesh(legGeo, darkRopeMat);
+                leg.position.set(xLeg, -0.17, 0);
+                benchGroup.add(leg);
+            });
+            root.add(benchGroup);
+
+            // Rear Helmsman Bench
+            const rearBench = new THREE.Mesh(new THREE.BoxGeometry(1.45, 0.1, 0.48), hullWoodMat);
+            rearBench.position.set(0, 0.72, 1.65);
+            root.add(rearBench);
+
+            // 5. Iconic Lashed Crossed Bow Spars & Slack Catenary Ropes (Reference Image 3!)
+            const bowSparsGroup = new THREE.Group();
+            bowSparsGroup.position.set(0, 1.05, -3.55);
+
+            // Left & right crossed wooden horns
+            const sparGeo = new THREE.CylinderGeometry(0.045, 0.065, 1.65, 8);
+            const sparLeft = new THREE.Mesh(sparGeo, weatheredTimberMat);
+            sparLeft.rotation.z = -0.36;
+            sparLeft.rotation.x = -0.28;
+            sparLeft.position.set(-0.08, 0.35, -0.1);
+            bowSparsGroup.add(sparLeft);
+
+            const sparRight = new THREE.Mesh(sparGeo, weatheredTimberMat);
+            sparRight.rotation.z = 0.25;
+            sparRight.rotation.x = -0.35;
+            sparRight.position.set(0.08, 0.3, -0.12);
+            bowSparsGroup.add(sparRight);
+
+            // Center vertical prow post
+            const centerPost = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.075, 1.35, 8), weatheredTimberMat);
+            centerPost.position.set(0, 0.15, -0.25);
+            centerPost.rotation.x = -0.18;
+            bowSparsGroup.add(centerPost);
+
+            // Heavy dark rope binding around the bow spar intersection
+            for (let r = 0; r < 5; r++) {
+                const knot = new THREE.Mesh(new THREE.TorusGeometry(0.16, 0.04, 8, 12), darkRopeMat);
+                knot.position.set(0, 0.22 + r * 0.05, -0.15);
+                knot.rotation.x = Math.PI / 3;
+                bowSparsGroup.add(knot);
+            }
+            root.add(bowSparsGroup);
+
+            // Slack catenary rigging ropes curving out from the bow post (just like Image 3!)
+            [-1, 1].forEach((dir) => {
+                const ropeCurve = new THREE.CatmullRomCurve3([
+                    new THREE.Vector3(0, 1.35, -3.68),
+                    new THREE.Vector3(dir * 1.35, 0.92, -2.55),
+                    new THREE.Vector3(dir * 2.55, 1.05, -1.25)
+                ]);
+                const ropeTube = new THREE.TubeGeometry(ropeCurve, 18, 0.025, 6, false);
+                const ropeMesh = new THREE.Mesh(ropeTube, darkRopeMat);
+                root.add(ropeMesh);
+            });
+
+            // 6. Crafted Iron-Headed Survival Axe Mounted on Right Gunwale (Reference Image 3!)
+            outriggerAxeGroup = new THREE.Group();
+            outriggerAxeGroup.position.set(0.88, 0.92, -1.55);
+            outriggerAxeGroup.rotation.set(0.18, -0.35, -0.12);
+
+            // Wooden axe handle
+            const handleGeo = new THREE.CylinderGeometry(0.036, 0.045, 1.15, 10);
+            const handleMesh = new THREE.Mesh(handleGeo, weatheredTimberMat);
+            handleMesh.position.y = 0.25;
+            outriggerAxeGroup.add(handleMesh);
+
+            // Forged iron axe collar & poll (back hammer block)
+            const collarGeo = new THREE.BoxGeometry(0.14, 0.22, 0.26);
+            const collarMesh = new THREE.Mesh(collarGeo, ironMat);
+            collarMesh.position.set(0, 0.68, 0.02);
+            outriggerAxeGroup.add(collarMesh);
+
+            // Curved bearded axe blade facing forward
+            const bladeShape = new THREE.Shape();
+            bladeShape.moveTo(0, 0.1);
+            bladeShape.lineTo(0.28, 0.14);
+            bladeShape.quadraticCurveTo(0.34, -0.05, 0.24, -0.28);
+            bladeShape.quadraticCurveTo(0.12, -0.18, 0.08, -0.04);
+            bladeShape.lineTo(0, -0.04);
+            bladeShape.closePath();
+
+            const extrudeSettings = { depth: 0.04, bevelEnabled: true, bevelThickness: 0.01, bevelSize: 0.01, bevelSegments: 2 };
+            const axeBladeGeo = new THREE.ExtrudeGeometry(bladeShape, extrudeSettings);
+            axeBladeGeo.rotateY(Math.PI / 2);
+            const axeBladeMesh = new THREE.Mesh(axeBladeGeo, ironMat);
+            axeBladeMesh.position.set(0.02, 0.68, -0.1);
+            outriggerAxeGroup.add(axeBladeMesh);
+
+            root.add(outriggerAxeGroup);
+
+            // 7. Side Outrigger Pontoons & Curved Booms (Reference Image 2 Horizon Tribal Skiff Style)
+            [-1, 1].forEach((side) => {
+                // Two curved cross-booms connecting hull to side stabilizer float
+                [-1.25, 1.35].forEach((zBoom) => {
+                    const boomCurve = new THREE.CatmullRomCurve3([
+                        new THREE.Vector3(side * 0.95, 0.78, zBoom),
+                        new THREE.Vector3(side * 1.85, 0.86, zBoom),
+                        new THREE.Vector3(side * 2.55, 0.32, zBoom)
+                    ]);
+                    const boomGeo = new THREE.TubeGeometry(boomCurve, 12, 0.065, 8, false);
+                    const boomMesh = new THREE.Mesh(boomGeo, weatheredTimberMat);
+                    boomMesh.castShadow = true;
+                    root.add(boomMesh);
+                });
+
+                // Side Outrigger Float Log with tribal orange/gold bindings
+                const floatGroup = new THREE.Group();
+                floatGroup.position.set(side * 2.55, 0.18, 0.05);
+
+                const logGeo = new THREE.CylinderGeometry(0.22, 0.22, 4.2, 12);
+                logGeo.rotateX(Math.PI / 2);
+                const logMesh = new THREE.Mesh(logGeo, weatheredTimberMat);
+                floatGroup.add(logMesh);
+
+                const tipFront = new THREE.Mesh(new THREE.ConeGeometry(0.22, 0.9, 12), tribalAccentMat);
+                tipFront.rotation.x = -Math.PI / 2;
+                tipFront.position.z = -2.55;
+                floatGroup.add(tipFront);
+
+                const tipBack = new THREE.Mesh(new THREE.ConeGeometry(0.22, 0.75, 12), weatheredTimberMat);
+                tipBack.rotation.x = Math.PI / 2;
+                tipBack.position.z = 2.45;
+                floatGroup.add(tipBack);
+
+                // Rope & salvage bands on the outrigger float
+                [-1.25, 0, 1.35].forEach((zBand) => {
+                    const band = new THREE.Mesh(new THREE.TorusGeometry(0.23, 0.035, 8, 14), darkRopeMat);
+                    band.position.z = zBand;
+                    floatGroup.add(band);
+                });
+
+                root.add(floatGroup);
+            });
+
+            // 8. Tribal Cargo Sacks, Shield Ornaments & Salvage Stern Wheel (Reference Image 2)
+            // Bundled supply sacks near bow & stern
+            const sackPositions = [
+                { x: -0.35, y: 0.55, z: -0.6, s: 0.36 },
+                { x: 0.42, y: 0.52, z: 0.45, s: 0.42 },
+                { x: -0.45, y: 0.58, z: 2.45, s: 0.38 }
+            ];
+            sackPositions.forEach((sp) => {
+                const sackGeo = new THREE.DodecahedronGeometry(sp.s, 1);
+                sackGeo.scale(1.1, 0.75, 1.25);
+                const sack = new THREE.Mesh(sackGeo, sackMat);
+                sack.position.set(sp.x, sp.y, sp.z);
+                sack.castShadow = true;
+                root.add(sack);
+            });
+
+            // Orange/amber tribal fabric trim draped along hull sides (from Image 2)
+            [-1.08, 1.08].forEach((sideX) => {
+                const trimGeo = new THREE.BoxGeometry(0.08, 0.24, 3.2);
+                const trim = new THREE.Mesh(trimGeo, tribalAccentMat);
+                trim.position.set(sideX, 0.65, 0.3);
+                root.add(trim);
+            });
+
+            // Rear Rotating Paddle-Wheel / Tribal Thruster at Stern
+            outriggerWheel = new THREE.Group();
+            outriggerWheel.position.set(0, 0.42, 4.15);
+            const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.22, 0.65, 10), ironMat);
+            hub.rotation.z = Math.PI / 2;
+            outriggerWheel.add(hub);
+            for (let b = 0; b < 6; b++) {
+                const angle = (b / 6) * Math.PI * 2;
+                const paddle = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.06, 0.45), weatheredTimberMat);
+                paddle.position.set(0, Math.cos(angle) * 0.36, Math.sin(angle) * 0.36);
+                paddle.rotation.x = angle;
+                outriggerWheel.add(paddle);
+            }
+            root.add(outriggerWheel);
+
+            return root;
+        }
+
+        // ============================================================================
+        // TROPICAL ARCHIPELAGO ENVIRONMENT (Matching Reference Images 1, 2 & 3)
+        // ============================================================================
+        function buildTropicalEnvironment() {
+            // 1. Crystal-Clear Turquoise Ocean Surface with Animated Waves
+            waterGeometry = new THREE.PlaneGeometry(360, 360, 110, 110);
+            waterGeometry.rotateX(-Math.PI / 2);
+
+            // Vertex colors for shallow turquoise laguna near the island vs deeper azure ocean
+            const wPos = waterGeometry.attributes.position;
+            const colors = [];
+            const shallowColor = new THREE.Color(0x16e0e8); // Vibrant Tchia turquoise
+            const midColor = new THREE.Color(0x06b6d4);
+            const deepColor = new THREE.Color(0x0369a1);
+
+            for (let i = 0; i < wPos.count; i++) {
+                const vx = wPos.getX(i);
+                const vz = wPos.getZ(i);
+                // Distance from main island center (0, -48)
+                const distToIsland = Math.hypot(vx, vz + 48);
+                const c = new THREE.Color();
+                if (distToIsland < 42) {
+                    c.lerpColors(shallowColor, midColor, distToIsland / 42);
+                } else {
+                    c.lerpColors(midColor, deepColor, Math.min(1, (distToIsland - 42) / 95));
+                }
+                colors.push(c.r, c.g, c.b);
+            }
+            waterGeometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+
+            const waterMat = new THREE.MeshStandardMaterial({
+                vertexColors: true,
+                roughness: 0.16,
+                metalness: 0.12,
+                transparent: true,
+                opacity: 0.86,
+                flatShading: true
+            });
+            waterMesh = new THREE.Mesh(waterGeometry, waterMat);
+            waterMesh.receiveShadow = true;
+            scene.add(waterMesh);
+
+            // 2. Sandy Seabed & Underwater Coral Reef Rocks (Visible through clear shallow water like Image 3!)
+            const seabedGeo = new THREE.PlaneGeometry(360, 360, 1, 1);
+            seabedGeo.rotateX(-Math.PI / 2);
+            const seabedMat = new THREE.MeshStandardMaterial({ color: 0xd6c79c, roughness: 0.95 });
+            const seabed = new THREE.Mesh(seabedGeo, seabedMat);
+            seabed.position.y = -2.4;
+            scene.add(seabed);
+
+            const reefMat = new THREE.MeshStandardMaterial({ color: 0x5c7267, roughness: 0.9, flatShading: true });
+            for (let r = 0; r < 40; r++) {
+                const rx = (Math.random() - 0.5) * 90;
+                const rz = -30 + (Math.random() - 0.5) * 90;
+                const reefRock = new THREE.Mesh(new THREE.DodecahedronGeometry(0.9 + Math.random() * 1.8, 1), reefMat);
+                reefRock.scale.set(1.4, 0.45, 1.2);
+                reefRock.position.set(rx, -1.1 - Math.random() * 0.6, rz);
+                reefRock.rotation.y = Math.random() * Math.PI;
+                scene.add(reefRock);
+            }
+
+            // 3. Main Tropical Island Beach, Giant Monolith Rock (Image 1), Craggy Peaks (Image 3) & Arch Ruin (Image 2)
+            const islandGroup = new THREE.Group();
+            islandGroup.position.set(0, 0, -52);
+            islandGroupRef = islandGroup;
+
+            // White-gold sandy beach mound
+            const sandMat = new THREE.MeshStandardMaterial({ color: 0xf3e5ab, roughness: 0.88 });
+            const beachGeo = new THREE.CylinderGeometry(24, 34, 3.2, 24);
+            const beach = new THREE.Mesh(beachGeo, sandMat);
+            beach.position.y = -0.5;
+            beach.scale.set(1.35, 1, 0.95);
+            beach.receiveShadow = true;
+            islandGroup.add(beach);
+
+            // Lush grassy interior mound
+            const grassMat = new THREE.MeshStandardMaterial({ color: 0x4d8c3a, roughness: 0.85 });
+            const grassGeo = new THREE.CylinderGeometry(17, 23, 2.4, 20);
+            const grass = new THREE.Mesh(grassGeo, grassMat);
+            grass.position.set(4, 0.7, -3);
+            grass.scale.set(1.2, 1, 0.85);
+            grass.receiveShadow = true;
+            islandGroup.add(grass);
+
+            // Giant Grey Coastal Monolith Rock on the Left (Directly inspired by Reference Image 1)
+            const rockMat = new THREE.MeshStandardMaterial({
+                color: 0x7a7d82,
+                roughness: 0.86,
+                flatShading: true
+            });
+            const monolithGroup = new THREE.Group();
+            monolithGroup.position.set(-28, 0, 8);
+            monolithGroupRef = monolithGroup;
+            const mMain = new THREE.Mesh(new THREE.DodecahedronGeometry(11, 1), rockMat);
+            mMain.scale.set(1.25, 1.35, 0.95);
+            mMain.position.y = 6.5;
+            mMain.castShadow = true;
+            monolithGroup.add(mMain);
+
+            const mSlope = new THREE.Mesh(new THREE.DodecahedronGeometry(8.5, 1), rockMat);
+            mSlope.scale.set(1.5, 0.85, 1.1);
+            mSlope.position.set(8, 3.2, 2);
+            monolithGroup.add(mSlope);
+            islandGroup.add(monolithGroup);
+
+            // Towering Craggy Mountain Spires in the Back (Inspired by Reference Image 3)
+            const spirePositions = [
+                { x: -10, z: -18, h: 26, r: 7.5 },
+                { x: 2, z: -22, h: 32, r: 9.0 },
+                { x: 15, z: -19, h: 24, r: 8.0 },
+                { x: 26, z: -12, h: 18, r: 6.5 }
+            ];
+            spirePositions.forEach((sp) => {
+                const spireGeo = new THREE.ConeGeometry(sp.r, sp.h, 7);
+                const spire = new THREE.Mesh(spireGeo, rockMat);
+                spire.position.set(sp.x, sp.h * 0.42, sp.z);
+                spire.rotation.y = Math.random() * Math.PI;
+                spire.castShadow = true;
+                islandGroup.add(spire);
+            });
+
+            // Overgrown Ancient Arch Ruin & Smoke Plume on the Right (Inspired by Reference Image 2)
+            const archCurve = new THREE.CatmullRomCurve3([
+                new THREE.Vector3(16, 0, 5),
+                new THREE.Vector3(22, 9.5, 2),
+                new THREE.Vector3(30, 0, -1)
+            ]);
+            const archGeo = new THREE.TubeGeometry(archCurve, 12, 2.1, 7, false);
+            const archMesh = new THREE.Mesh(archGeo, rockMat);
+            archMesh.castShadow = true;
+            islandGroup.add(archMesh);
+
+            // Swaying Coconut Palm Trees & Tall Cook Pines (From Image 1)
+            for (let p = 0; p < 18; p++) {
+                const angle = (p / 18) * Math.PI * 2;
+                const rad = 10 + Math.random() * 14;
+                const px = Math.cos(angle) * rad * 1.2 + 3;
+                const pz = Math.sin(angle) * rad * 0.8 - 2;
+                const palm = createPalmTree(3.5 + Math.random() * 2.5);
+                palm.position.set(px, 1.4, pz);
+                palm.rotation.y = Math.random() * Math.PI * 2;
+                islandGroup.add(palm);
+            }
+
+            scene.add(islandGroup);
+
+            // 4. Stylized Fluffy Tropical Clouds in the Sky
+            cloudsGroup = new THREE.Group();
+            const cloudMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.88 });
+            for (let c = 0; c < 18; c++) {
+                const cluster = new THREE.Group();
+                const angle = (c / 18) * Math.PI * 2;
+                const dist = 115 + Math.random() * 35;
+                cluster.position.set(Math.cos(angle) * dist, 18 + Math.random() * 22, Math.sin(angle) * dist);
+                for (let puff = 0; puff < 4; puff++) {
+                    const pMesh = new THREE.Mesh(new THREE.SphereGeometry(6 + Math.random() * 5, 10, 10), cloudMat);
+                    pMesh.position.set((puff - 1.5) * 5.5, (Math.random() - 0.5) * 3, (Math.random() - 0.5) * 3);
+                    pMesh.scale.y = 0.65;
+                    cluster.add(pMesh);
+                }
+                cluster.lookAt(0, 20, 0);
+                cloudsGroup.add(cluster);
+            }
+            scene.add(cloudsGroup);
+
+            // 5. Build the Island Arrival Spectacle (3D Banner, Seismic Fissures, Levitating Boulders & 3D Teleport Portal)
+            buildIslandArrivalSpectacle();
+        }
+
+        // ============================================================================
+        // ISLAND ARRIVAL SPECTACLE: 3D SKY BANNER, GROUND-BREAKING FISSURES & PORTAL
+        // ============================================================================
+        function buildIslandArrivalSpectacle() {
+            // A. Glowing Approach Target Ring on the Water in front of the Island (z = -8)
+            const beaconGroup = new THREE.Group();
+            beaconGroup.position.set(0, 0.14, -8);
+            const ringGeo = new THREE.RingGeometry(5.2, 6.0, 48);
+            ringGeo.rotateX(-Math.PI / 2);
+            const ringMat = new THREE.MeshBasicMaterial({
+                color: 0xfacc15,
+                side: THREE.DoubleSide,
+                transparent: true,
+                opacity: 0.75
+            });
+            arrivalBeaconRing = new THREE.Mesh(ringGeo, ringMat);
+            beaconGroup.add(arrivalBeaconRing);
+            scene.add(beaconGroup);
+
+            // B. MASSIVE 3D SKY BANNER Rigged Between Twin Golden Totem Pillars Over the Island
+            skyBannerGroup = new THREE.Group();
+            skyBannerGroup.position.set(0, -35, -44); // Starts hidden underground, rises dramatically!
+            skyBannerGroup.visible = false;
+
+            const pillarMat = new THREE.MeshStandardMaterial({
+                color: 0xd97706,
+                roughness: 0.35,
+                metalness: 0.75
+            });
+            [-21, 21].forEach((px) => {
+                const pillar = new THREE.Mesh(new THREE.CylinderGeometry(0.65, 0.9, 34, 12), pillarMat);
+                pillar.position.set(px, 14, 0);
+                skyBannerGroup.add(pillar);
+
+                const orb = new THREE.Mesh(
+                    new THREE.SphereGeometry(1.5, 16, 16),
+                    new THREE.MeshBasicMaterial({ color: 0xfde047 })
+                );
+                orb.position.set(px, 31.5, 0);
+                skyBannerGroup.add(orb);
+            });
+
+            skyBannerGeo = new THREE.PlaneGeometry(40, 10.5, 32, 8);
+            const bannerMat = new THREE.MeshBasicMaterial({
+                map: createGrandSkyBannerTexture(),
+                side: THREE.DoubleSide
+            });
+            skyBannerMesh = new THREE.Mesh(skyBannerGeo, bannerMat);
+            skyBannerMesh.position.set(0, 24.5, 0);
+            skyBannerGroup.add(skyBannerMesh);
+            scene.add(skyBannerGroup);
+
+            // C. GROUND-BREAKING SEISMIC FISSURES & LEVITATING BOULDERS
+            groundFissuresGroup = new THREE.Group();
+            groundFissuresGroup.position.set(0, 0.25, -38);
+            groundFissuresGroup.visible = false;
+
+            const magmaMat = new THREE.MeshBasicMaterial({
+                color: 0x38bdf8,
+                side: THREE.DoubleSide
+            });
+            // Glowing jagged tectonic cracks radiating across the island shore
+            for (let f = 0; f < 9; f++) {
+                const angle = (f / 9) * Math.PI - Math.PI / 2;
+                const crackCurve = new THREE.CatmullRomCurve3([
+                    new THREE.Vector3(0, 0.1, 14),
+                    new THREE.Vector3(Math.sin(angle) * 12, 0.4, 4 - Math.cos(angle) * 6),
+                    new THREE.Vector3(Math.sin(angle + 0.2) * 26, 0.8, -8 - Math.cos(angle) * 14)
+                ]);
+                const crackGeo = new THREE.TubeGeometry(crackCurve, 14, 0.38, 6, false);
+                const crackMesh = new THREE.Mesh(crackGeo, magmaMat);
+                groundFissuresGroup.add(crackMesh);
+            }
+            scene.add(groundFissuresGroup);
+
+            // Anti-gravity boulders that rip out of the island ground when the event triggers
+            const boulderMat = new THREE.MeshStandardMaterial({
+                color: 0x475569,
+                roughness: 0.75,
+                flatShading: true
+            });
+            const crystalMat = new THREE.MeshBasicMaterial({ color: 0x22d3ee });
+
+            for (let b = 0; b < 16; b++) {
+                const bGroup = new THREE.Group();
+                const radius = 1.1 + Math.random() * 1.8;
+                const rock = new THREE.Mesh(new THREE.DodecahedronGeometry(radius, 0), boulderMat);
+                bGroup.add(rock);
+
+                // Glowing energy vein shard inside each broken ground rock
+                const shard = new THREE.Mesh(new THREE.OctahedronGeometry(radius * 0.65, 0), crystalMat);
+                shard.position.set(0, radius * 0.5, 0);
+                bGroup.add(shard);
+
+                const angle = (b / 16) * Math.PI * 1.4 - Math.PI * 0.7;
+                const dist = 16 + (b % 3) * 8;
+                const homeX = Math.sin(angle) * dist;
+                const homeZ = -24 - Math.cos(angle) * 14;
+
+                bGroup.position.set(homeX, -6, homeZ);
+                scene.add(bGroup);
+
+                floatingBoulders.push({
+                    mesh: bGroup,
+                    baseX: homeX,
+                    baseZ: homeZ,
+                    targetY: 4.5 + Math.random() * 11,
+                    phase: Math.random() * Math.PI * 2,
+                    rotSpeed: (Math.random() - 0.5) * 1.8
+                });
+            }
+
+            // D. SWIRLING 3D TELEPORTATION PORTAL GATEWAY (Right at the Shoreline z = -21)
+            portalGroup = new THREE.Group();
+            portalGroup.position.set(0, -22, -21); // Rises out of the sea when island is entered
+            portalGroup.visible = false;
+
+            // Outer carved monolith arch frame
+            const archStoneMat = new THREE.MeshStandardMaterial({
+                color: 0x334155,
+                roughness: 0.6,
+                metalness: 0.3,
+                flatShading: true
+            });
+            const outerFrame = new THREE.Mesh(new THREE.TorusGeometry(6.8, 0.85, 10, 32), archStoneMat);
+            portalGroup.add(outerFrame);
+
+            // 3 Counter-Rotating Glowing Runic Energy Rings
+            const ring1Mat = new THREE.MeshBasicMaterial({ color: 0x38bdf8, wireframe: true });
+            portalRing1 = new THREE.Mesh(new THREE.TorusGeometry(5.9, 0.28, 8, 28), ring1Mat);
+            portalGroup.add(portalRing1);
+
+            const ring2Mat = new THREE.MeshBasicMaterial({ color: 0xfacc15 });
+            portalRing2 = new THREE.Group();
+            for (let n = 0; n < 12; n++) {
+                const a = (n / 12) * Math.PI * 2;
+                const rune = new THREE.Mesh(new THREE.OctahedronGeometry(0.45, 0), ring2Mat);
+                rune.position.set(Math.cos(a) * 5.3, Math.sin(a) * 5.3, 0);
+                portalRing2.add(rune);
+            }
+            portalGroup.add(portalRing2);
+
+            const ring3Mat = new THREE.MeshBasicMaterial({ color: 0xe879f9, wireframe: true });
+            portalRing3 = new THREE.Mesh(new THREE.TorusGeometry(4.6, 0.22, 6, 20), ring3Mat);
+            portalGroup.add(portalRing3);
+
+            // Swirling Vortex Core Disc
+            const coreGeo = new THREE.CircleGeometry(5.6, 40);
+            const coreMat = new THREE.MeshBasicMaterial({
+                map: createPortalVortexTexture(),
+                transparent: true,
+                opacity: 0.92,
+                side: THREE.DoubleSide,
+                depthWrite: false
+            });
+            portalCoreMesh = new THREE.Mesh(coreGeo, coreMat);
+            portalGroup.add(portalCoreMesh);
+
+            // Towering Sky Beam shooting up from the Portal into the heavens
+            const beamGeo = new THREE.CylinderGeometry(1.4, 4.2, 120, 20, 1, true);
+            const beamMat = new THREE.MeshBasicMaterial({
+                color: 0x38bdf8,
+                transparent: true,
+                opacity: 0.28,
+                side: THREE.DoubleSide,
+                depthWrite: false
+            });
+            portalBeamMesh = new THREE.Mesh(beamGeo, beamMat);
+            portalBeamMesh.position.y = 55;
+            portalGroup.add(portalBeamMesh);
+
+            // Dynamic Portal PointLight illuminating the water & boat
+            portalLight = new THREE.PointLight(0x38bdf8, 0, 45);
+            portalLight.position.set(0, 4, 2);
+            portalGroup.add(portalLight);
+
+            scene.add(portalGroup);
+
+            // Dynamic Firework Flash Light
+            fireworkLight = new THREE.PointLight(0xfacc15, 0, 120);
+            fireworkLight.position.set(0, 28, -38);
+            scene.add(fireworkLight);
+        }
+
+        // ============================================================================
+        // 3D FIREWORKS, SHORELINE FIRECRACKERS & SEISMIC SHOCKWAVES
+        // ============================================================================
+        function spawnShockwaveRing(originX, originZ, colorHex) {
+            const geo = new THREE.RingGeometry(1.0, 2.2, 48);
+            geo.rotateX(-Math.PI / 2);
+            const mat = new THREE.MeshBasicMaterial({
+                color: colorHex,
+                side: THREE.DoubleSide,
+                transparent: true,
+                opacity: 0.95
+            });
+            const mesh = new THREE.Mesh(geo, mat);
+            mesh.position.set(originX, 0.22, originZ);
+            scene.add(mesh);
+            shockwaveRings.push({ mesh, scale: 1, alpha: 1.0 });
+        }
+
+        function launchFirework(customX, customZ) {
+            const palette = [0xfacc15, 0x38bdf8, 0xf43f5e, 0xa855f7, 0x10b981, 0xf97316];
+            const colorHex = palette[Math.floor(Math.random() * palette.length)];
+
+            const startX = customX !== undefined ? customX : (Math.random() - 0.5) * 58;
+            const startZ = customZ !== undefined ? customZ : -28 - Math.random() * 34;
+
+            const rocketGeo = new THREE.SphereGeometry(0.38, 8, 8);
+            const rocketMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+            const rocketMesh = new THREE.Mesh(rocketGeo, rocketMat);
+            rocketMesh.position.set(startX, 1.0, startZ);
+            scene.add(rocketMesh);
+
+            fireworks.push({
+                stage: 'rocket',
+                mesh: rocketMesh,
+                vel: new THREE.Vector3((Math.random() - 0.5) * 4, 24 + Math.random() * 12, (Math.random() - 0.5) * 4),
+                targetY: 22 + Math.random() * 18,
+                color: colorHex,
+                particles: []
+            });
+        }
+
+        function explodeFirework(fw) {
+            const origin = fw.mesh.position.clone();
+            scene.remove(fw.mesh);
+            fw.mesh.geometry.dispose();
+            fw.mesh.material.dispose();
+
+            fw.stage = 'exploded';
+            fw.life = 1.6;
+
+            // Flash the sky and water with the firework's color
+            if (fireworkLight) {
+                fireworkLight.color.setHex(fw.color);
+                fireworkLight.position.copy(origin);
+                fireworkLight.intensity = 4.5;
+            }
+
+            const count = 52;
+            const pGeo = new THREE.SphereGeometry(0.28, 6, 6);
+            const pMat = new THREE.MeshBasicMaterial({
+                color: fw.color,
+                transparent: true,
+                opacity: 1.0
+            });
+
+            for (let i = 0; i < count; i++) {
+                const pMesh = new THREE.Mesh(pGeo, pMat);
+                pMesh.position.copy(origin);
+
+                // Spherical burst velocity
+                const theta = Math.random() * Math.PI * 2;
+                const phi = Math.acos(2 * Math.random() - 1);
+                const speed = 8 + Math.random() * 14;
+                const vx = Math.sin(phi) * Math.cos(theta) * speed;
+                const vy = Math.sin(phi) * Math.sin(theta) * speed;
+                const vz = Math.cos(phi) * speed;
+
+                scene.add(pMesh);
+                fw.particles.push({
+                    mesh: pMesh,
+                    vel: new THREE.Vector3(vx, vy, vz)
+                });
+            }
+            fw.sharedGeo = pGeo;
+            fw.sharedMat = pMat;
+        }
+
+        function updateFireworksAndShockwaves(dt) {
+            if (fireworkLight && fireworkLight.intensity > 0) {
+                fireworkLight.intensity = Math.max(0, fireworkLight.intensity - dt * 6.5);
+            }
+
+            for (let i = fireworks.length - 1; i >= 0; i--) {
+                const fw = fireworks[i];
+                if (fw.stage === 'rocket') {
+                    fw.mesh.position.addScaledVector(fw.vel, dt);
+                    if (fw.mesh.position.y >= fw.targetY) {
+                        explodeFirework(fw);
+                    }
+                } else {
+                    fw.life -= dt;
+                    fw.sharedMat.opacity = Math.max(0, fw.life / 1.6);
+                    for (let j = 0; j < fw.particles.length; j++) {
+                        const p = fw.particles[j];
+                        p.vel.y -= 9.8 * dt; // Gravity arc
+                        p.mesh.position.addScaledVector(p.vel, dt);
+                    }
+                    if (fw.life <= 0) {
+                        for (let j = 0; j < fw.particles.length; j++) {
+                            scene.remove(fw.particles[j].mesh);
+                        }
+                        fw.sharedGeo.dispose();
+                        fw.sharedMat.dispose();
+                        fireworks.splice(i, 1);
+                    }
+                }
+            }
+
+            // Update expanding ground-breaking shockwave rings
+            for (let i = shockwaveRings.length - 1; i >= 0; i--) {
+                const sw = shockwaveRings[i];
+                sw.scale += dt * 28;
+                sw.alpha -= dt * 0.7;
+                sw.mesh.scale.set(sw.scale, sw.scale, 1);
+                sw.mesh.material.opacity = Math.max(0, sw.alpha);
+                if (sw.alpha <= 0) {
+                    scene.remove(sw.mesh);
+                    sw.mesh.geometry.dispose();
+                    sw.mesh.material.dispose();
+                    shockwaveRings.splice(i, 1);
+                }
+            }
+        }
+
+        // ============================================================================
+        // TRIGGER GRAND ISLAND CATACLYSM & TELEPORTATION PORTAL
+        // ============================================================================
+        function triggerIslandCataclysm() {
+            if (state.islandEventActive) return;
+            state.islandEventActive = true;
+            state.shakeIntensity = 1.35; // Ground-breaking camera & island quake!
+
+            // Unhide 3D Sky Banner, Ground Fissures, and 3D Teleport Portal
+            skyBannerGroup.visible = true;
+            groundFissuresGroup.visible = true;
+            portalGroup.visible = true;
+            portalLight.intensity = 3.2;
+
+            // Show the massive UI Banner
+            const bannerEl = document.getElementById('grand-island-banner');
+            bannerEl.classList.remove('opacity-0', '-translate-y-8');
+            bannerEl.classList.add('opacity-100', 'translate-y-0', 'epic-banner-active');
+
+            // Reveal the Warp Through Portal quick button
+            const warpBtn = document.getElementById('btn-warp-portal');
+            warpBtn.classList.remove('hidden');
+            warpBtn.classList.add('flex');
+
+            // Spawn seismic shockwave rings & initial grand firework barrage!
+            spawnShockwaveRing(0, -21, 0x38bdf8);
+            spawnShockwaveRing(0, -38, 0xfacc15);
+            for (let f = 0; f < 8; f++) {
+                setTimeout(() => launchFirework(), f * 180);
+            }
+
+            showToast('🌋 GROUND-BREAKING ISLAND AWAKENING! Portal Opened!');
+        }
+
+        function sailToIslandAndTrigger() {
+            // Position the boat right at the island approach lagoon facing the shore & trigger the spectacle
+            state.pos.set(0, 0, -5);
+            state.heading = 0;
+            state.speed = 3.5;
+            if (state.islandEventActive) {
+                // Re-trigger quake & extra firework salvo if already active
+                state.shakeIntensity = 1.1;
+                spawnShockwaveRing(0, -21, 0xfacc15);
+                for (let f = 0; f < 6; f++) {
+                    setTimeout(() => launchFirework(), f * 160);
+                }
+                showToast('🎆 Massive Firecracker Barrage Launched!');
+            } else {
+                triggerIslandCataclysm();
+            }
+        }
+
+        function triggerPortalTeleport() {
+            if (state.portalCooldown > 0) return;
+            state.portalCooldown = 2.5;
+
+            // 1. Trigger intense white-cyan-magenta hyperspace flash
+            const flash = document.getElementById('warp-flash');
+            flash.style.opacity = '1';
+            setTimeout(() => { flash.style.opacity = '0'; }, 480);
+
+            // 2. Cycle to a new Mystic Dimension Realm!
+            state.realmIndex = (state.realmIndex + 1) % 3;
+            const subEl = document.getElementById('banner-subtitle');
+            const titleEl = document.getElementById('banner-main-title');
+            const descEl = document.getElementById('banner-instructions');
+
+            if (state.realmIndex === 1) {
+                // Celestial Bioluminescent Nebula Dimension
+                scene.background = new THREE.Color(0x090d26);
+                scene.fog.color.setHex(0x1e1b4b);
+                sunLight.color.setHex(0x38bdf8);
+                sunLight.intensity = 1.6;
+                ambientLight.color.setHex(0xc084fc);
+                portalCoreMesh.material.color.setHex(0x67e8f9);
+                subEl.textContent = '🌀 DIMENSIONAL TELEPORT COMPLETE • REALM II 🌀';
+                titleEl.textContent = 'BIOLUMINESCENT AETHER LAGOON';
+                descEl.textContent = 'You warped through the 3D Portal into the Celestial Night Lagoon! Sail in again to shift realms!';
+                document.getElementById('light-val').textContent = 'Aether Nebula';
+            } else if (state.realmIndex === 2) {
+                // Volcanic Solar Gold Awakening Dimension
+                scene.background = new THREE.Color(0x451a03);
+                scene.fog.color.setHex(0x7c2d12);
+                sunLight.color.setHex(0xfacc15);
+                sunLight.intensity = 1.8;
+                ambientLight.color.setHex(0xfb923c);
+                portalCoreMesh.material.color.setHex(0xfde047);
+                subEl.textContent = '🔥 DIMENSIONAL TELEPORT COMPLETE • REALM III 🔥';
+                titleEl.textContent = 'EMPEROR’S GOLDEN VOLCANO REALM';
+                descEl.textContent = 'The archipelago burns with golden solar energy! Sail through the Portal anytime to warp again!';
+                document.getElementById('light-val').textContent = 'Solar Gold';
+            } else {
+                // Back to Crystal Tropical Lagoon
+                scene.background = new THREE.Color(0x3b82f6);
+                scene.fog.color.setHex(0xbae6fd);
+                sunLight.color.setHex(0xfffbeb);
+                sunLight.intensity = 1.35;
+                ambientLight.color.setHex(0xe0f2fe);
+                portalCoreMesh.material.color.setHex(0xffffff);
+                subEl.textContent = '🎆 SEISMIC AWAKENING • FIREWORKS LAUNCHED 🎆';
+                titleEl.textContent = 'ISLAND SANCTUARY DISCOVERED!';
+                descEl.textContent = 'Back in the Crystal Turquoise Lagoon! Sail into the swirling 3D Teleport Portal to warp realms!';
+                document.getElementById('light-val').textContent = 'Tropical Noon';
+            }
+
+            // 3. Eject boat smoothly out of the portal with a burst of speed, camera shake & celebratory fireworks!
+            state.pos.set(0, 0, 26);
+            state.heading = 0;
+            state.speed = 11.0;
+            state.shakeIntensity = 1.25;
+
+            spawnShockwaveRing(0, -21, 0xe879f9);
+            spawnShockwaveRing(0, 22, 0x38bdf8);
+            for (let f = 0; f < 9; f++) {
+                setTimeout(() => launchFirework(), f * 140);
+            }
+
+            showToast('🌀 TELEPORTED TO NEW DIMENSION!');
+        }
+
+        function createPalmTree(height) {
+            const tree = new THREE.Group();
+            const trunkMat = new THREE.MeshStandardMaterial({ color: 0x7c5333, roughness: 0.9 });
+            const leafMat = new THREE.MeshStandardMaterial({ color: 0x2f8529, roughness: 0.7, side: THREE.DoubleSide });
+
+            const curve = new THREE.CatmullRomCurve3([
+                new THREE.Vector3(0, 0, 0),
+                new THREE.Vector3(0.4, height * 0.5, 0.2),
+                new THREE.Vector3(0.9, height, 0.4)
+            ]);
+            const trunkGeo = new THREE.TubeGeometry(curve, 8, 0.18, 6, false);
+            const trunk = new THREE.Mesh(trunkGeo, trunkMat);
+            trunk.castShadow = true;
+            tree.add(trunk);
+
+            // 6 Fronds at top
+            const crown = new THREE.Group();
+            crown.position.set(0.9, height, 0.4);
+            for (let f = 0; f < 6; f++) {
+                const frondGeo = new THREE.PlaneGeometry(0.55, 2.2, 2, 4);
+                const fPos = frondGeo.attributes.position;
+                for (let i = 0; i < fPos.count; i++) {
+                    const y = fPos.getY(i) + 1.1; // 0 to 2.2
+                    fPos.setY(i, y);
+                    fPos.setZ(i, -Math.pow(y * 0.5, 2) * 0.45);
+                }
+                frondGeo.computeVertexNormals();
+                const frond = new THREE.Mesh(frondGeo, leafMat);
+                frond.rotation.y = (f / 6) * Math.PI * 2;
+                frond.rotation.x = 0.65;
+                crown.add(frond);
+            }
+            tree.add(crown);
+            return tree;
+        }
+
+        // ============================================================================
+        // FOAM WAKE SPLASH PARTICLES (Matching Image 1 & 2 Wake Trails)
+        // ============================================================================
+        function spawnWakeParticle(originPos, boatWidth) {
+            const geo = new THREE.SphereGeometry(0.18 + Math.random() * 0.24, 6, 6);
+            const mat = new THREE.MeshBasicMaterial({
+                color: 0xffffff,
+                transparent: true,
+                opacity: 0.85
+            });
+            const mesh = new THREE.Mesh(geo, mat);
+            const side = (Math.random() > 0.5 ? 1 : -1) * (boatWidth * (0.4 + Math.random() * 0.5));
+            const offset = new THREE.Vector3(side, 0.08, 1.5 + Math.random() * 1.8);
+            offset.applyAxisAngle(new THREE.Vector3(0, 1, 0), state.heading);
+
+            mesh.position.copy(originPos).add(offset);
+            mesh.scale.y = 0.35;
+            scene.add(mesh);
+
+            wakeParticles.push({
+                mesh,
+                life: 1.0,
+                vel: new THREE.Vector3((Math.random() - 0.5) * 0.8, 0, (Math.random() - 0.5) * 0.8)
+            });
+        }
+
+        function updateWakeParticles(dt) {
+            for (let i = wakeParticles.length - 1; i >= 0; i--) {
+                const p = wakeParticles[i];
+                p.life -= dt * 0.9;
+                p.mesh.position.addScaledVector(p.vel, dt);
+                p.mesh.scale.x += dt * 0.9;
+                p.mesh.scale.z += dt * 0.9;
+                p.mesh.material.opacity = Math.max(0, p.life * 0.8);
+                if (p.life <= 0) {
+                    scene.remove(p.mesh);
+                    p.mesh.geometry.dispose();
+                    p.mesh.material.dispose();
+                    wakeParticles.splice(i, 1);
+                }
+            }
+        }
+
+        // ============================================================================
+        // UI ACTIONS: BOAT MODE, CAMERA MODE, WIND & .OBJ EXPORT
+        // ============================================================================
+        function setBoatMode(mode) {
+            state.boatMode = mode;
+            document.getElementById('select-boat-1').classList.toggle('active', mode === 'catamaran');
+            document.getElementById('select-boat-2').classList.toggle('active', mode === 'outrigger');
+            document.getElementById('select-both').classList.toggle('active', mode === 'both');
+
+            const badge = document.getElementById('boat-badge');
+            const title = document.getElementById('boat-title');
+            const desc = document.getElementById('boat-desc');
+
+            if (mode === 'catamaran') {
+                catamaranGroup.visible = true;
+                outriggerGroup.visible = false;
+                badge.textContent = 'Polynesian Craft • Boat 1';
+                title.textContent = 'Bamboo Catamaran Sail Raft';
+                desc.textContent = 'Twin ocean-blue pontoons lashed to a 15-pole bamboo deck with hemp bindings, woven pandanus leaf mat, steering oar, and a wind-billowing triangular sail topped with an island crest flag.';
+            } else if (mode === 'outrigger') {
+                catamaranGroup.visible = false;
+                outriggerGroup.visible = true;
+                badge.textContent = 'Tribal Survival Skiff • Boat 2';
+                title.textContent = 'Tribal Outrigger Canoe';
+                desc.textContent = 'Pointed wooden planked canoe with lashed crossed bow horns, slack rigging ropes, starboard survival axe, twin curved outrigger floats, bundled cargo sacks, and rear paddle wheel.';
+            } else {
+                catamaranGroup.visible = true;
+                outriggerGroup.visible = true;
+                badge.textContent = 'Dual Showcase • Both Boats';
+                title.textContent = 'Side-by-Side 3D Boat Comparison';
+                desc.textContent = 'Inspect and sail both the Bamboo Catamaran Sail Raft (left) and the Tribal Survival Outrigger Canoe (right) side-by-side across the lagoon.';
+            }
+        }
+
+        function setCameraMode(camMode) {
+            state.cameraMode = camMode;
+            document.getElementById('cam-chase').classList.toggle('active', camMode === 'chase');
+            document.getElementById('cam-fpv').classList.toggle('active', camMode === 'fpv');
+            document.getElementById('cam-orbit').classList.toggle('active', camMode === 'inspect');
+
+            const fpvHud = document.getElementById('fpv-survival-hud');
+            if (camMode === 'fpv') {
+                fpvHud.classList.remove('hidden');
+                fpvHud.classList.add('flex');
+                state.camYaw = 0;
+                state.camPitch = 0.06;
+            } else {
+                fpvHud.classList.add('hidden');
+                fpvHud.classList.remove('flex');
+                if (camMode === 'inspect') {
+                    state.camDist = 9.5;
+                    state.camPitch = 0.24;
+                } else {
+                    state.camDist = 15.5;
+                    state.camPitch = 0.28;
+                }
+            }
+        }
+
+        function toggleWind() {
+            const label = document.getElementById('wind-val');
+            if (state.windStrength === 1.0) {
+                state.windStrength = 1.8;
+                label.textContent = 'Strong Gale';
+            } else if (state.windStrength === 1.8) {
+                state.windStrength = 0.4;
+                label.textContent = 'Calm Lagoon';
+            } else {
+                state.windStrength = 1.0;
+                label.textContent = 'Breezy';
+            }
+        }
+
+        function cycleTimeOfDay() {
+            state.timeOfDay = (state.timeOfDay + 1) % 3;
+            const label = document.getElementById('light-val');
+            if (state.timeOfDay === 0) {
+                label.textContent = 'Tropical Noon';
+                scene.background = new THREE.Color(0x3b82f6);
+                scene.fog.color.setHex(0xbae6fd);
+                sunLight.color.setHex(0xfffbeb);
+                sunLight.intensity = 1.35;
+                sunLight.position.set(45, 75, 35);
+            } else if (state.timeOfDay === 1) {
+                label.textContent = 'Golden Sunset';
+                scene.background = new THREE.Color(0xf97316);
+                scene.fog.color.setHex(0xfdba74);
+                sunLight.color.setHex(0xfde047);
+                sunLight.intensity = 1.5;
+                sunLight.position.set(-60, 22, -40);
+            } else {
+                label.textContent = 'Clear Morning';
+                scene.background = new THREE.Color(0x38bdf8);
+                scene.fog.color.setHex(0xe0f2fe);
+                sunLight.color.setHex(0xffffff);
+                sunLight.intensity = 1.2;
+                sunLight.position.set(60, 45, -20);
+            }
+        }
+
+        function showToast(text) {
+            const toast = document.getElementById('toast-msg');
+            toast.textContent = text;
+            toast.style.opacity = '1';
+            setTimeout(() => { toast.style.opacity = '0'; }, 2800);
+        }
+
+        // Built-in Wavefront .OBJ Exporter so user can import either boat into Blender / Unity / Unreal
+        function exportActiveBoatOBJ() {
+            const targetGroup = state.boatMode === 'outrigger' ? outriggerGroup : catamaranGroup;
+            const fileName = state.boatMode === 'outrigger' ? 'tribal_outrigger_canoe.obj' : 'bamboo_catamaran_raft.obj';
+
+            let output = `# Exported from Tropical 3D Boat Studio\n# Model: ${targetGroup.name}\n`;
+            let vertexOffset = 1;
+
+            targetGroup.updateMatrixWorld(true);
+            targetGroup.traverse((child) => {
+                if (child.isMesh && child.geometry) {
+                    const geom = child.geometry.clone();
+                    geom.applyMatrix4(child.matrixWorld);
+                    const pos = geom.attributes.position;
+                    const idx = geom.index;
+
+                    output += `o mesh_${child.id}\n`;
+                    for (let i = 0; i < pos.count; i++) {
+                        output += `v ${pos.getX(i).toFixed(4)} ${pos.getY(i).toFixed(4)} ${pos.getZ(i).toFixed(4)}\n`;
+                    }
+                    if (idx) {
+                        for (let i = 0; i < idx.count; i += 3) {
+                            const a = idx.getX(i) + vertexOffset;
+                            const b = idx.getX(i + 1) + vertexOffset;
+                            const c = idx.getX(i + 2) + vertexOffset;
+                            output += `f ${a} ${b} ${c}\n`;
+                        }
+                    } else {
+                        for (let i = 0; i < pos.count; i += 3) {
+                            output += `f ${vertexOffset + i} ${vertexOffset + i + 1} ${vertexOffset + i + 2}\n`;
+                        }
+                    }
+                    vertexOffset += pos.count;
+                }
+            });
+
+            const blob = new THREE.Blob ? new Blob([output], { type: 'text/plain' }) : new Blob([output], { type: 'text/plain' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = fileName;
+            a.click();
+            URL.revokeObjectURL(url);
+            showToast(`Downloaded ${fileName}!`);
+        }
+
+        // ============================================================================
+        // INPUT LISTENERS (KEYBOARD, MOUSE ORBIT, TOUCH D-PAD)
+        // ============================================================================
+        function setupInputControls() {
+            window.addEventListener('keydown', (e) => {
+                const k = e.key.toLowerCase();
+                if (k === 'w' || e.key === 'ArrowUp') state.keys.forward = true;
+                if (k === 's' || e.key === 'ArrowDown') state.keys.backward = true;
+                if (k === 'a' || e.key === 'ArrowLeft') state.keys.left = true;
+                if (k === 'd' || e.key === 'ArrowRight') state.keys.right = true;
+            });
+
+            window.addEventListener('keyup', (e) => {
+                const k = e.key.toLowerCase();
+                if (k === 'w' || e.key === 'ArrowUp') state.keys.forward = false;
+                if (k === 's' || e.key === 'ArrowDown') state.keys.backward = false;
+                if (k === 'a' || e.key === 'ArrowLeft') state.keys.left = false;
+                if (k === 'd' || e.key === 'ArrowRight') state.keys.right = false;
+            });
+
+            // On-screen touch/mouse buttons
+            const bindHold = (id, keyProp) => {
+                const el = document.getElementById(id);
+                const start = (ev) => { ev.preventDefault(); state.keys[keyProp] = true; };
+                const end = (ev) => { ev.preventDefault(); state.keys[keyProp] = false; };
+                el.addEventListener('mousedown', start);
+                el.addEventListener('mouseup', end);
+                el.addEventListener('mouseleave', end);
+                el.addEventListener('touchstart', start, { passive: false });
+                el.addEventListener('touchend', end, { passive: false });
+            };
+            bindHold('btn-up', 'forward');
+            bindHold('btn-down', 'backward');
+            bindHold('btn-left', 'left');
+            bindHold('btn-right', 'right');
+
+            // Mouse / Touch Orbit Camera on Canvas
+            const dom = renderer.domElement;
+            dom.addEventListener('mousedown', (e) => {
+                state.isDragging = true;
+                state.prevMouse.x = e.clientX;
+                state.prevMouse.y = e.clientY;
+            });
+            window.addEventListener('mouseup', () => { state.isDragging = false; });
+            window.addEventListener('mousemove', (e) => {
+                if (!state.isDragging) return;
+                const dx = e.clientX - state.prevMouse.x;
+                const dy = e.clientY - state.prevMouse.y;
+                state.prevMouse.x = e.clientX;
+                state.prevMouse.y = e.clientY;
+
+                state.camYaw -= dx * 0.007;
+                state.camPitch = Math.max(-0.08, Math.min(1.15, state.camPitch + dy * 0.006));
+            });
+
+            dom.addEventListener('wheel', (e) => {
+                if (state.cameraMode === 'fpv') return;
+                state.camDist = Math.max(5.5, Math.min(34, state.camDist + e.deltaY * 0.012));
+            }, { passive: true });
+
+            // Touch drag for mobile camera orbit
+            dom.addEventListener('touchstart', (e) => {
+                if (e.touches.length === 1) {
+                    state.isDragging = true;
+                    state.prevMouse.x = e.touches[0].clientX;
+                    state.prevMouse.y = e.touches[0].clientY;
+                }
+            }, { passive: true });
+            dom.addEventListener('touchend', () => { state.isDragging = false; }, { passive: true });
+            dom.addEventListener('touchmove', (e) => {
+                if (!state.isDragging || e.touches.length !== 1) return;
+                const dx = e.touches[0].clientX - state.prevMouse.x;
+                const dy = e.touches[0].clientY - state.prevMouse.y;
+                state.prevMouse.x = e.touches[0].clientX;
+                state.prevMouse.y = e.touches[0].clientY;
+                state.camYaw -= dx * 0.007;
+                state.camPitch = Math.max(-0.08, Math.min(1.15, state.camPitch + dy * 0.006));
+            }, { passive: true });
+        }
+
+        // ============================================================================
+        // SCENE INITIALIZATION & MAIN ANIMATION LOOP
+        // ============================================================================
+        function initScene() {
+            const container = document.getElementById('canvas-container');
+            clock = new THREE.Clock();
+
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x3b82f6);
+            scene.fog = new THREE.FogExp2(0xbae6fd, 0.0042);
+
+            camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.1, 500);
+
+            renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            container.appendChild(renderer.domElement);
+
+            // Warm Tropical Sunlight + Sky Hemisphere Fill
+            ambientLight = new THREE.HemisphereLight(0xe0f2fe, 0x0e7490, 0.85);
+            scene.add(ambientLight);
+
+            sunLight = new THREE.DirectionalLight(0xfffbeb, 1.35);
+            sunLight.position.set(45, 75, 35);
+            sunLight.castShadow = true;
+            sunLight.shadow.mapSize.width = 2048;
+            sunLight.shadow.mapSize.height = 2048;
+            sunLight.shadow.camera.near = 10;
+            sunLight.shadow.camera.far = 220;
+            const d = 55;
+            sunLight.shadow.camera.left = -d;
+            sunLight.shadow.camera.right = d;
+            sunLight.shadow.camera.top = d;
+            sunLight.shadow.camera.bottom = -d;
+            scene.add(sunLight);
+
+            // Build Tropical Ocean & Island Archipelago
+            buildTropicalEnvironment();
+
+            // Build Both Custom 3D Boats
+            catamaranGroup = buildBambooCatamaran();
+            scene.add(catamaranGroup);
+
+            outriggerGroup = buildTribalOutrigger();
+            outriggerGroup.visible = false;
+            scene.add(outriggerGroup);
+
+            setupInputControls();
+
+            window.addEventListener('resize', () => {
+                camera.aspect = window.innerWidth / window.innerHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(window.innerWidth, window.innerHeight);
+            });
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+
+            const dt = Math.min(clock.getDelta(), 0.05);
+            const elapsed = clock.getElapsedTime();
+
+            // 1. Update Sailing & Steering Physics
+            const maxSpeed = 8.5 * (0.7 + state.windStrength * 0.3);
+            if (state.keys.forward) {
+                state.speed = THREE.MathUtils.lerp(state.speed, maxSpeed, dt * 2.2);
+            } else if (state.keys.backward) {
+                state.speed = THREE.MathUtils.lerp(state.speed, -maxSpeed * 0.45, dt * 2.2);
+            } else {
+                // Gentle ambient forward drift so the boat feels alive on the water
+                state.speed = THREE.MathUtils.lerp(state.speed, 1.15 * state.windStrength, dt * 1.2);
+            }
+
+            if (state.keys.left) {
+                state.turnRate = THREE.MathUtils.lerp(state.turnRate, 1.25, dt * 4);
+            } else if (state.keys.right) {
+                state.turnRate = THREE.MathUtils.lerp(state.turnRate, -1.25, dt * 4);
+            } else {
+                state.turnRate = THREE.MathUtils.lerp(state.turnRate, 0, dt * 5);
+            }
+
+            state.heading += state.turnRate * dt;
+
+            // Move forward along heading (-Z is forward when heading == 0)
+            const effectiveSpeed = state.cameraMode === 'inspect' && !state.keys.forward && !state.keys.backward ? 0.35 : state.speed;
+            state.pos.x -= Math.sin(state.heading) * effectiveSpeed * dt;
+            state.pos.z -= Math.cos(state.heading) * effectiveSpeed * dt;
+
+            // Keep boat within scenic lagoon bounds (allow sailing all the way into the portal at z = -21)
+            state.pos.x = Math.max(-95, Math.min(95, state.pos.x));
+            state.pos.z = Math.max(-28, Math.min(95, state.pos.z));
+
+            // Check distance to Island Arrival Zone (z <= -4)
+            const distToShore = Math.max(0, Math.round(state.pos.z - (-6)));
+            const distBadge = document.getElementById('island-dist-badge');
+            if (distBadge) {
+                if (!state.islandEventActive) {
+                    distBadge.textContent = `🏝️ ${distToShore}m to Island Trigger`;
+                } else {
+                    const distToPortal = Math.round(Math.hypot(state.pos.x, state.pos.z - (-21)));
+                    distBadge.textContent = `🌀 ${distToPortal}m to Teleport Portal`;
+                }
+            }
+
+            // Automatically trigger the Ground-Breaking Island Arrival when the boat enters the Island Lagoon!
+            if (!state.islandEventActive && state.pos.z <= -4 && Math.abs(state.pos.x) < 38) {
+                triggerIslandCataclysm();
+            }
+
+            // Pulse the approach beacon ring before arrival
+            if (arrivalBeaconRing) {
+                const s = 1 + Math.sin(elapsed * 4) * 0.08;
+                arrivalBeaconRing.scale.set(s, s, 1);
+                arrivalBeaconRing.visible = !state.islandEventActive;
+            }
+
+            // Update Portal, Sky Banner, Ground-Breaking Boulders & Fireworks when Island Event is Active
+            if (state.portalCooldown > 0) state.portalCooldown = Math.max(0, state.portalCooldown - dt);
+
+            if (state.islandEventActive) {
+                state.islandEventTimer += dt;
+                state.portalRiseProgress = Math.min(1, state.portalRiseProgress + dt * 0.55);
+                const easeOut = 1 - Math.pow(1 - state.portalRiseProgress, 3);
+
+                // 1. Raise the Swirling 3D Teleportation Portal from the sea floor
+                portalGroup.position.y = -22 + easeOut * 28.2; // Settles at y = 6.2
+                portalRing1.rotation.z = elapsed * 1.4;
+                portalRing2.rotation.z = -elapsed * 0.95;
+                portalRing3.rotation.z = elapsed * 2.1;
+                portalCoreMesh.rotation.z = -elapsed * 2.6;
+                const corePulse = 1 + Math.sin(elapsed * 5) * 0.05;
+                portalCoreMesh.scale.set(corePulse, corePulse, 1);
+
+                // 2. Raise & Wave the Massive 3D Sky Banner above the Island
+                skyBannerGroup.position.y = -35 + easeOut * 35;
+                if (skyBannerGeo) {
+                    const bPos = skyBannerGeo.attributes.position;
+                    for (let i = 0; i < bPos.count; i++) {
+                        const bx = bPos.getX(i);
+                        const by = bPos.getY(i);
+                        bPos.setZ(i, Math.sin(elapsed * 4.5 - bx * 0.22 + by * 0.15) * 0.85);
+                    }
+                    skyBannerGeo.attributes.position.needsUpdate = true;
+                }
+
+                // 3. Ground-Breaking Levitating Boulders & Monolith Fracture Vibration
+                for (let i = 0; i < floatingBoulders.length; i++) {
+                    const b = floatingBoulders[i];
+                    const hoverY = b.targetY * easeOut + Math.sin(elapsed * 2.2 + b.phase) * 1.2;
+                    b.mesh.position.y = hoverY;
+                    b.mesh.rotation.x += b.rotSpeed * dt;
+                    b.mesh.rotation.y += b.rotSpeed * dt;
+                }
+                if (monolithGroupRef && state.shakeIntensity > 0.05) {
+                    monolithGroupRef.position.x = -28 + (Math.random() - 0.5) * state.shakeIntensity * 1.4;
+                }
+
+                // 4. Continuous Celebratory Fireworks & Shoreline Firecrackers
+                if (Math.random() < dt * 2.4) {
+                    launchFirework();
+                }
+                if (Math.random() < dt * 0.8) {
+                    spawnShockwaveRing((Math.random() - 0.5) * 24, -21 - Math.random() * 16, 0x38bdf8);
+                }
+
+                // 5. Check if the Boat Sails Into the Swirling 3D Teleport Portal!
+                const distToPortalCenter = Math.hypot(state.pos.x - portalGroup.position.x, state.pos.z - portalGroup.position.z);
+                if (distToPortalCenter < 6.8 && state.portalRiseProgress > 0.7 && state.portalCooldown <= 0) {
+                    triggerPortalTeleport();
+                }
+            }
+
+            updateFireworksAndShockwaves(dt);
+
+            // Decay Ground-Breaking Camera Shake
+            if (state.shakeIntensity > 0) {
+                state.shakeIntensity = Math.max(0, state.shakeIntensity - dt * 0.45);
+            }
+
+            // Update UI Speed & Compass Readout
+            const knots = (Math.abs(effectiveSpeed) * 1.8).toFixed(1);
+            document.getElementById('speed-readout').textContent = `${knots} kts`;
+
+            const deg = (((-state.heading * 180 / Math.PI) % 360) + 360) % 360;
+            const dirs = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
+            const dirLabel = dirs[Math.round(deg / 45) % 8];
+            document.getElementById('compass-heading').textContent = `◆ ${dirLabel} ${Math.round(deg)}°`;
+
+            // 2. Position & Bob the Boats on the Waves
+            const wavePitch = Math.sin(elapsed * 2.2) * 0.035 * state.windStrength + (state.speed * 0.008);
+            const waveRoll = Math.cos(elapsed * 1.7) * 0.04 * state.windStrength - (state.turnRate * 0.06);
+            const waveHeave = Math.sin(elapsed * 2.5) * 0.08 * state.windStrength;
+
+            if (state.boatMode === 'both') {
+                // Place both boats side-by-side so the user can compare them directly
+                const rightVec = new THREE.Vector3(Math.cos(state.heading), 0, -Math.sin(state.heading));
+                catamaranGroup.position.copy(state.pos).addScaledVector(rightVec, -4.2);
+                catamaranGroup.position.y = waveHeave;
+                catamaranGroup.rotation.set(wavePitch, state.heading, waveRoll);
+
+                outriggerGroup.position.copy(state.pos).addScaledVector(rightVec, 4.2);
+                outriggerGroup.position.y = waveHeave * 0.9;
+                outriggerGroup.rotation.set(wavePitch * 0.9, state.heading, -waveRoll);
+            } else {
+                catamaranGroup.position.copy(state.pos);
+                catamaranGroup.position.y = waveHeave;
+                catamaranGroup.rotation.set(wavePitch, state.heading, waveRoll);
+
+                outriggerGroup.position.copy(state.pos);
+                outriggerGroup.position.y = waveHeave;
+                outriggerGroup.rotation.set(wavePitch, state.heading, waveRoll);
+            }
+
+            // 3. Animate Sail Billowing, Flag Waving & Outrigger Stern Wheel
+            if (sailGeometry) {
+                const sPos = sailGeometry.attributes.position;
+                for (let i = 0; i < sPos.count; i++) {
+                    const x = sPos.getX(i); // 0 at mast to ~3.3 at clew
+                    const y = sPos.getY(i);
+                    // Billow out in Z based on distance from mast and wind strength
+                    const arch = Math.sin((x / 3.3) * Math.PI) * (0.42 * state.windStrength);
+                    const flutter = Math.sin(elapsed * 5.0 - x * 2.2 + y) * 0.045 * state.windStrength;
+                    sPos.setZ(i, arch + flutter);
+                }
+                sailGeometry.attributes.position.needsUpdate = true;
+            }
+
+            if (flagGeometry) {
+                const fPos = flagGeometry.attributes.position;
+                for (let i = 0; i < fPos.count; i++) {
+                    const x = fPos.getX(i); // 0 at pole to 1.35 at tip
+                    const wave = Math.sin(elapsed * 8.5 - x * 4.5) * (x * 0.16 * state.windStrength);
+                    fPos.setZ(i, wave);
+                }
+                flagGeometry.attributes.position.needsUpdate = true;
+            }
+
+            if (outriggerWheel) {
+                outriggerWheel.rotation.x -= effectiveSpeed * dt * 2.5;
+            }
+
+            // 4. Animate Ocean Surface Waves
+            if (waterGeometry) {
+                const wPos = waterGeometry.attributes.position;
+                for (let i = 0; i < wPos.count; i++) {
+                    const vx = wPos.getX(i);
+                    const vz = wPos.getZ(i);
+                    const h = Math.sin(vx * 0.14 + elapsed * 1.8) * 0.16 * state.windStrength +
+                              Math.cos(vz * 0.12 + elapsed * 1.5) * 0.14 * state.windStrength;
+                    wPos.setY(i, h);
+                }
+                waterGeometry.attributes.position.needsUpdate = true;
+            }
+
+            // 5. Spawn Foam Wake Particles Behind Active Boat(s)
+            if (Math.random() < 0.55) {
+                if (state.boatMode === 'catamaran' || state.boatMode === 'both') {
+                    spawnWakeParticle(catamaranGroup.position, 2.3);
+                }
+                if (state.boatMode === 'outrigger' || state.boatMode === 'both') {
+                    spawnWakeParticle(outriggerGroup.position, 2.4);
+                }
+            }
+            updateWakeParticles(dt);
+
+            // Slowly drift sky clouds
+            if (cloudsGroup) {
+                cloudsGroup.rotation.y = elapsed * 0.008;
+            }
+
+            // 6. Update Camera Position & Look Target
+            if (state.cameraMode === 'fpv') {
+                // 1st-Person Bow POV (Matching Reference Image 3 looking over the prow & axe!)
+                const activeGroup = state.boatMode === 'outrigger' ? outriggerGroup : catamaranGroup;
+                const eyeOffset = state.boatMode === 'outrigger'
+                    ? new THREE.Vector3(0, 1.55, -0.45) // Behind the forward bench, axe on right, crossed bow horns ahead
+                    : new THREE.Vector3(0.55, 1.85, 1.65); // Standing on the woven green mat at the stern (like Tchia in Image 1)
+
+                eyeOffset.applyAxisAngle(new THREE.Vector3(0, 1, 0), state.heading);
+                camera.position.copy(activeGroup.position).add(eyeOffset);
+
+                const lookAngle = state.heading + state.camYaw * 0.7;
+                const lookTarget = new THREE.Vector3(
+                    camera.position.x - Math.sin(lookAngle) * 20,
+                    camera.position.y - 0.8 + state.camPitch * 8,
+                    camera.position.z - Math.cos(lookAngle) * 20
+                );
+                camera.lookAt(lookTarget);
+            } else {
+                // 3rd-Person Orbit / Chase Camera (Matching Reference Images 1 & 2)
+                const totalYaw = state.heading + state.camYaw;
+                const dist = state.boatMode === 'both' ? state.camDist * 1.25 : state.camDist;
+                const camX = state.pos.x + Math.sin(totalYaw) * Math.cos(state.camPitch) * dist;
+                const camY = state.pos.y + Math.sin(state.camPitch) * dist + 1.4;
+                const camZ = state.pos.z + Math.cos(totalYaw) * Math.cos(state.camPitch) * dist;
+
+                camera.position.lerp(new THREE.Vector3(camX, Math.max(1.2, camY), camZ), 0.12);
+                const focusTarget = new THREE.Vector3(state.pos.x, state.pos.y + 1.5, state.pos.z - 1.5);
+                camera.lookAt(focusTarget);
+            }
+
+            // Apply Seismic Ground-Breaking Screen Shake when active
+            if (state.shakeIntensity > 0.01) {
+                camera.position.x += (Math.random() - 0.5) * state.shakeIntensity * 0.9;
+                camera.position.y += (Math.random() - 0.5) * state.shakeIntensity * 0.9;
+                camera.position.z += (Math.random() - 0.5) * state.shakeIntensity * 0.9;
+            }
+
+            renderer.render(scene, camera);
+        }
+
+        window.onload = function () {
+            initScene();
+            animate();
+        };
+    </script>
+</body>
+</html>

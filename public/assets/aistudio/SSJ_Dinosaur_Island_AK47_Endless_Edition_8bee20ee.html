@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SSJ Dinosaur Island — Endless AK-47 Chase & Cinematic Breakout</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; }
+    html, body { width: 100%; height: 100%; overflow: hidden; background: #030712; font-family: system-ui, -apple-system, sans-serif; color: #f8fafc; }
+    canvas { display: block; width: 100vw; height: 100vh; }
+    .hud { position: fixed; inset: 0; pointer-events: none; display: flex; flex-direction: column; justify-content: space-between; padding: 14px; z-index: 10; }
+    .row { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
+    .panel { pointer-events: auto; background: rgba(9, 14, 26, 0.86); border: 1px solid rgba(148, 163, 184, 0.25); border-radius: 14px; padding: 12px 14px; backdrop-filter: blur(10px); box-shadow: 0 12px 32px rgba(0,0,0,0.55); }
+    .banner { pointer-events: auto; background: rgba(120, 53, 15, 0.9); border: 1px solid rgba(251, 191, 36, 0.65); color: #fef3c7; padding: 10px 16px; border-radius: 12px; font-size: 13px; font-weight: 700; max-width: 540px; text-align: center; box-shadow: 0 10px 28px rgba(0,0,0,0.6); }
+    .bar-bg { width: 100%; height: 8px; background: #1e293b; border-radius: 99px; overflow: hidden; margin-top: 4px; }
+    .bar-fill { height: 100%; transition: width 0.15s ease; }
+    .btn { pointer-events: auto; cursor: pointer; border: 1px solid rgba(255,255,255,0.2); border-radius: 10px; padding: 8px 13px; font-size: 12px; font-weight: 700; color: #fff; background: #1e293b; transition: 0.15s; }
+    .btn:hover { transform: translateY(-1px); filter: brightness(1.15); }
+    .btn-ak { background: #f59e0b; color: #090d16; border-color: #fde68a; }
+    .btn-car { background: #0284c7; color: #fff; border-color: #7dd3fc; }
+    .btn-sprint { background: #10b981; color: #052e16; border-color: #6ee7b7; }
+    .btn-flare { background: #e11d48; color: #fff; border-color: #fda4af; }
+    .controls-row { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; align-items: center; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; }
+  </style>
+</head>
+<body>
+  <div class="hud">
+    <div class="row">
+      <div class="panel" style="width: 300px;">
+        <div class="mono" style="color: #38bdf8;" id="modeLabel">PAD-01N · ON_FOOT (ENDLESS CHASE)</div>
+        <div style="font-size: 15px; font-weight: 800; margin: 2px 0 8px;" id="zoneTitle">Closed Night T-Rex Breakout Arena</div>
+        <div class="mono" style="display:flex; justify-content:space-between;"><span>EXPLORER HP (IMMORTAL ARMOR)</span><span id="hpText" style="color:#34d399;">150 / 150</span></div>
+        <div class="bar-bg"><div id="hpBar" class="bar-fill" style="width:100%; background:#10b981;"></div></div>
+        <div class="mono" style="display:flex; justify-content:space-between; margin-top:8px;"><span>T-REX CHASE HP</span><span id="dinoHpText" style="color:#fb7185;">350 / 350</span></div>
+        <div class="bar-bg"><div id="dinoHpBar" class="bar-fill" style="width:100%; background:#f43f5e;"></div></div>
+        <div class="mono" style="display:flex; justify-content:space-between; margin-top:8px;">
+          <span id="killsText" style="color:#fcd34d;">KILLS: 0 (ENDLESS)</span>
+          <span id="wallText" style="color:#94a3b8;">WALLS: 0/4 BROKEN</span>
+        </div>
+      </div>
+
+      <div class="banner" id="bannerBox">
+        STARTING MISSION: T-Rex is chasing! Sprint [Shift+WASD] or Drive Car [J] and Fire AK-47 [K] to kill the T-Rex & watch all 4 walls break one by one!
+      </div>
+
+      <div class="panel mono" style="text-align:right;">
+        <div style="color:#fde047; font-weight:700;">STANDALONE HTML EDITION</div>
+        <div style="color:#94a3b8; margin-top:4px;">WASD: Move / Steer · Shift: Sprint</div>
+        <div style="color:#94a3b8;">K or Click: Fire AK-47 · J: Drive Safari Car</div>
+        <div style="color:#94a3b8;">N: Spawn Next Endless T-Rex Wave</div>
+      </div>
+    </div>
+
+    <div class="controls-row panel" style="margin: 0 auto;">
+      <button class="btn btn-ak" id="btnAk">Fire AK-47 & Kill Dino [K]</button>
+      <button class="btn btn-car" id="btnCar">Drive Safari Car [J]</button>
+      <button class="btn btn-sprint" id="btnSprint">Toggle Sprint [Shift]</button>
+      <button class="btn btn-flare" id="btnWave">Next Endless Dino Chase [N]</button>
+    </div>
+  </div>
+
+  <script type="module">
+    import * as THREE from 'https://esm.sh/three@0.170.0';
+
+    // Procedural Web Audio Sound Engine
+    let audioCtx = null;
+    function getAudio() {
+      if (!audioCtx) {
+        const AC = window.AudioContext || window.webkitAudioContext;
+        if (AC) audioCtx = new AC();
+      }
+      if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+      return audioCtx;
+    }
+
+    function playAk47Sound(isDrivingCar = false) {
+      const ctx = getAudio();
+      if (!ctx) return;
+      const now = ctx.currentTime;
+      for (let s = 0; s < 5; s++) {
+        const t0 = now + s * 0.068;
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = isDrivingCar ? 'sawtooth' : 'square';
+        osc.frequency.setValueAtTime(isDrivingCar ? 220 : 185, t0);
+        osc.frequency.exponentialRampToValueAtTime(46, t0 + 0.06);
+        gain.gain.setValueAtTime(0.28, t0);
+        gain.gain.exponentialRampToValueAtTime(0.004, t0 + 0.065);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(t0);
+        osc.stop(t0 + 0.066);
+      }
+    }
+
+    function playWallBoomSound(stage) {
+      const ctx = getAudio();
+      if (!ctx) return;
+      const now = ctx.currentTime;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(110 - stage * 12, now);
+      osc.frequency.exponentialRampToValueAtTime(22, now + 0.65);
+      gain.gain.setValueAtTime(0.4, now);
+      gain.gain.exponentialRampToValueAtTime(0.005, now + 0.68);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(now);
+      osc.stop(now + 0.7);
+    }
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x060d1a);
+    scene.fog = new THREE.FogExp2(0x060d1a, 0.008);
+
+    const camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.3, 1200);
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    document.body.appendChild(renderer.domElement);
+
+    const hemi = new THREE.HemisphereLight(0x60a5fa, 0x0f172a, 1.1);
+    scene.add(hemi);
+    const dirLight = new THREE.DirectionalLight(0xe0f2fe, 1.8);
+    dirLight.position.set(25, 60, -30);
+    scene.add(dirLight);
+
+    // Endless Ground & Wet Gravel Road
+    const ground = new THREE.Mesh(
+      new THREE.PlaneGeometry(2400, 2400),
+      new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.55 })
+    );
+    ground.rotation.x = -Math.PI / 2;
+    scene.add(ground);
+
+    // 4 Breakable Containment Walls (broken ONE BY ONE after T-Rex is killed!)
+    const wallMat = new THREE.MeshStandardMaterial({ color: 0x334155, roughness: 0.6 });
+    const walls = [
+      new THREE.Mesh(new THREE.BoxGeometry(3.2, 16, 56), wallMat), // 1: West Wall
+      new THREE.Mesh(new THREE.BoxGeometry(36, 16, 3.2), wallMat), // 2: North Wall
+      new THREE.Mesh(new THREE.BoxGeometry(3.2, 16, 56), wallMat), // 3: East Wall
+      new THREE.Mesh(new THREE.BoxGeometry(36, 16, 3.2), wallMat), // 4: South Wall
+    ];
+    walls[0].position.set(-16, 8, 12);
+    walls[1].position.set(0, 8, 38);
+    walls[2].position.set(16, 8, 12);
+    walls[3].position.set(0, 8, -16);
+    walls.forEach((w) => scene.add(w));
+
+    // Flying Debris Chunks per Wall (1..4)
+    const debris = [];
+    for (let w = 0; w < 4; w++) {
+      for (let i = 0; i < 14; i++) {
+        const m = new THREE.Mesh(new THREE.DodecahedronGeometry(0.9, 0), wallMat);
+        m.visible = false;
+        scene.add(m);
+        debris.push({
+          mesh: m,
+          stage: w + 1,
+          active: false,
+          vx: (Math.random() - 0.5) * 18,
+          vy: 6 + Math.random() * 10,
+          vz: (Math.random() - 0.5) * 18,
+        });
+      }
+    }
+
+    // Player + AK-47 + Safari Car
+    const playerGroup = new THREE.Group();
+    const playerBody = new THREE.Mesh(
+      new THREE.CapsuleGeometry(0.45, 1.1, 8, 12),
+      new THREE.MeshStandardMaterial({ color: 0x1d4ed8 })
+    );
+    playerBody.position.y = 1.0;
+    playerGroup.add(playerBody);
+
+    const carMesh = new THREE.Mesh(
+      new THREE.BoxGeometry(2.4, 1.4, 4.6),
+      new THREE.MeshStandardMaterial({ color: 0xd97706, roughness: 0.3 })
+    );
+    carMesh.position.y = 0.85;
+    carMesh.visible = false;
+    playerGroup.add(carMesh);
+
+    const akMesh = new THREE.Mesh(
+      new THREE.BoxGeometry(0.15, 0.22, 1.1),
+      new THREE.MeshStandardMaterial({ color: 0x0f172a })
+    );
+    akMesh.position.set(0.55, 1.35, 0.6);
+    playerGroup.add(akMesh);
+    scene.add(playerGroup);
+
+    // Chasing T-Rex Model
+    const dinoGroup = new THREE.Group();
+    const dinoBody = new THREE.Mesh(
+      new THREE.CapsuleGeometry(1.5, 3.2, 10, 14),
+      new THREE.MeshStandardMaterial({ color: 0x7c2d12, roughness: 0.45 })
+    );
+    dinoBody.position.y = 3.2;
+    dinoBody.rotation.x = 0.35;
+    dinoGroup.add(dinoBody);
+    dinoGroup.position.set(0, 0, 20);
+    scene.add(dinoGroup);
+
+    const tracerGeo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]);
+    const tracerLine = new THREE.Line(tracerGeo, new THREE.LineBasicMaterial({ color: 0xfef08a }));
+    tracerLine.visible = false;
+    scene.add(tracerLine);
+
+    let dinoHp = 350;
+    let maxDinoHp = 350;
+    let kills = 0;
+    let brokenWalls = 0;
+    let breakSeqTimer = 0;
+    let drivingCar = false;
+    let sprinting = false;
+    let tracerTimer = 0;
+    const keys = new Set();
+
+    function updateHud(bannerMsg) {
+      document.getElementById('modeLabel').textContent =
+        'PAD-01N · ' + (drivingCar ? 'DRIVING SAFARI CAR + AK-47' : sprinting ? 'SPRINTING + AK-47' : 'ON_FOOT');
+      document.getElementById('dinoHpText').textContent = dinoHp + ' / ' + maxDinoHp;
+      document.getElementById('dinoHpBar').style.width = ((dinoHp / maxDinoHp) * 100) + '%';
+      document.getElementById('killsText').textContent = 'KILLS: ' + kills + ' (ENDLESS)';
+      document.getElementById('wallText').textContent = 'WALLS: ' + brokenWalls + '/4 BROKEN';
+      if (bannerMsg) document.getElementById('bannerBox').textContent = bannerMsg;
+    }
+
+    function triggerWallStage(stage) {
+      if (stage < 1 || stage > 4) return;
+      const w = walls[stage - 1];
+      if (!w.visible) return;
+      w.visible = false;
+      brokenWalls = stage;
+      playWallBoomSound(stage);
+      debris.forEach((d) => {
+        if (d.stage === stage) {
+          d.active = true;
+          d.mesh.visible = true;
+          d.mesh.position.copy(w.position);
+        }
+      });
+      updateHud(
+        stage < 4
+          ? 'CINEMATIC BREAKOUT: Wall ' + stage + '/4 shattered! Next wall breaking...'
+          : 'ALL 4 WALLS DESTROYED ONE BY ONE! Endless Dinosaur Chase unlocked — drive or sprint forever!'
+      );
+    }
+
+    function fireAk47() {
+      playAk47Sound(drivingCar);
+      tracerTimer = 0.25;
+      const posArr = tracerGeo.attributes.position.array;
+      posArr[0] = playerGroup.position.x + 0.5;
+      posArr[1] = playerGroup.position.y + 1.4;
+      posArr[2] = playerGroup.position.z;
+      posArr[3] = dinoGroup.position.x;
+      posArr[4] = dinoGroup.position.y + 2.8;
+      posArr[5] = dinoGroup.position.z;
+      tracerGeo.attributes.position.needsUpdate = true;
+      tracerLine.visible = true;
+
+      if (dinoHp > 0) {
+        dinoHp = Math.max(0, dinoHp - 175);
+        if (dinoHp === 0) {
+          kills += 1;
+          breakSeqTimer = 0.01;
+          triggerWallStage(1);
+        } else {
+          updateHud('AK-47 HIT CHASING T-REX! (' + dinoHp + '/350 HP left) — Firing finishing burst!');
+          setTimeout(() => {
+            if (dinoHp > 0) fireAk47();
+          }, 180);
+        }
+      }
+      updateHud();
+    }
+
+    function spawnNextWave() {
+      dinoHp = 350;
+      dinoGroup.rotation.z = 0;
+      dinoGroup.position.set(playerGroup.position.x + (Math.random() - 0.5) * 14, 0, playerGroup.position.z + 24);
+      updateHud('NEW ENDLESS T-REX CHASE WAVE SPAWNED! Sprint or Drive Car [J] and Fire AK-47 [K]!');
+    }
+
+    document.getElementById('btnAk').onclick = fireAk47;
+    document.getElementById('btnCar').onclick = () => {
+      drivingCar = !drivingCar;
+      carMesh.visible = drivingCar;
+      updateHud(drivingCar ? 'DRIVING SAFARI CAR! You can fire AK-47 [K] directly from the car!' : 'On foot — Sprint [Shift] and fire AK-47 [K]!');
+    };
+    document.getElementById('btnSprint').onclick = () => {
+      sprinting = !sprinting;
+      updateHud(sprinting ? 'SPRINTING ACTIVE! Run and gun with AK-47 [K]!' : 'Standard pace.');
+    };
+    document.getElementById('btnWave').onclick = spawnNextWave;
+
+    window.addEventListener('keydown', (e) => {
+      keys.add(e.code);
+      if (e.code === 'KeyK' || e.code === 'KeyF') fireAk47();
+      if (e.code === 'KeyJ') document.getElementById('btnCar').click();
+      if (e.code === 'KeyN') spawnNextWave();
+      if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') { sprinting = true; updateHud(); }
+    });
+    window.addEventListener('keyup', (e) => {
+      keys.delete(e.code);
+      if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') { sprinting = false; updateHud(); }
+    });
+
+    let last = performance.now();
+    function animate(now) {
+      requestAnimationFrame(animate);
+      const dt = Math.min(0.05, (now - last) * 0.001);
+      last = now;
+
+      const speed = drivingCar ? 22 : sprinting ? 15 : 9.5;
+      if (keys.has('KeyW') || keys.has('ArrowUp')) playerGroup.position.z += speed * dt;
+      if (keys.has('KeyS') || keys.has('ArrowDown')) playerGroup.position.z -= speed * dt;
+      if (keys.has('KeyA') || keys.has('ArrowLeft')) playerGroup.position.x -= speed * dt;
+      if (keys.has('KeyD') || keys.has('ArrowRight')) playerGroup.position.x += speed * dt;
+
+      if (tracerTimer > 0) {
+        tracerTimer -= dt;
+        if (tracerTimer <= 0) tracerLine.visible = false;
+      }
+
+      // Chasing T-Rex AI or Death Collapse
+      if (dinoHp > 0) {
+        const dx = playerGroup.position.x - dinoGroup.position.x;
+        const dz = playerGroup.position.z - dinoGroup.position.z;
+        const dist = Math.hypot(dx, dz) || 1;
+        if (dist > 3.8) {
+          dinoGroup.position.x += (dx / dist) * 7.2 * dt;
+          dinoGroup.position.z += (dz / dist) * 7.2 * dt;
+        }
+        dinoGroup.rotation.y = Math.atan2(dx, dz);
+      } else {
+        dinoGroup.rotation.z = THREE.MathUtils.lerp(dinoGroup.rotation.z, Math.PI * 0.48, 0.15);
+      }
+
+      // Sequential One-by-One Cinematic Wall Destruction (Stages 1 -> 2 -> 3 -> 4)
+      if (breakSeqTimer > 0) {
+        breakSeqTimer += dt;
+        if (breakSeqTimer > 0.42 && brokenWalls < 2) triggerWallStage(2);
+        if (breakSeqTimer > 0.84 && brokenWalls < 3) triggerWallStage(3);
+        if (breakSeqTimer > 1.26 && brokenWalls < 4) {
+          triggerWallStage(4);
+          breakSeqTimer = 0;
+        }
+      }
+
+      debris.forEach((d) => {
+        if (d.active && d.mesh.position.y > 0.4) {
+          d.mesh.position.x += d.vx * dt;
+          d.mesh.position.z += d.vz * dt;
+          d.vy -= 18 * dt;
+          d.mesh.position.y = Math.max(0.4, d.mesh.position.y + d.vy * dt);
+          d.mesh.rotation.x += 3 * dt;
+        }
+      });
+
+      camera.position.lerp(
+        new THREE.Vector3(playerGroup.position.x, playerGroup.position.y + 4.2, playerGroup.position.z - 11.5),
+        0.12
+      );
+      camera.lookAt(playerGroup.position.x, playerGroup.position.y + 1.8, playerGroup.position.z + 8);
+      renderer.render(scene, camera);
+    }
+    requestAnimationFrame(animate);
+  </script>
+</body>
+</html>

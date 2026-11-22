@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#1E1838" />
+      <stop offset="45%" stop-color="#4A3267" />
+      <stop offset="76%" stop-color="#C87584" />
+      <stop offset="100%" stop-color="#F4B892" />
+    </linearGradient>
+    <radialGradient id="sunGlow" cx="50%" cy="46%" r="36%">
+      <stop offset="0%" stop-color="#FFF2D6" />
+      <stop offset="55%" stop-color="#FFBC82" />
+      <stop offset="100%" stop-color="#FF9A76" stop-opacity="0" />
+    </radialGradient>
+  </defs>
+  <rect width="512" height="512" rx="96" fill="url(#sky)" />
+  <circle cx="256" cy="222" r="140" fill="url(#sunGlow)" />
+  <circle cx="256" cy="216" r="76" fill="#FFE7C4" />
+  <path d="M40 318 Q156 266 256 286 Q356 262 472 318 L472 472 L40 472 Z" fill="#231936" opacity="0.92" />
+  <path d="M96 348 Q256 276 416 348" fill="none" stroke="#FCE5D4" stroke-width="6" stroke-linecap="round" opacity="0.85" />
+  <!-- Converging countryside railway tracks -->
+  <line x1="162" y1="446" x2="234" y2="288" stroke="#F4BE98" stroke-width="11" stroke-linecap="round" />
+  <line x1="350" y1="446" x2="278" y2="288" stroke="#F4BE98" stroke-width="11" stroke-linecap="round" />
+  <line x1="184" y1="416" x2="328" y2="416" stroke="#F4BE98" stroke-width="9" stroke-linecap="round" />
+  <line x1="200" y1="382" x2="312" y2="382" stroke="#F4BE98" stroke-width="8" stroke-linecap="round" />
+  <line x1="214" y1="350" x2="298" y2="350" stroke="#F4BE98" stroke-width="7" stroke-linecap="round" />
+  <line x1="226" y1="322" x2="286" y2="322" stroke="#F4BE98" stroke-width="6" stroke-linecap="round" />
+  <!-- Horizon ring emblem -->
+  <circle cx="256" cy="256" r="176" fill="none" stroke="#FCE5D4" stroke-width="6" stroke-opacity="0.45" />
+</svg>

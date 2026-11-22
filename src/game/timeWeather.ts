@@ -1,0 +1,469 @@
+import type { SeasonType, TimePeriod, WeatherType } from './types';
+
+export interface Rgb {
+  r: number;
+  g: number;
+  b: number;
+}
+
+export interface SkyPalette {
+  zenith: Rgb;
+  midSky: Rgb;
+  horizon: Rgb;
+  sunColor: Rgb;
+  cloudLit: Rgb;
+  cloudShadow: Rgb;
+  fogColor: Rgb;
+  fogDensity: number;
+  hemiSky: Rgb;
+  hemiGround: Rgb;
+  hemiIntensity: number;
+  sunIntensity: number;
+  sunElevation: number; // radians
+  sunAzimuth: number; // radians
+  lanternStrength: number; // 0..1
+  starOpacity: number; // 0..1
+  waterTint: Rgb;
+}
+
+function hex(h: number): Rgb {
+  return {
+    r: ((h >> 16) & 255) / 255,
+    g: ((h >> 8) & 255) / 255,
+    b: (h & 255) / 255,
+  };
+}
+
+function lerpNum(a: number, b: number, t: number): number {
+  return a + (b - a) * t;
+}
+
+function lerpRgb(a: Rgb, b: Rgb, t: number): Rgb {
+  return {
+    r: a.r + (b.r - a.r) * t,
+    g: a.g + (b.g - a.g) * t,
+    b: a.b + (b.b - a.b) * t,
+  };
+}
+
+interface Keyframe {
+  hour: number;
+  palette: SkyPalette;
+}
+
+/**
+ * Curated Makoto Shinkai / anime countryside railway palettes matching the reference images:
+ * Lavender-purple twilight, pastel pink clouds, peach-orange sunset, warm golden hour, soft morning mist, starry night.
+ */
+const KEYFRAMES: Keyframe[] = [
+  {
+    hour: 0.0, // Midnight
+    palette: {
+      zenith: hex(0x0b1026),
+      midSky: hex(0x161d3f),
+      horizon: hex(0x282d52),
+      sunColor: hex(0xa9c3f5),
+      cloudLit: hex(0x414a75),
+      cloudShadow: hex(0x181d38),
+      fogColor: hex(0x1c213f),
+      fogDensity: 0.0042,
+      hemiSky: hex(0x43558c),
+      hemiGround: hex(0x191828),
+      hemiIntensity: 0.58,
+      sunIntensity: 0.42,
+      sunElevation: 0.55,
+      sunAzimuth: 0.6,
+      lanternStrength: 1.0,
+      starOpacity: 1.0,
+      waterTint: hex(0x162244),
+    },
+  },
+  {
+    hour: 6.5, // Morning (soft blue sky, gentle sunlight, morning mist)
+    palette: {
+      zenith: hex(0x4d88cf),
+      midSky: hex(0x95c3e8),
+      horizon: hex(0xf5dfcf),
+      sunColor: hex(0xffe6c2),
+      cloudLit: hex(0xfff4ea),
+      cloudShadow: hex(0xa8bad4),
+      fogColor: hex(0xdbe3eb),
+      fogDensity: 0.0048,
+      hemiSky: hex(0xa8d0f0),
+      hemiGround: hex(0x6c7c58),
+      hemiIntensity: 0.92,
+      sunIntensity: 1.55,
+      sunElevation: 0.34,
+      sunAzimuth: 1.15,
+      lanternStrength: 0.15,
+      starOpacity: 0.0,
+      waterTint: hex(0x5282a8),
+    },
+  },
+  {
+    hour: 13.0, // Afternoon (bright natural lighting, vivid green countryside)
+    palette: {
+      zenith: hex(0x2d72c9),
+      midSky: hex(0x6fb1eb),
+      horizon: hex(0xd5ebfa),
+      sunColor: hex(0xfff8e8),
+      cloudLit: hex(0xffffff),
+      cloudShadow: hex(0x9db4d6),
+      fogColor: hex(0xc5e0f5),
+      fogDensity: 0.0028,
+      hemiSky: hex(0x9bd0ff),
+      hemiGround: hex(0x657d4a),
+      hemiIntensity: 1.0,
+      sunIntensity: 2.05,
+      sunElevation: 0.98,
+      sunAzimuth: 2.2,
+      lanternStrength: 0.0,
+      starOpacity: 0.0,
+      waterTint: hex(0x3a79b8),
+    },
+  },
+  {
+    hour: 16.5, // Golden Hour (warm amber sunlight, golden grass, long shadows)
+    palette: {
+      zenith: hex(0x3f65b5),
+      midSky: hex(0x9987c2),
+      horizon: hex(0xffbc78),
+      sunColor: hex(0xffb566),
+      cloudLit: hex(0xffe3b8),
+      cloudShadow: hex(0x8c7ca6),
+      fogColor: hex(0xe8b596),
+      fogDensity: 0.0036,
+      hemiSky: hex(0xd6a8b8),
+      hemiGround: hex(0x7c6042),
+      hemiIntensity: 0.88,
+      sunIntensity: 1.95,
+      sunElevation: 0.25,
+      sunAzimuth: 3.75,
+      lanternStrength: 0.42,
+      starOpacity: 0.05,
+      waterTint: hex(0x6b6c94),
+    },
+  },
+  {
+    hour: 17.8, // Sunset (signature reference look: lavender purple, pastel pink, peach-orange clouds!)
+    palette: {
+      zenith: hex(0x343b8c),
+      midSky: hex(0x8864a8),
+      horizon: hex(0xff9c7c),
+      sunColor: hex(0xff9966),
+      cloudLit: hex(0xffcdb8),
+      cloudShadow: hex(0x6c5994),
+      fogColor: hex(0xc98b9e),
+      fogDensity: 0.0040,
+      hemiSky: hex(0xb684b5),
+      hemiGround: hex(0x52414f),
+      hemiIntensity: 0.85,
+      sunIntensity: 1.65,
+      sunElevation: 0.13,
+      sunAzimuth: 4.15,
+      lanternStrength: 0.92,
+      starOpacity: 0.28,
+      waterTint: hex(0x544b82),
+    },
+  },
+  {
+    hour: 19.3, // Evening (deep twilight blue, glowing warm railway & train windows)
+    palette: {
+      zenith: hex(0x161f52),
+      midSky: hex(0x373c7a),
+      horizon: hex(0x9e6386),
+      sunColor: hex(0xd98494),
+      cloudLit: hex(0x8c6896),
+      cloudShadow: hex(0x272c59),
+      fogColor: hex(0x3d3b69),
+      fogDensity: 0.0045,
+      hemiSky: hex(0x57619c),
+      hemiGround: hex(0x262238),
+      hemiIntensity: 0.68,
+      sunIntensity: 0.65,
+      sunElevation: 0.06,
+      sunAzimuth: 4.45,
+      lanternStrength: 1.0,
+      starOpacity: 0.72,
+      waterTint: hex(0x252c5c),
+    },
+  },
+  {
+    hour: 21.5, // Night
+    palette: {
+      zenith: hex(0x0b1026),
+      midSky: hex(0x161d3f),
+      horizon: hex(0x282d52),
+      sunColor: hex(0xa9c3f5),
+      cloudLit: hex(0x414a75),
+      cloudShadow: hex(0x181d38),
+      fogColor: hex(0x1c213f),
+      fogDensity: 0.0042,
+      hemiSky: hex(0x43558c),
+      hemiGround: hex(0x191828),
+      hemiIntensity: 0.58,
+      sunIntensity: 0.42,
+      sunElevation: 0.55,
+      sunAzimuth: 0.6,
+      lanternStrength: 1.0,
+      starOpacity: 1.0,
+      waterTint: hex(0x162244),
+    },
+  },
+];
+
+export const TIME_PRESET_HOURS: Record<TimePeriod, number> = {
+  morning: 6.75,
+  afternoon: 13.0,
+  golden: 16.5,
+  sunset: 17.75,
+  evening: 19.35,
+  night: 22.0,
+};
+
+export const TIME_PERIOD_LABELS: Record<TimePeriod, { name: string; jp: string }> = {
+  morning: { name: 'Morning', jp: 'காலை' },
+  afternoon: { name: 'Afternoon', jp: 'மதியம்' },
+  golden: { name: 'Golden Hour', jp: 'பொன்மாலை' },
+  sunset: { name: 'Sunset', jp: 'அந்திமாலை' },
+  evening: { name: 'Evening', jp: 'மாலை' },
+  night: { name: 'Night', jp: 'இரவு' },
+};
+
+export const WEATHER_LABELS: Record<WeatherType, { name: string; jp: string }> = {
+  clear: { name: 'Clear Sky', jp: 'தெளிவான வானம்' },
+  breeze: { name: 'Gentle Wind', jp: 'தென்றல் காற்று' },
+  cloudy: { name: 'Soft Clouds', jp: 'மேகமூட்டம்' },
+  fog: { name: 'Morning Mist', jp: 'காலைப் பனி' },
+  rain: { name: 'Light Rain', jp: 'சிறுமழை' },
+  heavy_rain: { name: 'Heavy Rain', jp: 'பெருமழை' },
+  thunderstorm: { name: 'Thunder Rain', jp: 'இடிமழை' },
+  ferocious_rain: { name: 'Ferocious Rain', jp: 'கொடும் மழை' },
+  flood: { name: 'Flood', jp: 'வெள்ளம்' },
+  tsunami: { name: 'Tsunami', jp: 'சுனாமி' },
+  snow: { name: 'Light Snow', jp: 'மென்பனி' },
+};
+
+export const SEASON_LABELS: Record<
+  SeasonType,
+  { name: string; tamil: string; desc: string }
+> = {
+  spring: {
+    name: 'Spring',
+    tamil: 'வசந்தம்',
+    desc: 'Sakura blossoms & drifting pink petals',
+  },
+  summer: {
+    name: 'Summer',
+    tamil: 'கோடை',
+    desc: 'Warm golden sun & vivid emerald hills',
+  },
+  autumn: {
+    name: 'Autumn',
+    tamil: 'இலையுதிர்',
+    desc: 'Crimson-amber maple leaves & warm breeze',
+  },
+  winter: {
+    name: 'Winter',
+    tamil: 'குளிர்',
+    desc: 'Frosted trees & gentle snowfall everywhere',
+  },
+};
+
+export function normalizeHours(hours: number): number {
+  const m = hours % 24;
+  return m < 0 ? m + 24 : m;
+}
+
+export function getTimePeriod(hours: number): TimePeriod {
+  const h = normalizeHours(hours);
+  if (h >= 5.0 && h < 10.5) return 'morning';
+  if (h >= 10.5 && h < 15.5) return 'afternoon';
+  if (h >= 15.5 && h < 17.2) return 'golden';
+  if (h >= 17.2 && h < 18.7) return 'sunset';
+  if (h >= 18.7 && h < 20.6) return 'evening';
+  return 'night';
+}
+
+export function formatClockTime(hours: number): string {
+  const h = normalizeHours(hours);
+  const hh = Math.floor(h);
+  const mm = Math.floor((h - hh) * 60);
+  return `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
+}
+
+export function computeSkyPalette(
+  hours: number,
+  weather: WeatherType,
+  season: SeasonType = 'spring'
+): SkyPalette {
+  const h = normalizeHours(hours);
+
+  let a = KEYFRAMES[KEYFRAMES.length - 1];
+  let b = KEYFRAMES[0];
+  let span = 24 - a.hour + b.hour;
+  let dist = h >= a.hour ? h - a.hour : 24 - a.hour + h;
+
+  for (let i = 0; i < KEYFRAMES.length - 1; i++) {
+    if (h >= KEYFRAMES[i].hour && h <= KEYFRAMES[i + 1].hour) {
+      a = KEYFRAMES[i];
+      b = KEYFRAMES[i + 1];
+      span = b.hour - a.hour;
+      dist = h - a.hour;
+      break;
+    }
+  }
+
+  const rawT = span > 0 ? dist / span : 0;
+  // Smoothstep for silky transitions
+  const t = rawT * rawT * (3 - 2 * rawT);
+
+  const p: SkyPalette = {
+    zenith: lerpRgb(a.palette.zenith, b.palette.zenith, t),
+    midSky: lerpRgb(a.palette.midSky, b.palette.midSky, t),
+    horizon: lerpRgb(a.palette.horizon, b.palette.horizon, t),
+    sunColor: lerpRgb(a.palette.sunColor, b.palette.sunColor, t),
+    cloudLit: lerpRgb(a.palette.cloudLit, b.palette.cloudLit, t),
+    cloudShadow: lerpRgb(a.palette.cloudShadow, b.palette.cloudShadow, t),
+    fogColor: lerpRgb(a.palette.fogColor, b.palette.fogColor, t),
+    fogDensity: lerpNum(a.palette.fogDensity, b.palette.fogDensity, t),
+    hemiSky: lerpRgb(a.palette.hemiSky, b.palette.hemiSky, t),
+    hemiGround: lerpRgb(a.palette.hemiGround, b.palette.hemiGround, t),
+    hemiIntensity: lerpNum(a.palette.hemiIntensity, b.palette.hemiIntensity, t),
+    sunIntensity: lerpNum(a.palette.sunIntensity, b.palette.sunIntensity, t),
+    sunElevation: lerpNum(a.palette.sunElevation, b.palette.sunElevation, t),
+    sunAzimuth: lerpNum(a.palette.sunAzimuth, b.palette.sunAzimuth, t),
+    lanternStrength: lerpNum(a.palette.lanternStrength, b.palette.lanternStrength, t),
+    starOpacity: lerpNum(a.palette.starOpacity, b.palette.starOpacity, t),
+    waterTint: lerpRgb(a.palette.waterTint, b.palette.waterTint, t),
+  };
+
+  // Weather modifiers
+  const overcastGrey = hex(0x8893ab);
+  if (weather === 'cloudy') {
+    p.zenith = lerpRgb(p.zenith, overcastGrey, 0.32);
+    p.horizon = lerpRgb(p.horizon, overcastGrey, 0.25);
+    p.sunIntensity *= 0.72;
+    p.fogDensity *= 1.25;
+    p.starOpacity *= 0.35;
+  } else if (weather === 'fog') {
+    const mistTint = lerpRgb(p.horizon, hex(0xe8e4ec), 0.45);
+    p.fogColor = lerpRgb(p.fogColor, mistTint, 0.55);
+    p.fogDensity = Math.max(p.fogDensity * 2.35, 0.0095);
+    p.sunIntensity *= 0.78;
+    p.starOpacity *= 0.25;
+  } else if (weather === 'rain') {
+    const rainSlate = hex(0x4c5875);
+    p.zenith = lerpRgb(p.zenith, rainSlate, 0.48);
+    p.midSky = lerpRgb(p.midSky, rainSlate, 0.42);
+    p.fogColor = lerpRgb(p.fogColor, rainSlate, 0.45);
+    p.fogDensity = Math.max(p.fogDensity * 1.9, 0.0078);
+    p.sunIntensity *= 0.58;
+    p.lanternStrength = Math.max(p.lanternStrength, 0.72);
+    p.starOpacity *= 0.12;
+  } else if (weather === 'heavy_rain') {
+    const heavySlate = hex(0x37435e);
+    const heavyCloud = hex(0x525e7a);
+    p.zenith = lerpRgb(p.zenith, heavySlate, 0.66);
+    p.midSky = lerpRgb(p.midSky, heavySlate, 0.6);
+    p.horizon = lerpRgb(p.horizon, heavyCloud, 0.52);
+    p.cloudLit = lerpRgb(p.cloudLit, heavyCloud, 0.65);
+    p.cloudShadow = lerpRgb(p.cloudShadow, hex(0x1f273d), 0.65);
+    p.fogColor = lerpRgb(p.fogColor, heavySlate, 0.62);
+    p.fogDensity = Math.max(p.fogDensity * 2.3, 0.0098);
+    p.sunIntensity *= 0.42;
+    p.hemiIntensity *= 0.78;
+    p.lanternStrength = Math.max(p.lanternStrength, 0.88);
+    p.starOpacity = 0;
+  } else if (weather === 'thunderstorm') {
+    const stormIndigo = hex(0x232d47);
+    const stormHorizon = hex(0x404d6b);
+    p.zenith = lerpRgb(p.zenith, stormIndigo, 0.78);
+    p.midSky = lerpRgb(p.midSky, stormIndigo, 0.72);
+    p.horizon = lerpRgb(p.horizon, stormHorizon, 0.62);
+    p.cloudLit = lerpRgb(p.cloudLit, hex(0x4d5a78), 0.75);
+    p.cloudShadow = lerpRgb(p.cloudShadow, hex(0x141a2e), 0.78);
+    p.fogColor = lerpRgb(p.fogColor, stormHorizon, 0.7);
+    p.fogDensity = Math.max(p.fogDensity * 2.55, 0.011);
+    p.sunIntensity *= 0.34;
+    p.hemiIntensity *= 0.72;
+    p.lanternStrength = Math.max(p.lanternStrength, 0.96);
+    p.starOpacity = 0;
+  } else if (weather === 'ferocious_rain') {
+    const tempestDark = hex(0x182136);
+    const tempestMist = hex(0x323f59);
+    p.zenith = lerpRgb(p.zenith, tempestDark, 0.88);
+    p.midSky = lerpRgb(p.midSky, tempestDark, 0.84);
+    p.horizon = lerpRgb(p.horizon, tempestMist, 0.76);
+    p.cloudLit = lerpRgb(p.cloudLit, hex(0x3f4c68), 0.84);
+    p.cloudShadow = lerpRgb(p.cloudShadow, hex(0x0d1221), 0.88);
+    p.fogColor = lerpRgb(p.fogColor, tempestMist, 0.8);
+    p.fogDensity = Math.max(p.fogDensity * 2.95, 0.0132);
+    p.sunIntensity *= 0.25;
+    p.hemiIntensity *= 0.66;
+    p.lanternStrength = 1.0;
+    p.starOpacity = 0;
+  } else if (weather === 'flood') {
+    const floodTeal = hex(0x2b3e52);
+    const floodMist = hex(0x465d72);
+    p.zenith = lerpRgb(p.zenith, floodTeal, 0.76);
+    p.midSky = lerpRgb(p.midSky, floodTeal, 0.68);
+    p.horizon = lerpRgb(p.horizon, floodMist, 0.64);
+    p.cloudLit = lerpRgb(p.cloudLit, hex(0x586d82), 0.72);
+    p.cloudShadow = lerpRgb(p.cloudShadow, hex(0x182534), 0.76);
+    p.fogColor = lerpRgb(p.fogColor, floodMist, 0.72);
+    p.fogDensity = Math.max(p.fogDensity * 2.45, 0.0108);
+    p.sunIntensity *= 0.36;
+    p.hemiIntensity *= 0.76;
+    p.lanternStrength = Math.max(p.lanternStrength, 0.94);
+    p.waterTint = lerpRgb(p.waterTint, hex(0x28566b), 0.65);
+    p.starOpacity = 0;
+  } else if (weather === 'tsunami') {
+    const surgeNavy = hex(0x16293d);
+    const seaSpray = hex(0x3a5a70);
+    p.zenith = lerpRgb(p.zenith, surgeNavy, 0.84);
+    p.midSky = lerpRgb(p.midSky, surgeNavy, 0.78);
+    p.horizon = lerpRgb(p.horizon, seaSpray, 0.72);
+    p.cloudLit = lerpRgb(p.cloudLit, hex(0x527087), 0.78);
+    p.cloudShadow = lerpRgb(p.cloudShadow, hex(0x0f1e2e), 0.84);
+    p.fogColor = lerpRgb(p.fogColor, seaSpray, 0.74);
+    p.fogDensity = Math.max(p.fogDensity * 2.55, 0.0112);
+    p.sunIntensity *= 0.34;
+    p.hemiIntensity *= 0.74;
+    p.lanternStrength = 1.0;
+    p.waterTint = lerpRgb(p.waterTint, hex(0x145369), 0.75);
+    p.starOpacity = 0;
+  } else if (weather === 'snow') {
+    const snowTint = hex(0xcbd5e8);
+    p.fogColor = lerpRgb(p.fogColor, snowTint, 0.35);
+    p.fogDensity = Math.max(p.fogDensity * 1.7, 0.0072);
+    p.sunIntensity *= 0.78;
+    p.lanternStrength = Math.max(p.lanternStrength, 0.55);
+  }
+
+  // Seasonal colour & lighting shifts
+  if (season === 'summer') {
+    const warmSun = hex(0xffe19c);
+    p.sunColor = lerpRgb(p.sunColor, warmSun, 0.22);
+    p.horizon = lerpRgb(p.horizon, hex(0xffdfb0), 0.14);
+    p.sunIntensity *= 1.12;
+    p.fogDensity *= 0.88;
+  } else if (season === 'autumn') {
+    const amberHorizon = hex(0xf59e6c);
+    const copperFog = hex(0xd48e6a);
+    p.horizon = lerpRgb(p.horizon, amberHorizon, 0.26);
+    p.fogColor = lerpRgb(p.fogColor, copperFog, 0.22);
+    p.hemiGround = lerpRgb(p.hemiGround, hex(0x8a5236), 0.35);
+    p.cloudLit = lerpRgb(p.cloudLit, hex(0xffd2a6), 0.22);
+  } else if (season === 'winter') {
+    const frostMist = hex(0xcfdff2);
+    p.zenith = lerpRgb(p.zenith, hex(0x3a527a), 0.24);
+    p.horizon = lerpRgb(p.horizon, frostMist, 0.3);
+    p.fogColor = lerpRgb(p.fogColor, frostMist, 0.36);
+    p.fogDensity = Math.max(p.fogDensity * 1.28, 0.0052);
+    p.hemiSky = lerpRgb(p.hemiSky, hex(0xbcd4f2), 0.3);
+    p.sunIntensity *= 0.9;
+  }
+
+  return p;
+}
