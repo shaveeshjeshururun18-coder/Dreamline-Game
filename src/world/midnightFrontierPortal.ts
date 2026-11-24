@@ -537,8 +537,91 @@ export function buildMidnightFrontierPortal(): MidnightFrontierPortalSystem {
     });
   });
 
-  // Interactive Farmhouse Door & Cellar Hatch prompts
+  // =========================================================================
+  // 6B. ULTRA-BRIGHT NIGHTTIME TELEPORTATION PORTAL & 240M SKY BEACON (VISIBLE FROM ANY DISTANCE!)
+  // =========================================================================
+  const portalBaseY = yAt(0, 0);
+  const portalGroup = new THREE.Group();
+  portalGroup.position.set(OX, portalBaseY, OZ);
+
+  const portalRingMat = track(
+    new THREE.MeshBasicMaterial({
+      color: 0xffd166,
+      transparent: true,
+      opacity: 0.96,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+      fog: false,
+    })
+  );
+  const portalCoreMat = track(
+    new THREE.MeshBasicMaterial({
+      color: 0xa855f7,
+      transparent: true,
+      opacity: 0.56,
+      side: THREE.DoubleSide,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+      fog: false,
+    })
+  );
+  const skyPillarMat = track(
+    new THREE.MeshBasicMaterial({
+      color: 0xfde047,
+      transparent: true,
+      opacity: 0.34,
+      side: THREE.DoubleSide,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+      fog: false,
+    })
+  );
+  const skyOuterBeamMat = track(
+    new THREE.MeshBasicMaterial({
+      color: 0xc084fc,
+      transparent: true,
+      opacity: 0.22,
+      side: THREE.DoubleSide,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+      fog: false,
+    })
+  );
+
+  // Sculpted stone portal dais + glowing vertical rift gate
+  const dais = new THREE.Mesh(track(new THREE.CylinderGeometry(3.4, 3.9, 0.32, 16)), stoneMat);
+  dais.position.y = 0.16;
+  const portalArch = new THREE.Mesh(track(new THREE.TorusGeometry(2.55, 0.24, 12, 32)), portalRingMat);
+  portalArch.position.y = 2.75;
+  const portalVortex = new THREE.Mesh(track(new THREE.CircleGeometry(2.38, 28)), portalCoreMat);
+  portalVortex.position.y = 2.75;
+  const portalInnerHalo = new THREE.Mesh(track(new THREE.TorusGeometry(1.75, 0.11, 10, 28)), skyOuterBeamMat);
+  portalInnerHalo.position.y = 2.75;
+  // Towering 260m fog-free sky beacon pillar + crown orb visible from anywhere in Dreamline at Night!
+  const skyPillarCore = new THREE.Mesh(track(new THREE.CylinderGeometry(0.95, 1.85, 260, 12, 1, true)), skyPillarMat);
+  skyPillarCore.position.y = 130;
+  const skyPillarOuter = new THREE.Mesh(track(new THREE.CylinderGeometry(3.2, 4.4, 260, 12, 1, true)), skyOuterBeamMat);
+  skyPillarOuter.position.y = 130;
+  const skyCrownOrb = new THREE.Mesh(track(new THREE.SphereGeometry(4.2, 16, 12)), portalRingMat);
+  skyCrownOrb.position.y = 62;
+  const portalLight = new THREE.PointLight(0xffd166, 0, 48, 1.2);
+  portalLight.position.set(0, 4.2, 0);
+
+  portalGroup.add(dais, portalArch, portalVortex, portalInnerHalo, skyPillarCore, skyPillarOuter, skyCrownOrb, portalLight);
+  group.add(portalGroup);
+
+  // Interactive Portal Gate + Farmhouse Door + Cellar Hatch prompts
   interactables.push(
+    {
+      id: 'mf_enter_portal',
+      kind: 'midnight_frontier_portal',
+      label: 'Enter The Midnight Frontier Portal',
+      sublabel: 'Step into the glowing gate to launch the game-inside-a-game',
+      x: OX,
+      y: portalBaseY + 1.4,
+      z: OZ,
+      radius: 4.6,
+    },
     {
       id: 'mf_toggle_farmhouse_door',
       kind: 'midnight_frontier_door',
@@ -619,6 +702,21 @@ export function buildMidnightFrontierPortal(): MidnightFrontierPortalSystem {
       beaconOrbs[i].rotation.y = elapsed * 0.7 + i;
       beaconShafts[i].rotation.y = -elapsed * 0.25;
     }
+
+    // Ultra-bright Nighttime Portal & 260m Sky Pillar pulsing visible from ANY distance!
+    const portalPulse = 0.85 + Math.sin(elapsed * 3.4) * 0.15;
+    portalArch.rotation.z = elapsed * 0.55;
+    portalInnerHalo.rotation.z = -elapsed * 1.1;
+    portalInnerHalo.rotation.y = Math.sin(elapsed * 1.4) * 0.35;
+    portalVortex.rotation.z = elapsed * 0.9;
+    portalRingMat.opacity = 0.98 * vis;
+    portalCoreMat.opacity = (0.56 + Math.sin(elapsed * 4.2) * 0.14) * vis;
+    skyPillarMat.opacity = (0.52 + Math.sin(elapsed * 2.2) * 0.14) * vis;
+    skyOuterBeamMat.opacity = (0.28 + Math.cos(elapsed * 1.9) * 0.08) * vis;
+    skyPillarCore.rotation.y = elapsed * 0.35;
+    skyPillarOuter.rotation.y = -elapsed * 0.22;
+    skyCrownOrb.scale.setScalar((0.92 + Math.sin(elapsed * 2.6) * 0.18) * vis);
+    portalLight.intensity = 10.5 * vis * portalPulse;
   };
 
   return {

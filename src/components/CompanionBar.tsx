@@ -45,7 +45,7 @@ interface CompanionJournalModalProps {
   onClose: () => void;
 }
 
-const ALL_REGIONS: RegionId[] = ['sakura', 'coastal', 'snow', 'countryside', 'lake_camp'];
+const ALL_REGIONS: RegionId[] = ['sakura', 'coastal', 'snow', 'countryside', 'lake_camp', 'desert'];
 
 export const CompanionJournalModal: React.FC<CompanionJournalModalProps> = ({
   hud,

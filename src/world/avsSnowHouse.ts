@@ -288,59 +288,6 @@ export function buildAvsSnowHouse(): AvsSnowHouseSystem {
   }
 
   // 3B. Walkable Exterior East Helipad Staircase & Rooftop Skywalk Bridge
-  const avsHeliDeckTopY = heliPadY + 0.11; // 7.59
-  const avsStairBaseY = upperBaseY; // 4.29
-  const avsStairCenterX = halfW + 0.58; // 2.88
-  const avsStairWidth = 1.14;
-  addBox(avsStairWidth + 0.12, 0.16, 1.45, mainConcrete, avsStairCenterX, avsStairBaseY - 0.08, 0.58);
-  addBox(avsStairWidth + 0.16, 0.05, 1.48, yellowTrim, avsStairCenterX, avsStairBaseY + 0.01, 0.58);
-  addBox(avsStairWidth + 0.12, 0.06, 0.06, steelRailMat, avsStairCenterX, avsStairBaseY + 0.88, 1.26);
-  addBox(0.06, 0.06, 1.4, steelRailMat, avsStairCenterX + avsStairWidth / 2, avsStairBaseY + 0.88, 0.58);
-  addBox(0.06, 0.9, 0.06, steelRailMat, avsStairCenterX + avsStairWidth / 2, avsStairBaseY + 0.45, 1.26);
-  addBox(0.06, 0.9, 0.06, steelRailMat, avsStairCenterX - avsStairWidth / 2, avsStairBaseY + 0.45, 1.26);
-
-  const avsCols: Array<[number, number, number]> = [
-    [avsStairCenterX + 0.48, avsStairBaseY, 1.15],
-    [avsStairCenterX + 0.48, (avsStairBaseY + avsHeliDeckTopY) * 0.5, -2.4],
-    [avsStairCenterX + 0.48, avsHeliDeckTopY, -5.0],
-    [avsStairCenterX + 0.48, avsHeliDeckTopY, -6.6],
-  ];
-  for (const [cx, ch, cz] of avsCols) {
-    addBox(0.14, ch, 0.14, ironGrille, cx, ch * 0.5, cz);
-  }
-
-  const avsHeliSteps = 14;
-  const avsHeliStartZ = -0.1;
-  const avsHeliRun = 4.8;
-  const avsHeliRise = avsHeliDeckTopY - avsStairBaseY;
-  for (let i = 0; i < avsHeliSteps; i++) {
-    const f = (i + 0.5) / avsHeliSteps;
-    const sy = avsStairBaseY + f * avsHeliRise;
-    const sz = avsHeliStartZ - f * avsHeliRun;
-    addBox(avsStairWidth, 0.1, 0.4, stepRedTile, avsStairCenterX, sy - 0.05, sz);
-    addBox(avsStairWidth + 0.02, 0.03, 0.42, i % 3 === 0 ? yellowTrim : stepDarkTread, avsStairCenterX, sy + 0.01, sz);
-  }
-
-  const avsSlopeLen = Math.hypot(avsHeliRun, avsHeliRise);
-  const avsSlopePitch = Math.atan2(avsHeliRise, avsHeliRun);
-  for (const rx of [avsStairCenterX - avsStairWidth / 2 + 0.04, avsStairCenterX + avsStairWidth / 2 - 0.04]) {
-    const stringer = addBox(0.08, 0.16, avsSlopeLen + 0.25, ironGrille, rx, avsStairBaseY + avsHeliRise * 0.5 - 0.14, avsHeliStartZ - avsHeliRun * 0.5);
-    stringer.rotation.x = avsSlopePitch;
-    const hRail = addBox(0.05, 0.05, avsSlopeLen + 0.25, steelRailMat, rx, avsStairBaseY + avsHeliRise * 0.5 + 0.85, avsHeliStartZ - avsHeliRun * 0.5);
-    hRail.rotation.x = avsSlopePitch;
-    for (let p = 0; p <= 4; p++) {
-      const pf = p / 4;
-      addBox(0.045, 0.9, 0.045, steelRailMat, rx, avsStairBaseY + pf * avsHeliRise + 0.42, avsHeliStartZ - pf * avsHeliRun);
-    }
-  }
-
-  addBox(1.68, 0.2, 1.85, padAsphalt, 2.65, avsHeliDeckTopY - 0.1, -5.8);
-  addBox(1.72, 0.04, 0.1, padMarkYellow, 2.65, avsHeliDeckTopY + 0.02, -6.68);
-  addBox(0.06, 0.06, 1.85, steelRailMat, 3.45, avsHeliDeckTopY + 0.88, -5.8);
-  addBox(1.68, 0.06, 0.06, steelRailMat, 2.65, avsHeliDeckTopY + 0.88, -6.7);
-  addCyl(0.09, 0.12, 0.24, 8, padBeaconCyan, 3.4, avsHeliDeckTopY + 1.05, -6.65);
-
-  // 3B. Walkable Exterior East Helipad Staircase & Rooftop Skywalk Bridge
   //     Connects 1st-floor east balcony (localY = 4.29, lz: -0.1..1.25) smoothly up to AVS Rooftop Helipad (localY = 7.59)!
   const avsHeliDeckTopY = heliPadY + 0.11; // 7.59
   const avsStairBaseY = upperBaseY; // 4.29
@@ -350,10 +297,10 @@ export function buildAvsSnowHouse(): AvsSnowHouseSystem {
   addBox(avsStairWidth + 0.12, 0.16, 1.45, mainConcrete, avsStairCenterX, avsStairBaseY - 0.08, 0.58);
   addBox(avsStairWidth + 0.16, 0.05, 1.48, yellowTrim, avsStairCenterX, avsStairBaseY + 0.01, 0.58);
   // Protective rail along front & outer edge of entry landing
-  addBox(avsStairWidth + 0.12, 0.06, 0.06, steelRailMat, avsStairCenterX, avsStairBaseY + 0.88, 1.26);
-  addBox(0.06, 0.06, 1.4, steelRailMat, avsStairCenterX + avsStairWidth / 2, avsStairBaseY + 0.88, 0.58);
-  addBox(0.06, 0.9, 0.06, steelRailMat, avsStairCenterX + avsStairWidth / 2, avsStairBaseY + 0.45, 1.26);
-  addBox(0.06, 0.9, 0.06, steelRailMat, avsStairCenterX - avsStairWidth / 2, avsStairBaseY + 0.45, 1.26);
+  addBox(avsStairWidth + 0.12, 0.06, 0.06, stainlessSteel, avsStairCenterX, avsStairBaseY + 0.88, 1.26);
+  addBox(0.06, 0.06, 1.4, stainlessSteel, avsStairCenterX + avsStairWidth / 2, avsStairBaseY + 0.88, 0.58);
+  addBox(0.06, 0.9, 0.06, stainlessSteel, avsStairCenterX + avsStairWidth / 2, avsStairBaseY + 0.45, 1.26);
+  addBox(0.06, 0.9, 0.06, stainlessSteel, avsStairCenterX - avsStairWidth / 2, avsStairBaseY + 0.45, 1.26);
 
   // Steel support columns grounding the AVS exterior helipad staircase to plinth base
   const avsCols: Array<[number, number, number]> = [
@@ -385,19 +332,19 @@ export function buildAvsSnowHouse(): AvsSnowHouseSystem {
   for (const rx of [avsStairCenterX - avsStairWidth / 2 + 0.04, avsStairCenterX + avsStairWidth / 2 - 0.04]) {
     const stringer = addBox(0.08, 0.16, avsSlopeLen + 0.25, ironGrille, rx, avsStairBaseY + avsHeliRise * 0.5 - 0.14, avsHeliStartZ - avsHeliRun * 0.5);
     stringer.rotation.x = avsSlopePitch;
-    const hRail = addBox(0.05, 0.05, avsSlopeLen + 0.25, steelRailMat, rx, avsStairBaseY + avsHeliRise * 0.5 + 0.85, avsHeliStartZ - avsHeliRun * 0.5);
+    const hRail = addBox(0.05, 0.05, avsSlopeLen + 0.25, stainlessSteel, rx, avsStairBaseY + avsHeliRise * 0.5 + 0.85, avsHeliStartZ - avsHeliRun * 0.5);
     hRail.rotation.x = avsSlopePitch;
     for (let p = 0; p <= 4; p++) {
       const pf = p / 4;
-      addBox(0.045, 0.9, 0.045, steelRailMat, rx, avsStairBaseY + pf * avsHeliRise + 0.42, avsHeliStartZ - pf * avsHeliRun);
+      addBox(0.045, 0.9, 0.045, stainlessSteel, rx, avsStairBaseY + pf * avsHeliRise + 0.42, avsHeliStartZ - pf * avsHeliRun);
     }
   }
 
   // Rooftop Skywalk Bridge connecting stair top (lz: -4.9..-6.7, lx: 1.85..3.45) smoothly onto the circular AVS Helipad!
   addBox(1.68, 0.2, 1.85, padAsphalt, 2.65, avsHeliDeckTopY - 0.1, -5.8);
   addBox(1.72, 0.04, 0.1, padMarkYellow, 2.65, avsHeliDeckTopY + 0.02, -6.68);
-  addBox(0.06, 0.06, 1.85, steelRailMat, 3.45, avsHeliDeckTopY + 0.88, -5.8);
-  addBox(1.68, 0.06, 0.06, steelRailMat, 2.65, avsHeliDeckTopY + 0.88, -6.7);
+  addBox(0.06, 0.06, 1.85, stainlessSteel, 3.45, avsHeliDeckTopY + 0.88, -5.8);
+  addBox(1.68, 0.06, 0.06, stainlessSteel, 2.65, avsHeliDeckTopY + 0.88, -6.7);
   addCyl(0.09, 0.12, 0.24, 8, padBeaconCyan, 3.4, avsHeliDeckTopY + 1.05, -6.65);
 
   // 4. Exterior 6-Step Red-Tiled Entrance Staircase + Stainless-Steel Tubular Handrail

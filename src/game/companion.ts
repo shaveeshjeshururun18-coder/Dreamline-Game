@@ -81,6 +81,33 @@ const DIALOGUE_POOL: DialogueEntry[] = [
     context: 'lake_camp',
     text: 'Nothing beats quiet lakeside camping with my favourite travelling friend.',
   },
+  // Thar Golden Desert Oasis & Pyramid Ruins
+  {
+    id: 'desert_1',
+    context: 'desert',
+    text: 'Whoa, golden sand dunes as far as the eye can see! Good thing my enchanted scarf keeps me cool and frosty!',
+  },
+  {
+    id: 'desert_2',
+    context: 'desert',
+    text: '*eyes sparkle* Did you see that giant sandstone pyramid? Let us peek inside the torch-lit secret chamber!',
+  },
+  {
+    id: 'desert_3',
+    context: 'desert',
+    text: 'The emerald oasis palms cast such cozy shade! Shall we summon the Safari 4x4 and race over the dunes?',
+  },
+  // Dreamline International Airport & Underground Metro
+  {
+    id: 'airport_1',
+    context: 'airport',
+    text: 'Look at that giant DL-787 Dreamliner waiting on the runway! Ready for takeoff, Captain?',
+  },
+  {
+    id: 'airport_2',
+    context: 'airport',
+    text: '*eyes wide* The rotating radar tower and the Underground Metro right outside Terminal 1 are so cool!',
+  },
   // Personal Home & Frosty's Igloo Corner
   {
     id: 'home_1',

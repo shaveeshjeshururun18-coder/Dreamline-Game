@@ -1,6 +1,8 @@
 import type { NavigationHudState } from './navigation';
 import type { BusDispatchState } from './busHailing';
 import type { SkyTaxiState } from './skyTaxi';
+import type { ActiveHeroRuntimeState } from './heroCharacters';
+import type { BatmobileState } from './batmobile';
 
 export type GameMode =
   | 'title'
@@ -17,13 +19,14 @@ export type GameMode =
   | 'ai_conductor'
   | 'mobile_phone'
   | 'midnight_frontier'
-  | 'exhibition_vehicle';
+  | 'exhibition_vehicle'
+  | 'hero_armory';
 
 export type SeasonType = 'spring' | 'summer' | 'autumn' | 'winter';
 
 export type SizeMode = 'auto' | 'giant' | 'small';
 
-export type RegionId = 'coastal' | 'snow' | 'sakura' | 'countryside' | 'lake_camp';
+export type RegionId = 'coastal' | 'snow' | 'sakura' | 'countryside' | 'lake_camp' | 'desert' | 'airport';
 
 export type TimePeriod =
   | 'morning'
@@ -52,7 +55,7 @@ export type DayCyclePreference = 'dynamic' | 'slow' | 'frozen';
 
 export type TransportMode = 'walk' | 'bicycle' | 'skateboard';
 
-export type VehicleKind = 'none' | 'train' | 'bus' | 'boat' | 'camper' | 'safari_car' | 'sky_explorer';
+export type VehicleKind = 'none' | 'train' | 'bus' | 'boat' | 'camper' | 'safari_car' | 'sky_explorer' | 'batmobile' | 'airliner' | 'vault_car';
 
 export type BoatId =
   | 'lake_boat'
@@ -125,6 +128,7 @@ export type InteractableKind =
   | 'home_decor'
   | 'frosty_igloo'
   | 'companion_talk'
+  | 'batmobile_drive'
   | 'iceland_transfer'
   | 'iceland_return'
   | 'giant_igloo_man'
@@ -141,7 +145,19 @@ export type InteractableKind =
   | 'sky_explorer_fly'
   | 'sky_taxi_board'
   | 'exhibition_vehicle'
-  | 'home_avatar_stand';
+  | 'home_avatar_stand'
+  | 'metro_enter'
+  | 'metro_exit'
+  | 'metro_train_board'
+  | 'airliner_board'
+  | 'home_hero_hall'
+  | 'hero_hq_switch'
+  | 'parachute_tower_launch'
+  | 'home_vault_toggle'
+  | 'home_vault_enter'
+  | 'home_vault_exit'
+  | 'vault_hero_pod'
+  | 'vault_car_drive';
 
 export interface InteractableItem {
   id: string;
@@ -421,6 +437,7 @@ export interface HudSnapshot {
   temperatureC: number;
   manualTemperatureC: number | null;
   isNightMode: boolean;
+  lanternOn: boolean;
   isSwimming: boolean;
   isJumping: boolean;
   floodLevel: number;
@@ -472,6 +489,16 @@ export interface HudSnapshot {
   inUndergroundCave: boolean;
   caveAreaName: string | null;
   exhibitionTestVehicleId: string | null;
+  hero: ActiveHeroRuntimeState;
+  batmobile: BatmobileState;
+  metroDestruction: {
+    score: number;
+    buildingsDestroyed: number;
+    totalBuildings: number;
+    propsDestroyed: number;
+    totalProps: number;
+    inMetroCity: boolean;
+  };
   stationAnnouncement: {
     id: string;
     stationName: string;
@@ -481,6 +508,30 @@ export interface HudSnapshot {
     text: string;
     eventKind: 'approaching' | 'arrived' | 'departing' | 'ambient';
   } | null;
+  inUndergroundMetro: boolean;
+  metroStationId: string | null;
+  metroStationName: string | null;
+  subwayTrainStatus: string;
+  subwayTrainAtPlatform: boolean;
+  subwayRidingTo: string | null;
+  airliner: {
+    speedKmh: number;
+    altitudeM: number;
+    throttle: number;
+    afterburner: boolean;
+    landingGearDown: boolean;
+    onGround: boolean;
+  };
+  parachuteActive: boolean;
+  homeVault: {
+    inPersonalHome: boolean;
+    hatchUnlocked: boolean;
+    hatchOpenProgress: number;
+    inVault: boolean;
+    activeVaultCarName: string | null;
+    activeVaultCarSpeedKmh: number;
+    activeVaultCarBoost: boolean;
+  };
 }
 
 export interface SaveData {

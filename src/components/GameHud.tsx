@@ -11,6 +11,7 @@ import {
   CloudSun,
   Crosshair,
   Eye,
+  Flame,
   Footprints,
   Home,
   Map as MapIcon,
@@ -29,12 +30,17 @@ import {
   TrainFront,
   Volume2,
   VolumeX,
+  Building2,
+  Camera,
+  Sparkles,
+  Wrench,
   Waves,
   Wind,
   X,
   Zap,
 } from 'lucide-react';
 import type { HudSnapshot, TrainBoardingStatus, TrainViewMode, TransportMode } from '../game/types';
+import { getHeroById, getHeroOutfitById } from '../game/heroCharacters';
 import { SEASON_LABELS, TIME_PERIOD_LABELS, WEATHER_LABELS } from '../game/timeWeather';
 import { getWeatherProfile } from '../game/extremeWeather';
 import { REGION_LABELS } from '../game/terrain';
@@ -90,6 +96,28 @@ interface GameHudProps {
   onExitUndergroundCave: () => void;
   onToggleBoatFpv: (fpv: boolean) => void;
   onSkyVertical: (ascend: boolean, descend: boolean) => void;
+  onOpenHeroArmory: () => void;
+  onHeroPrimaryPower: () => void;
+  onHeroSecondaryPower: () => void;
+  onHeroFlightOrSpecial: () => void;
+  onCycleHeroOutfit: () => void;
+  onToggleHeroHelmet: () => void;
+  onSpawnBatmobile: (teleportToMetro: boolean) => void;
+  onToggleBatmobileCanopy: () => void;
+  onToggleBatmobileLights: () => void;
+  onCycleBatmobileCamera: () => void;
+  onRepairBatmobile: () => void;
+  onExitBatmobile: () => void;
+  onToggleHomeVaultHatch: () => void;
+  onEnterHomeVault: () => void;
+  onExitHomeVault: () => void;
+  onExitVaultCar: () => void;
+  onToggleVaultCarLights: () => void;
+  onRideUndergroundMetro: (targetStationId: 'metro_central' | 'metro_airport') => void;
+  onExitUndergroundMetro: () => void;
+  onExitAirliner: (withParachute: boolean) => void;
+  onToggleParachute: () => void;
+  onToggleLantern: () => void;
 }
 
 function formatBoardingStatus(status: TrainBoardingStatus): string {
@@ -171,6 +199,28 @@ export const GameHud: React.FC<GameHudProps> = ({
   onExitUndergroundCave,
   onToggleBoatFpv,
   onSkyVertical,
+  onOpenHeroArmory,
+  onHeroPrimaryPower,
+  onHeroSecondaryPower,
+  onHeroFlightOrSpecial,
+  onCycleHeroOutfit,
+  onToggleHeroHelmet,
+  onSpawnBatmobile,
+  onToggleBatmobileCanopy,
+  onToggleBatmobileLights,
+  onCycleBatmobileCamera,
+  onRepairBatmobile,
+  onExitBatmobile,
+  onToggleHomeVaultHatch,
+  onEnterHomeVault,
+  onExitHomeVault,
+  onExitVaultCar,
+  onToggleVaultCarLights,
+  onRideUndergroundMetro,
+  onExitUndergroundMetro,
+  onExitAirliner,
+  onToggleParachute,
+  onToggleLantern,
 }) => {
   const periodLabel = TIME_PERIOD_LABELS[hud.period].name;
   const weatherLabel = WEATHER_LABELS[hud.weather].name;
@@ -197,6 +247,14 @@ export const GameHud: React.FC<GameHudProps> = ({
   const isDrivingCamper = hud.activeVehicle === 'camper';
   const isDrivingSafariCar = hud.activeVehicle === 'safari_car';
   const isFlyingSkyExplorer = hud.activeVehicle === 'sky_explorer';
+  const isDrivingBatmobile = hud.activeVehicle === 'batmobile';
+  const isDrivingVaultCar = hud.activeVehicle === 'vault_car';
+  const isFlyingAirliner = hud.activeVehicle === 'airliner';
+  const activeHeroSpec = hud.hero.activeHeroId ? getHeroById(hud.hero.activeHeroId) : null;
+  const activeHeroOutfit =
+    activeHeroSpec && hud.hero.activeHeroId
+      ? getHeroOutfitById(hud.hero.activeHeroId, hud.hero.activeOutfitId)
+      : null;
   const dino = hud.dinosaurIsland;
 
   const handleUtilityClick =
@@ -283,6 +341,55 @@ export const GameHud: React.FC<GameHudProps> = ({
                 className="px-2 py-0.5 rounded bg-cyan-400 hover:bg-cyan-300 text-slate-950 font-semibold text-[10px] cursor-pointer"
               >
                 Surface Exit
+              </button>
+            </div>
+          )}
+          {hud.inUndergroundMetro && (
+            <div
+              data-testid="underground-metro-hud"
+              className="mt-1.5 pointer-events-auto flex flex-wrap items-center gap-1.5 pt-1.5 border-t border-cyan-300/35 text-[11px] text-cyan-100"
+            >
+              <span className="inline-flex items-center gap-1 font-semibold text-cyan-200">
+                <TrainFront className="w-3.5 h-3.5 text-cyan-300 shrink-0" />
+                {hud.metroStationName ?? 'Underground Metro'}
+              </span>
+              <span className="font-mono-tabular px-1.5 py-0.5 rounded bg-cyan-950/90 border border-cyan-400/30 text-[10px] text-amber-200">
+                {hud.subwayTrainStatus}
+              </span>
+              <button
+                type="button"
+                tabIndex={-1}
+                data-testid="metro-ride-central-btn"
+                onClick={handleUtilityClick(() => onRideUndergroundMetro('metro_central'))}
+                className={`px-2 py-0.5 rounded text-[10px] font-semibold cursor-pointer ${
+                  hud.metroStationId === 'metro_central'
+                    ? 'bg-cyan-400 text-slate-950'
+                    : 'bg-cyan-500/20 hover:bg-cyan-500/35 border border-cyan-300/40 text-cyan-100'
+                }`}
+              >
+                Central
+              </button>
+              <button
+                type="button"
+                tabIndex={-1}
+                data-testid="metro-ride-airport-btn"
+                onClick={handleUtilityClick(() => onRideUndergroundMetro('metro_airport'))}
+                className={`px-2 py-0.5 rounded text-[10px] font-semibold cursor-pointer ${
+                  hud.metroStationId === 'metro_airport'
+                    ? 'bg-cyan-400 text-slate-950'
+                    : 'bg-cyan-500/20 hover:bg-cyan-500/35 border border-cyan-300/40 text-cyan-100'
+                }`}
+              >
+                Airport T1
+              </button>
+              <button
+                type="button"
+                tabIndex={-1}
+                data-testid="metro-exit-surface-btn"
+                onClick={handleUtilityClick(onExitUndergroundMetro)}
+                className="px-2 py-0.5 rounded bg-amber-400 hover:bg-amber-300 text-slate-950 font-semibold text-[10px] cursor-pointer"
+              >
+                Exit to Surface
               </button>
             </div>
           )}
@@ -417,6 +524,23 @@ export const GameHud: React.FC<GameHudProps> = ({
               </button>
             </div>
           )}
+          {hud.stationAnnouncement && (
+            <div
+              data-testid="station-pa-banner"
+              className="mt-1.5 pt-1.5 border-t border-amber-200/25 text-[11px] max-w-[320px]"
+            >
+              <div className="flex items-center gap-1.5 text-amber-200 font-semibold">
+                <Megaphone className="w-3.5 h-3.5 shrink-0 text-amber-300" />
+                <span className="truncate">{hud.stationAnnouncement.regionTag}</span>
+                <span className="text-[9px] font-normal text-amber-100/75 ml-auto shrink-0">
+                  ♪ {hud.stationAnnouncement.chimeName}
+                </span>
+              </div>
+              <p className="mt-0.5 text-[11px] leading-snug text-slate-100/95">
+                {hud.stationAnnouncement.text}
+              </p>
+            </div>
+          )}
           {dino.onIsland && (
             <div className="mt-2 pt-2 border-t border-[#FACC15]/30 space-y-1.5 text-[11px]">
               <div className="flex items-center justify-between gap-3">
@@ -465,10 +589,81 @@ export const GameHud: React.FC<GameHudProps> = ({
               </div>
             </div>
           )}
+          {hud.homeVault.inPersonalHome && !hud.homeVault.inVault && (
+            <div
+              data-testid="hud-home-secret-button-bar"
+              className="mt-1.5 pointer-events-auto flex flex-wrap items-center gap-2 pt-1.5 border-t border-cyan-400/35 text-[11px]"
+            >
+              <span className="inline-flex items-center gap-1 font-semibold text-cyan-200">
+                <Sparkles className="w-3.5 h-3.5 text-cyan-300 shrink-0" />
+                En Illam Secret Floor
+              </span>
+              <button
+                type="button"
+                tabIndex={-1}
+                data-testid="hud-vault-toggle-btn"
+                onClick={handleUtilityClick(onToggleHomeVaultHatch)}
+                className={`px-2.5 py-0.5 rounded font-semibold text-[10px] cursor-pointer transition-colors ${
+                  hud.homeVault.hatchUnlocked
+                    ? 'bg-slate-700 hover:bg-slate-600 text-slate-100 border border-slate-500'
+                    : 'bg-cyan-400 hover:bg-cyan-300 text-slate-950 shadow-sm shadow-cyan-400/30'
+                }`}
+              >
+                {hud.homeVault.hatchUnlocked ? 'Close Hidden Floor Hatch' : 'Press Secret Underground Button'}
+              </button>
+              {hud.homeVault.hatchUnlocked && (
+                <button
+                  type="button"
+                  tabIndex={-1}
+                  data-testid="hud-vault-enter-btn"
+                  onClick={handleUtilityClick(onEnterHomeVault)}
+                  className="px-2.5 py-0.5 rounded bg-amber-400 hover:bg-amber-300 text-slate-950 font-bold text-[10px] cursor-pointer shadow-sm"
+                >
+                  Go Down to Secret Superhero Vault &amp; Garage
+                </button>
+              )}
+            </div>
+          )}
+          {hud.homeVault.inVault && (
+            <div
+              data-testid="hud-home-vault-banner"
+              className="mt-1.5 pointer-events-auto flex flex-wrap items-center gap-2 pt-1.5 border-t border-amber-400/35 text-[11px]"
+            >
+              <span className="inline-flex items-center gap-1 font-semibold text-amber-300">
+                <Sparkles className="w-3.5 h-3.5 text-amber-300 shrink-0" />
+                Secret Underground Floor · 7 Hero Suits &amp; 4 Cars
+              </span>
+              <button
+                type="button"
+                tabIndex={-1}
+                data-testid="hud-vault-exit-btn"
+                onClick={handleUtilityClick(onExitHomeVault)}
+                className="px-2.5 py-0.5 rounded bg-amber-400 hover:bg-amber-300 text-slate-950 font-semibold text-[10px] cursor-pointer"
+              >
+                Go Up to House
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Top-Right: Compact Square Utility Strip */}
         <div className="pointer-events-auto shrink-0 flex items-center gap-1 sm:gap-1.5">
+          <button
+            type="button"
+            tabIndex={-1}
+            data-testid="open-hero-armory-btn"
+            aria-label="Open 360 Hero Armory and Batmobile Studio (U)"
+            title="360° Hero Armory — Steve, Iron Man, Hulkbuster, Batman, Spider-Man & Batmobile (U)"
+            onClick={handleUtilityClick(onOpenHeroArmory)}
+            className={`h-8 sm:h-10 px-2.5 sm:px-3 flex items-center justify-center gap-1.5 rounded-md border text-xs font-semibold transition-colors cursor-pointer whitespace-nowrap ${
+              activeHeroSpec
+                ? 'bg-amber-400 border-amber-200 text-slate-950 shadow-md shadow-amber-500/20'
+                : 'bg-[#2A182E]/90 border-amber-400/55 text-amber-200 hover:bg-[#3A2140]'
+            }`}
+          >
+            <Sparkles className="w-4 h-4 shrink-0" />
+            <span>{activeHeroSpec ? activeHeroSpec.name.split(' ')[0] : 'Heroes'}</span>
+          </button>
           <button
             type="button"
             tabIndex={-1}
@@ -572,6 +767,34 @@ export const GameHud: React.FC<GameHudProps> = ({
             className="w-8 h-8 sm:w-10 sm:h-10 flex items-center justify-center rounded-md bg-[#191429]/82 border border-[#F5D6C0]/20 text-[#F7EFE8] hover:bg-[#271F3F]/92 transition-colors cursor-pointer"
           >
             <MapIcon className="w-4 h-4" />
+          </button>
+
+          <button
+            type="button"
+            tabIndex={-1}
+            data-testid="hud-lantern-btn"
+            aria-label={
+              hud.lanternOn
+                ? 'Turn Personal Lantern Off (L)'
+                : 'Turn Personal Lantern On (L)'
+            }
+            aria-pressed={hud.lanternOn}
+            title={
+              hud.lanternOn
+                ? 'Personal Lantern ON — Click or press L to extinguish'
+                : 'Personal Lantern OFF — Click or press L to light your lantern'
+            }
+            onClick={handleUtilityClick(onToggleLantern)}
+            className={`h-8 sm:h-10 px-2 sm:px-2.5 flex items-center justify-center gap-1.5 rounded-md border text-xs font-medium transition-colors cursor-pointer whitespace-nowrap ${
+              hud.lanternOn
+                ? 'bg-amber-400 border-amber-200 text-slate-950 font-semibold shadow-md shadow-amber-500/25'
+                : 'bg-[#191429]/82 border-[#F5D6C0]/20 text-[#FCE2C8] hover:bg-[#271F3F]/92'
+            }`}
+          >
+            <Flame className="w-4 h-4 shrink-0" />
+            <span className="hidden md:inline">
+              {hud.lanternOn ? 'Lantern On' : 'Lantern'}
+            </span>
           </button>
 
           <button
@@ -1131,6 +1354,194 @@ export const GameHud: React.FC<GameHudProps> = ({
                     Land &amp; Exit [E]
                   </button>
                 </div>
+              ) : isFlyingAirliner ? (
+                <div
+                  data-testid="airliner-hud"
+                  className="pointer-events-auto flex flex-wrap items-center justify-center gap-2 px-3.5 py-2.5 rounded-lg bg-[#0C1D2E]/94 border border-sky-300/55 text-xs text-sky-50 shadow-2xl"
+                >
+                  <div className="flex items-center gap-2 pr-1">
+                    <Plane className="w-4 h-4 text-sky-300" />
+                    <span className="font-display font-semibold text-sky-100">
+                      DL-787 Dreamliner
+                    </span>
+                    <span className="font-mono-tabular px-1.5 py-0.5 rounded bg-slate-800 text-sky-300 font-semibold">
+                      {hud.airliner.speedKmh} km/h
+                    </span>
+                    <span className="font-mono-tabular px-1.5 py-0.5 rounded bg-slate-800 text-amber-200">
+                      ALT {hud.airliner.altitudeM}m
+                    </span>
+                    <span className="font-mono-tabular px-1.5 py-0.5 rounded bg-slate-800 text-emerald-300 text-[10px]">
+                      GEAR {hud.airliner.landingGearDown ? 'DOWN' : 'UP'}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    tabIndex={-1}
+                    onPointerDown={(e) => {
+                      e.stopPropagation();
+                      onSkyVertical(true, false);
+                    }}
+                    onPointerUp={() => onSkyVertical(false, false)}
+                    onPointerLeave={() => onSkyVertical(false, false)}
+                    onPointerCancel={() => onSkyVertical(false, false)}
+                    style={{ touchAction: 'none' }}
+                    className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded bg-sky-500/25 hover:bg-sky-500/40 border border-sky-300/40 text-sky-100 text-xs font-medium cursor-pointer select-none"
+                  >
+                    <ArrowUp className="w-3.5 h-3.5" />
+                    <span>Climb [Space]</span>
+                  </button>
+                  <button
+                    type="button"
+                    tabIndex={-1}
+                    onPointerDown={(e) => {
+                      e.stopPropagation();
+                      onSkyVertical(false, true);
+                    }}
+                    onPointerUp={() => onSkyVertical(false, false)}
+                    onPointerLeave={() => onSkyVertical(false, false)}
+                    onPointerCancel={() => onSkyVertical(false, false)}
+                    style={{ touchAction: 'none' }}
+                    className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded bg-sky-500/25 hover:bg-sky-500/40 border border-sky-300/40 text-sky-100 text-xs font-medium cursor-pointer select-none"
+                  >
+                    <ArrowDown className="w-3.5 h-3.5" />
+                    <span>Descend [Q]</span>
+                  </button>
+                  <button
+                    type="button"
+                    tabIndex={-1}
+                    data-testid="airliner-skydive-btn"
+                    onClick={handleUtilityClick(() => onExitAirliner(true))}
+                    className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded bg-emerald-400 hover:bg-emerald-300 text-slate-950 text-xs font-semibold cursor-pointer whitespace-nowrap"
+                  >
+                    <Wind className="w-3.5 h-3.5" />
+                    <span>Skydive + Parachute</span>
+                  </button>
+                  <button
+                    type="button"
+                    tabIndex={-1}
+                    onClick={handleUtilityClick(() => onExitAirliner(false))}
+                    className="px-3 py-1.5 rounded bg-sky-400 hover:bg-sky-300 text-slate-950 text-xs font-semibold cursor-pointer whitespace-nowrap"
+                  >
+                    Exit Jet [E]
+                  </button>
+                </div>
+              ) : isDrivingBatmobile ? (
+                <div
+                  data-testid="batmobile-hud"
+                  className="pointer-events-auto flex flex-wrap items-center justify-center gap-2 px-3.5 py-2.5 rounded-lg bg-[#0D111A]/94 border border-amber-400/50 text-xs text-slate-100 shadow-2xl"
+                >
+                  <div className="flex items-center gap-2 pr-1">
+                    <Car className="w-4 h-4 text-amber-400" />
+                    <span className="font-display font-semibold text-amber-200">
+                      Armoured Batmobile
+                    </span>
+                    <span className="font-mono-tabular px-1.5 py-0.5 rounded bg-slate-800 text-cyan-300 font-semibold">
+                      {hud.batmobile.speedKmh} km/h
+                    </span>
+                    <span className="font-mono-tabular px-1.5 py-0.5 rounded bg-slate-800 text-emerald-300">
+                      Armour {Math.round(hud.batmobile.integrity)}%
+                    </span>
+                    {hud.batmobile.boostActive && (
+                      <span className="px-1.5 py-0.5 rounded bg-amber-400 text-slate-950 font-semibold text-[10px]">
+                        AFTERBURNER
+                      </span>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    tabIndex={-1}
+                    onClick={handleUtilityClick(onToggleBatmobileCanopy)}
+                    className={`px-2.5 py-1 rounded border text-[11px] font-medium cursor-pointer ${
+                      hud.batmobile.canopyOpen
+                        ? 'bg-cyan-400 border-cyan-200 text-slate-950 font-semibold'
+                        : 'bg-slate-800/90 border-slate-600 text-slate-200 hover:bg-slate-700'
+                    }`}
+                  >
+                    Canopy [O]
+                  </button>
+                  <button
+                    type="button"
+                    tabIndex={-1}
+                    onClick={handleUtilityClick(onToggleBatmobileLights)}
+                    className={`px-2.5 py-1 rounded border text-[11px] font-medium cursor-pointer ${
+                      hud.batmobile.headlightsOn
+                        ? 'bg-amber-300 border-amber-100 text-slate-950 font-semibold'
+                        : 'bg-slate-800/90 border-slate-600 text-slate-200 hover:bg-slate-700'
+                    }`}
+                  >
+                    Lights [L]
+                  </button>
+                  <button
+                    type="button"
+                    tabIndex={-1}
+                    onClick={handleUtilityClick(onCycleBatmobileCamera)}
+                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-slate-800/90 hover:bg-slate-700 border border-slate-600 text-[11px] font-medium text-slate-100 cursor-pointer"
+                  >
+                    <Camera className="w-3.5 h-3.5 text-cyan-300" />
+                    <span>{hud.batmobile.cameraMode.toUpperCase()} [V]</span>
+                  </button>
+                  {hud.batmobile.integrity < 100 && (
+                    <button
+                      type="button"
+                      tabIndex={-1}
+                      onClick={handleUtilityClick(onRepairBatmobile)}
+                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-emerald-400/25 hover:bg-emerald-400/35 border border-emerald-300/45 text-emerald-100 text-[11px] font-semibold cursor-pointer"
+                    >
+                      <Wrench className="w-3.5 h-3.5" />
+                      <span>Repair [R]</span>
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    tabIndex={-1}
+                    onClick={handleUtilityClick(onExitBatmobile)}
+                    className="px-3 py-1 rounded bg-amber-400 hover:bg-amber-300 text-slate-950 text-[11px] font-semibold cursor-pointer"
+                  >
+                    Exit [E]
+                  </button>
+                </div>
+              ) : isDrivingVaultCar ? (
+                <div
+                  data-testid="vault-car-hud"
+                  className="pointer-events-auto flex flex-wrap items-center justify-center gap-2 px-3.5 py-2.5 rounded-lg bg-[#0D111A]/94 border border-cyan-400/50 text-xs text-slate-100 shadow-2xl"
+                >
+                  <div className="flex items-center gap-2 pr-1">
+                    <Car className="w-4 h-4 text-cyan-300" />
+                    <span className="font-display font-semibold text-cyan-200">
+                      {hud.homeVault.activeVaultCarName ?? 'Underground Garage Car'}
+                    </span>
+                    <span className="font-mono-tabular px-1.5 py-0.5 rounded bg-slate-800 text-amber-300 font-semibold">
+                      {hud.homeVault.activeVaultCarSpeedKmh} km/h
+                    </span>
+                    {hud.homeVault.activeVaultCarBoost && (
+                      <span className="px-1.5 py-0.5 rounded bg-cyan-400 text-slate-950 font-semibold text-[10px]">
+                        TURBO
+                      </span>
+                    )}
+                    {hud.homeVault.inVault && (
+                      <span className="hidden sm:inline text-[11px] text-slate-300">
+                        Drive East Tunnel to exit outdoors
+                      </span>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    tabIndex={-1}
+                    onClick={handleUtilityClick(onToggleVaultCarLights)}
+                    className="px-2.5 py-1 rounded bg-slate-800/90 hover:bg-slate-700 border border-slate-600 text-[11px] font-medium text-amber-200 cursor-pointer"
+                  >
+                    Lights [L]
+                  </button>
+                  <button
+                    type="button"
+                    tabIndex={-1}
+                    data-testid="vault-car-exit-btn"
+                    onClick={handleUtilityClick(onExitVaultCar)}
+                    className="px-3 py-1 rounded bg-cyan-400 hover:bg-cyan-300 text-slate-950 text-[11px] font-semibold cursor-pointer"
+                  >
+                    Exit Car [E]
+                  </button>
+                </div>
               ) : isDrivingBoat ? (
                 <div className="pointer-events-auto flex flex-wrap items-center justify-center gap-2.5 px-4 py-2.5 rounded-md bg-[#191429]/92 border border-[#85C7DE]/45 text-xs sm:text-sm text-[#FAF5EF] shadow-xl">
                   <div className="flex items-center gap-2">
@@ -1243,6 +1654,188 @@ export const GameHud: React.FC<GameHudProps> = ({
                         <span>Next Endless Dino [N]</span>
                       </button>
                     </div>
+                  )}
+
+                  {/* Active 3D Hero Action Bar on foot */}
+                  {activeHeroSpec && hud.activeVehicle === 'none' && (
+                    <div
+                      data-testid="hero-action-bar"
+                      className="pointer-events-auto flex flex-wrap items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-[#141122]/92 border border-amber-400/45 shadow-xl text-xs text-slate-100"
+                    >
+                      <div className="flex items-center gap-1.5 pr-1.5 border-r border-white/15">
+                        <Sparkles className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                        <span className="font-display font-semibold text-amber-200">
+                          {activeHeroSpec.name}
+                        </span>
+                        {activeHeroOutfit && (
+                          <span className="hidden md:inline text-[11px] text-slate-300">
+                            · {activeHeroOutfit.label}
+                          </span>
+                        )}
+                      </div>
+
+                      <button
+                        type="button"
+                        tabIndex={-1}
+                        data-testid="hero-primary-power-btn"
+                        onClick={handleUtilityClick(onHeroPrimaryPower)}
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded bg-rose-600 hover:bg-rose-500 text-white text-xs font-semibold cursor-pointer whitespace-nowrap"
+                      >
+                        <Zap className="w-3.5 h-3.5" />
+                        <span>
+                          {activeHeroSpec.primaryPower.label} [{activeHeroSpec.primaryPower.keyHint}]
+                        </span>
+                      </button>
+
+                      {(activeHeroSpec.mobility.canFly ||
+                        activeHeroSpec.mobility.canWebSwing ||
+                        activeHeroSpec.mobility.canCapeGlide) && (
+                        <button
+                          type="button"
+                          tabIndex={-1}
+                          data-testid="hero-mobility-btn"
+                          onClick={handleUtilityClick(onHeroFlightOrSpecial)}
+                          className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded border text-xs font-semibold cursor-pointer whitespace-nowrap ${
+                            hud.hero.isFlying || hud.hero.isGliding || hud.hero.isWebSwinging
+                              ? 'bg-cyan-400 border-cyan-200 text-slate-950'
+                              : 'bg-sky-500/25 hover:bg-sky-500/40 border-sky-300/45 text-sky-100'
+                          }`}
+                        >
+                          <Wind className="w-3.5 h-3.5" />
+                          <span>
+                            {activeHeroSpec.mobility.canFly
+                              ? hud.hero.isFlying
+                                ? 'Land [F]'
+                                : 'Fly / Hover [F]'
+                              : activeHeroSpec.mobility.canWebSwing
+                              ? 'Web-Zip [F]'
+                              : hud.hero.isGliding
+                              ? 'Drop Glide [F]'
+                              : 'Cape Glide [F]'}
+                          </span>
+                        </button>
+                      )}
+
+                      {activeHeroSpec.mobility.canFly && hud.hero.isFlying && (
+                        <>
+                          <button
+                            type="button"
+                            tabIndex={-1}
+                            onPointerDown={(e) => {
+                              e.stopPropagation();
+                              onSkyVertical(true, false);
+                            }}
+                            onPointerUp={() => onSkyVertical(false, false)}
+                            onPointerLeave={() => onSkyVertical(false, false)}
+                            onPointerCancel={() => onSkyVertical(false, false)}
+                            style={{ touchAction: 'none' }}
+                            className="inline-flex items-center gap-1 px-2 py-1.5 rounded bg-cyan-500/25 hover:bg-cyan-500/40 border border-cyan-300/45 text-cyan-100 text-xs font-semibold cursor-pointer select-none"
+                          >
+                            <ArrowUp className="w-3.5 h-3.5" />
+                            <span>Up</span>
+                          </button>
+                          <button
+                            type="button"
+                            tabIndex={-1}
+                            onPointerDown={(e) => {
+                              e.stopPropagation();
+                              onSkyVertical(false, true);
+                            }}
+                            onPointerUp={() => onSkyVertical(false, false)}
+                            onPointerLeave={() => onSkyVertical(false, false)}
+                            onPointerCancel={() => onSkyVertical(false, false)}
+                            style={{ touchAction: 'none' }}
+                            className="inline-flex items-center gap-1 px-2 py-1.5 rounded bg-cyan-500/25 hover:bg-cyan-500/40 border border-cyan-300/45 text-cyan-100 text-xs font-semibold cursor-pointer select-none"
+                          >
+                            <ArrowDown className="w-3.5 h-3.5" />
+                            <span>Down</span>
+                          </button>
+                        </>
+                      )}
+
+                      <button
+                        type="button"
+                        tabIndex={-1}
+                        data-testid="hero-secondary-power-btn"
+                        onClick={handleUtilityClick(onHeroSecondaryPower)}
+                        className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded border text-xs font-medium cursor-pointer whitespace-nowrap ${
+                          hud.hero.energyShieldActive ||
+                          hud.hero.spiderSenseActive ||
+                          hud.hero.detectiveVisionActive
+                            ? 'bg-emerald-400 border-emerald-200 text-slate-950 font-semibold'
+                            : 'bg-slate-800/90 hover:bg-slate-700 border-slate-600 text-slate-100'
+                        }`}
+                      >
+                        <Shield className="w-3.5 h-3.5 text-cyan-300" />
+                        <span>
+                          {activeHeroSpec.secondaryPower.label} [{activeHeroSpec.secondaryPower.keyHint}]
+                        </span>
+                      </button>
+
+                      {activeHeroSpec.outfits.length > 1 && (
+                        <button
+                          type="button"
+                          tabIndex={-1}
+                          data-testid="hero-swap-outfit-btn"
+                          onClick={handleUtilityClick(onCycleHeroOutfit)}
+                          className="px-2.5 py-1.5 rounded bg-indigo-500/25 hover:bg-indigo-500/40 border border-indigo-300/45 text-indigo-100 text-xs font-medium cursor-pointer whitespace-nowrap"
+                        >
+                          Swap Suit [C/V]
+                        </button>
+                      )}
+
+                      {activeHeroSpec.mobility.hasHelmetToggle && (
+                        <button
+                          type="button"
+                          tabIndex={-1}
+                          onClick={handleUtilityClick(onToggleHeroHelmet)}
+                          className="px-2.5 py-1.5 rounded bg-amber-500/25 hover:bg-amber-500/40 border border-amber-300/45 text-amber-100 text-xs font-medium cursor-pointer whitespace-nowrap"
+                        >
+                          {hud.hero.helmetOpen ? 'Seal Helmet' : 'Open Faceplate'}
+                        </button>
+                      )}
+
+                      {activeHeroSpec.mobility.hasBatmobileLink && (
+                        <button
+                          type="button"
+                          tabIndex={-1}
+                          data-testid="summon-batmobile-btn"
+                          onClick={handleUtilityClick(() => onSpawnBatmobile(false))}
+                          className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded bg-amber-400 hover:bg-amber-300 text-slate-950 text-xs font-semibold cursor-pointer whitespace-nowrap"
+                        >
+                          <Car className="w-3.5 h-3.5" />
+                          <span>Batmobile</span>
+                        </button>
+                      )}
+
+                      <button
+                        type="button"
+                        tabIndex={-1}
+                        data-testid="hud-parachute-btn"
+                        onClick={handleUtilityClick(onToggleParachute)}
+                        className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded border text-xs font-semibold cursor-pointer whitespace-nowrap ${
+                          hud.parachuteActive
+                            ? 'bg-emerald-400 border-emerald-200 text-slate-950'
+                            : 'bg-emerald-500/20 hover:bg-emerald-500/35 border-emerald-300/40 text-emerald-100'
+                        }`}
+                      >
+                        <Wind className="w-3.5 h-3.5" />
+                        <span>{hud.parachuteActive ? 'Fold Chute [G]' : 'Parachute [G]'}</span>
+                      </button>
+                    </div>
+                  )}
+
+                  {!activeHeroSpec && hud.parachuteActive && hud.activeVehicle === 'none' && (
+                    <button
+                      type="button"
+                      tabIndex={-1}
+                      data-testid="hud-parachute-active-btn"
+                      onClick={handleUtilityClick(onToggleParachute)}
+                      className="pointer-events-auto inline-flex items-center gap-2 px-3.5 py-2 rounded-lg bg-emerald-400 hover:bg-emerald-300 text-slate-950 text-xs font-bold shadow-lg cursor-pointer"
+                    >
+                      <Wind className="w-4 h-4" />
+                      <span>Parachute Glide Active · Fold [G]</span>
+                    </button>
                   )}
 
                   {hud.activePrompt && (

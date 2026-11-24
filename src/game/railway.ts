@@ -8,6 +8,9 @@ import { registerRailSamplesForTerrain } from './terrain';
 import { normalizeHours } from './timeWeather';
 import { DINOSAUR_STATION_APPROX } from './dinosaurIsland';
 import { EXHIBITION_STATION_POS } from './exhibitionComplex';
+import { DESERT_TRAIN_STATION_APPROX } from './desertOasis';
+
+export const SNOW_SUMMIT_RAIL_STATION_APPROX = { x: -100.0, z: -128.0 } as const;
 
 export interface SplinePoint {
   x: number;
@@ -23,13 +26,16 @@ export const DREAMLINE_TRAIN_NUMBER = 'DL-402';
 
 /**
  * Control points for the closed scenic railway loop (clockwise).
- * Links all 6 stations in order:
+ * Links all 9 stations in order:
  * 1. ஷவீஷ் ஜெஷுருன் சா (0, 9.6) — Main Blossom Valley Station
- * 2. Pachai Meadow Halt (38, 12.0) — Golden Countryside Fields
- * 3. SSJ Dinosaur Island (150, 56.0) — Offshore Sea Island via the Ocean Railway Bridge!
- * 4. Neelam Lakeside (56.5, -5.5) — Mirror Lake & Campsite Shore
- * 5. Thendral Malai Halt (-18, -56.2) — Stone Tunnel Foothill Stop
- * 6. Iceland Express Halt (-46.5, -24.0) — Northwest Glacier Gateway into Panimalai Iceland!
+ * 2. Pachai Meadow Halt (35.5, 11.8) — Golden Countryside Fields
+ * 3. Universal Exhibition Complex (204, 210) — Ocean Showroom & Hangar Island
+ * 4. SSJ Dinosaur Island (280, 106) — Offshore Sea Island via Ocean Railway Bridge
+ * 5. Neelam Lakeside (56.5, -5.5) — Mirror Lake & Campsite Shore
+ * 6. Thendral Malai Halt (-18, -56.2) — Stone Tunnel Foothill Stop
+ * 7. Panimalai Snow Summit (-100, -128) — Snow Area Alpine Station (AVS Snow House & Caves!)
+ * 8. Thar Desert Oasis (-168, 112) — Thar Golden Desert Oasis & Pyramid Ruins Station!
+ * 9. Iceland Express Halt (-46.5, -20.0) — Northwest Glacier Transfer Stop
  */
 const CONTROL_POINTS: Array<{ x: number; z: number }> = [
   { x: -16, z: 9.6 },
@@ -57,8 +63,25 @@ const CONTROL_POINTS: Array<{ x: number; z: number }> = [
   { x: 40, z: -48.0 },
   { x: 16, z: -61.5 },
   { x: -18, z: -56.2 },
-  { x: -38, z: -42.0 },
-  { x: -48, z: -18.0 },
+  // Northwest Snow Area Extension -> Panimalai Snow Summit Station
+  { x: -48, z: -82.0 },
+  { x: -80, z: -122.0 },
+  { x: -100, z: -128.0 }, // Panimalai Snow Summit Station (AVS Snow House & Caves)
+  { x: -134, z: -104.0 },
+  { x: -162, z: -56.0 },
+  // Western Alpine-to-Desert Corridor -> Thar Golden Desert Oasis Station
+  { x: -176, z: 6.0 },
+  { x: -178, z: 66.0 },
+  { x: -168, z: 112.0 }, // Thar Desert Oasis & Pyramid Ruins Station
+  { x: -164, z: 138.0 },
+  { x: -146, z: 144.0 },
+  { x: -136, z: 122.0 },
+  { x: -136, z: 84.0 },
+  { x: -140, z: 44.0 },
+  { x: -134, z: 6.0 },
+  { x: -104, z: -16.0 },
+  { x: -70, z: -24.0 },
+  { x: -48, z: -20.0 }, // Iceland Express Halt
   { x: -44, z: 3.5 },
   { x: -30, z: 9.2 },
 ];
@@ -75,7 +98,7 @@ function catmullRom(p0: number, p1: number, p2: number, p3: number, t: number): 
   );
 }
 
-const TABLE_SIZE = 1600;
+const TABLE_SIZE = 2400;
 
 interface LutEntry {
   x: number;
@@ -273,12 +296,31 @@ export const STATIONS: StationStop[] = [
     -1
   ),
   makeStationStop(
+    'panimalai_snow_station',
+    'Panimalai Snow Summit',
+    'பனிமலை சிகரம் நிலையம்',
+    'Snow Area · AVS & Caves',
+    SNOW_SUMMIT_RAIL_STATION_APPROX.x,
+    SNOW_SUMMIT_RAIL_STATION_APPROX.z,
+    -1,
+    true
+  ),
+  makeStationStop(
+    'thar_desert_station',
+    'Thar Desert Oasis',
+    'பாலைவன சோலை நிலையம்',
+    'Golden Dunes & Pyramid',
+    DESERT_TRAIN_STATION_APPROX.x,
+    DESERT_TRAIN_STATION_APPROX.z,
+    1
+  ),
+  makeStationStop(
     'iceland_gateway',
     'Iceland Express Halt',
     'ஐஸ்லாந்து நுழைவு',
     'Iceland Glacier Transfer',
-    -46.5,
-    -24.0,
+    -47.5,
+    -18.0,
     1,
     true
   ),

@@ -52,6 +52,11 @@ import { AndroidAppModal, OfflineIndicator } from './components/AndroidAppModal'
 import { AiConductorModal } from './components/AiConductorModal';
 import { MobilePhoneModal } from './components/MobilePhoneModal';
 import { ExhibitionVehicleModal } from './components/ExhibitionVehicleModal';
+import { HeroArmoryModal } from './components/HeroArmoryModal';
+import { MidnightFrontierOverlay } from './components/MidnightFrontierOverlay';
+import { WeatherEffectsOverlay } from './components/WeatherEffectsOverlay';
+import { createInitialHeroRuntimeState } from './game/heroCharacters';
+import { createInitialBatmobileState } from './game/batmobile';
 
 const INITIAL_HUD: HudSnapshot = {
   location: LOCATIONS[0],
@@ -64,6 +69,7 @@ const INITIAL_HUD: HudSnapshot = {
   temperatureC: 19,
   manualTemperatureC: null,
   isNightMode: false,
+  lanternOn: false,
   transportMode: 'walk',
   activeVehicle: 'none',
   activeBoatId: null,
@@ -125,6 +131,41 @@ const INITIAL_HUD: HudSnapshot = {
   inUndergroundCave: false,
   caveAreaName: null,
   exhibitionTestVehicleId: null,
+  hero: createInitialHeroRuntimeState(),
+  batmobile: createInitialBatmobileState(),
+  metroDestruction: {
+    score: 0,
+    buildingsDestroyed: 0,
+    totalBuildings: 0,
+    propsDestroyed: 0,
+    totalProps: 0,
+    inMetroCity: false,
+  },
+  inUndergroundMetro: false,
+  metroStationId: null,
+  metroStationName: null,
+  subwayTrainStatus: 'Approaching Platform',
+  subwayTrainAtPlatform: false,
+  subwayRidingTo: null,
+  airliner: {
+    speedKmh: 0,
+    altitudeM: 0,
+    throttle: 0,
+    afterburner: false,
+    landingGearDown: true,
+    onGround: true,
+  },
+  parachuteActive: false,
+  homeVault: {
+    inPersonalHome: false,
+    hatchUnlocked: false,
+    hatchOpenProgress: 0,
+    inVault: false,
+    activeVaultCarName: null,
+    activeVaultCarSpeedKmh: 0,
+    activeVaultCarBoost: false,
+  },
+  stationAnnouncement: null,
 };
 
 export default function App() {
@@ -165,7 +206,7 @@ export default function App() {
       setIsInspectingExhibition(false);
       engineRef.current?.clearExhibitionInspectFocus();
     }
-    engineRef.current?.setSuspended(false);
+    engineRef.current?.setSuspended(next === 'hero_armory' || next === 'midnight_frontier');
     engineRef.current?.setMode(next);
   }, []);
 
@@ -286,7 +327,7 @@ export default function App() {
   }, []);
 
   const handleGoHome = useCallback(() => {
-    engineRef.current?.teleportTo(HOME_CENTER.x, HOME_CENTER.z + 9.2, 'En Illam · My Home');
+    engineRef.current?.teleportTo(HOME_CENTER.x, HOME_CENTER.z + 4.0, 'En Illam · My Home');
     applyMode('playing');
   }, [applyMode]);
 
@@ -374,6 +415,19 @@ export default function App() {
         ref={canvasMountRef}
         className="fixed inset-0 w-full h-full z-0"
         aria-label="DREAMLINE 3D 5-region open-world railway journey"
+      />
+
+      <WeatherEffectsOverlay
+        weather={hud.weather}
+        season={hud.season}
+        period={hud.period}
+        suppressed={
+          webglLost ||
+          hud.inUndergroundCave ||
+          hud.inUndergroundMetro ||
+          mode === 'hero_armory' ||
+          mode === 'midnight_frontier'
+        }
       />
 
       {webglLost && (
@@ -479,6 +533,30 @@ export default function App() {
             onExitUndergroundCave={() => engineRef.current?.exitUndergroundCave()}
             onToggleBoatFpv={(fpv) => engineRef.current?.setBoatFpvMode(fpv)}
             onSkyVertical={(up, down) => engineRef.current?.setSkyVerticalInput(up, down)}
+            onOpenHeroArmory={() => applyMode('hero_armory')}
+            onHeroPrimaryPower={() => engineRef.current?.triggerHeroPrimaryPower()}
+            onHeroSecondaryPower={() => engineRef.current?.triggerHeroSecondaryPower()}
+            onHeroFlightOrSpecial={() => engineRef.current?.toggleHeroFlightOrSpecial()}
+            onCycleHeroOutfit={() => engineRef.current?.cycleActiveHeroOutfit()}
+            onToggleHeroHelmet={() => engineRef.current?.toggleHeroHelmet()}
+            onSpawnBatmobile={(toMetro) => engineRef.current?.spawnAndDriveBatmobile(toMetro)}
+            onToggleBatmobileCanopy={() => engineRef.current?.toggleBatmobileCanopy()}
+            onToggleBatmobileLights={() => engineRef.current?.toggleBatmobileLights()}
+            onCycleBatmobileCamera={() => engineRef.current?.cycleBatmobileCamera()}
+            onRepairBatmobile={() => engineRef.current?.repairBatmobileNow()}
+            onExitBatmobile={() => engineRef.current?.exitBatmobile()}
+            onToggleHomeVaultHatch={() => engineRef.current?.toggleHomeSecretVaultHatch()}
+            onEnterHomeVault={() => engineRef.current?.enterHomeSecretVault()}
+            onExitHomeVault={() => engineRef.current?.exitHomeSecretVault()}
+            onExitVaultCar={() => engineRef.current?.exitVaultCar()}
+            onToggleVaultCarLights={() => engineRef.current?.toggleVaultCarLights()}
+            onRideUndergroundMetro={(stationId) =>
+              engineRef.current?.rideUndergroundMetroTo(stationId)
+            }
+            onExitUndergroundMetro={() => engineRef.current?.exitUndergroundMetro()}
+            onExitAirliner={(withParachute) => engineRef.current?.exitAirliner(withParachute)}
+            onToggleParachute={() => engineRef.current?.toggleParachute()}
+            onToggleLantern={() => engineRef.current?.togglePersonalLantern()}
           />
 
           <AtmospherePanel
@@ -528,6 +606,18 @@ export default function App() {
           onBoardSkyExplorer={handleBoardSkyExplorer}
           onBoardSkyTaxi={handleBoardSkyTaxi}
           onDriveCamper={handleDriveCamper}
+          onEnterUndergroundMetro={() => {
+            engineRef.current?.enterUndergroundMetro('metro_central');
+            applyMode('playing');
+          }}
+          onBoardAirliner={() => {
+            engineRef.current?.boardAirliner(true);
+            applyMode('playing');
+          }}
+          onTeleportMidnightFrontier={() => {
+            engineRef.current?.teleportToMidnightFrontier(true);
+            applyMode('playing');
+          }}
           onClose={() => applyMode('playing')}
         />
       )}
@@ -603,10 +693,24 @@ export default function App() {
           onCallSkyTaxi={(dest) => engineRef.current?.callMobileSkyTaxi(dest)}
           onCancelSkyTaxi={() => engineRef.current?.cancelSkyTaxi()}
           onBoardSkyTaxi={handleBoardSkyTaxi}
+          onSpawnCatalogueVehicle={(vehicleId, boardNow) =>
+            engineRef.current?.spawnCatalogueVehicle(vehicleId, boardNow)
+          }
           onSetNavigation={(target) => engineRef.current?.setNavigationTarget(target)}
           onOpenAiConductor={() => applyMode('ai_conductor')}
           onEnterCaves={() => engineRef.current?.enterUndergroundCave()}
           onExitCaves={() => engineRef.current?.exitUndergroundCave()}
+          onSelectHeroSuit={(heroId, outfitId, teleportToMetro) =>
+            engineRef.current?.selectHero(heroId, outfitId, teleportToMetro)
+          }
+          onUseClassicTraveler={() => engineRef.current?.clearHero()}
+          onEnterUndergroundMetro={() => engineRef.current?.enterUndergroundMetro('metro_central')}
+          onBoardAirliner={() => engineRef.current?.boardAirliner(true)}
+          onLaunchParachuteTower={() => engineRef.current?.launchFromParachuteTower()}
+          onTeleportMidnightFrontier={() => engineRef.current?.teleportToMidnightFrontier(true)}
+          onOpenHouseSecretTunnel={() => engineRef.current?.openHomeSecretTunnelFromPhone()}
+          onEnterHouseSecretVault={() => engineRef.current?.enterHomeSecretVault()}
+          onExitHouseSecretVault={() => engineRef.current?.exitHomeSecretVault()}
           onClose={() => applyMode('playing')}
         />
       )}
@@ -647,6 +751,35 @@ export default function App() {
           />
         );
       })()}
+
+      {mode === 'hero_armory' && (
+        <HeroArmoryModal
+          activeHeroId={hud.hero.activeHeroId}
+          activeOutfitId={hud.hero.activeOutfitId}
+          onDeployHero={(heroId, outfitId, teleportToMetro) => {
+            engineRef.current?.selectHero(heroId, outfitId, teleportToMetro);
+            applyMode('playing');
+          }}
+          onSpawnBatmobile={(teleportToMetro) => {
+            engineRef.current?.spawnAndDriveBatmobile(teleportToMetro);
+            applyMode('playing');
+          }}
+          onUseClassicTraveler={() => {
+            engineRef.current?.clearHero();
+            applyMode('playing');
+          }}
+          onClose={() => applyMode('playing')}
+        />
+      )}
+
+      {mode === 'midnight_frontier' && (
+        <MidnightFrontierOverlay
+          onReturn={() => {
+            engineRef.current?.teleportToMidnightFrontier(true);
+            applyMode('playing');
+          }}
+        />
+      )}
 
       {mode === 'inspect' && inspectContent && (
         <InspectModal

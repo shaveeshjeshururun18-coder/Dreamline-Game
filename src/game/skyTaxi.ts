@@ -1,6 +1,7 @@
 import { AVS_HELIPAD_POS, HOME_HELIPAD_POS } from './skyExplorer';
 import { EXHIBITION_HELIPAD_POS } from './exhibitionComplex';
 import { DINOSAUR_ISLAND_CENTER } from './dinosaurIsland';
+import { DESERT_HELIPAD_POS } from './desertOasis';
 import { COAST_CENTER, walkableHeightAt } from './terrain';
 
 export type SkyTaxiPhase =
@@ -91,6 +92,14 @@ export const SKY_TAXI_STOPS: SkyTaxiStop[] = [
     x: AVS_HELIPAD_POS.x,
     y: AVS_HELIPAD_POS.y,
     z: AVS_HELIPAD_POS.z,
+  },
+  {
+    id: 'sky_desert',
+    name: 'Thar Desert Oasis Sky Pad',
+    tamilName: 'பாலைவன சோலை ஹெலிபேட்',
+    x: DESERT_HELIPAD_POS.x,
+    y: DESERT_HELIPAD_POS.y + 0.6,
+    z: DESERT_HELIPAD_POS.z,
   },
 ];
 

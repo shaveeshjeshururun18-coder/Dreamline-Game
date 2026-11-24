@@ -9,6 +9,7 @@ import { sampleRailway, STATIONS } from '../game/railway';
 import { BUS_STOPS, sampleBusRoad } from '../game/vehicles';
 import { ENCHANTED_FOREST_CENTER, HOME_CENTER, LAKE_CENTER } from '../game/terrain';
 import { DINOSAUR_ISLAND_CENTER } from '../game/dinosaurIsland';
+import { DESERT_BIOME_CENTER, DESERT_OASIS_CENTER } from '../game/desertOasis';
 
 interface TransitScheduleModalProps {
   hud: HudSnapshot;
@@ -18,12 +19,12 @@ interface TransitScheduleModalProps {
   onClose: () => void;
 }
 
-const MAP_SCALE = 0.64;
+const MAP_SCALE = 0.6;
 function toMapX(x: number): number {
   return 212 + x * MAP_SCALE;
 }
 function toMapY(z: number): number {
-  return 212 + z * MAP_SCALE;
+  return 198 + z * MAP_SCALE;
 }
 
 export const TransitScheduleModal: React.FC<TransitScheduleModalProps> = ({
@@ -45,8 +46,9 @@ export const TransitScheduleModal: React.FC<TransitScheduleModalProps> = ({
 
   const railPath = useMemo(() => {
     const pts: string[] = [];
-    for (let i = 0; i <= 88; i++) {
-      const s = sampleRailway(i / 88);
+    const steps = 160;
+    for (let i = 0; i <= steps; i++) {
+      const s = sampleRailway(i / steps);
       pts.push(`${i === 0 ? 'M' : 'L'} ${toMapX(s.x).toFixed(1)} ${toMapY(s.z).toFixed(1)}`);
     }
     return pts.join(' ') + ' Z';
@@ -103,7 +105,37 @@ export const TransitScheduleModal: React.FC<TransitScheduleModalProps> = ({
               viewBox="0 0 480 420"
               className="w-full max-w-[440px] mx-auto h-auto rounded-lg bg-[#1E1935] border border-[#F5D6C0]/16"
             >
-              {/* Water, Offshore Dinosaur Island & Enchanted Forest Landmarks */}
+              {/* Snow Kingdom (NW), Thar Desert Oasis (SW), Water, Offshore Dinosaur Island & Enchanted Forest Landmarks */}
+              <ellipse
+                cx={toMapX(-154)}
+                cy={toMapY(-145)}
+                rx="88"
+                ry="76"
+                fill="#DDE8F7"
+                fillOpacity="0.16"
+                stroke="#B8DCF8"
+                strokeOpacity="0.28"
+                strokeDasharray="4 3"
+              />
+              <ellipse
+                cx={toMapX(DESERT_BIOME_CENTER.x)}
+                cy={toMapY(DESERT_BIOME_CENTER.z)}
+                rx="64"
+                ry="52"
+                fill="#D99B4E"
+                fillOpacity="0.28"
+                stroke="#F6C873"
+                strokeOpacity="0.45"
+                strokeDasharray="4 3"
+              />
+              <ellipse
+                cx={toMapX(DESERT_OASIS_CENTER.x)}
+                cy={toMapY(DESERT_OASIS_CENTER.z)}
+                rx="13"
+                ry="10"
+                fill="#1FA896"
+                fillOpacity="0.65"
+              />
               <ellipse
                 cx={toMapX(LAKE_CENTER.x)}
                 cy={toMapY(LAKE_CENTER.z)}
@@ -186,39 +218,53 @@ export const TransitScheduleModal: React.FC<TransitScheduleModalProps> = ({
                 strokeOpacity="0.95"
               />
 
-              {/* All 6 Train Stations with concise labels */}
-              {STATIONS.map((st, i) => (
-                <g key={st.id} transform={`translate(${toMapX(st.worldX)}, ${toMapY(st.worldZ)})`}>
-                  <circle
-                    r="5.2"
-                    fill={
-                      st.isDinosaurIsland
-                        ? '#FEF08A'
-                        : st.connectsToIceland
-                        ? '#BCEFFF'
-                        : '#FAF5EF'
-                    }
-                    stroke={
-                      st.isDinosaurIsland
-                        ? '#D97706'
-                        : st.connectsToIceland
-                        ? '#2D9BD6'
-                        : '#D46254'
-                    }
-                    strokeWidth="2"
-                  />
-                  <text
-                    x="0"
-                    y={i === 0 ? 15 : -9}
-                    textAnchor="middle"
-                    fill={st.isDinosaurIsland ? '#FDE047' : '#FCE7D6'}
-                    fontSize="7.8"
-                    fontWeight="600"
-                  >
-                    {i === 0 ? 'ஷவீஷ் ஜெஷுருன் சா' : st.isDinosaurIsland ? 'Dino Isle' : st.name.split(' ')[0]}
-                  </text>
-                </g>
-              ))}
+              {/* All 9 Train Stations with concise non-overlapping labels */}
+              {STATIONS.map((st, i) => {
+                const isDesert = st.id === 'thar_desert_station';
+                const isSnowSummit = st.id === 'panimalai_snow_station';
+                const shortLabel =
+                  i === 0
+                    ? 'ஷவீஷ் ஜெஷுருன் சா'
+                    : st.isDinosaurIsland
+                    ? 'Dino Isle'
+                    : isSnowSummit
+                    ? 'Snow Summit'
+                    : isDesert
+                    ? 'Desert Oasis'
+                    : st.name.split(' ')[0];
+                return (
+                  <g key={st.id} transform={`translate(${toMapX(st.worldX)}, ${toMapY(st.worldZ)})`}>
+                    <circle
+                      r="5.0"
+                      fill={
+                        st.isDinosaurIsland || isDesert
+                          ? '#FEF08A'
+                          : st.connectsToIceland
+                          ? '#BCEFFF'
+                          : '#FAF5EF'
+                      }
+                      stroke={
+                        st.isDinosaurIsland || isDesert
+                          ? '#D97706'
+                          : st.connectsToIceland
+                          ? '#2D9BD6'
+                          : '#D46254'
+                      }
+                      strokeWidth="2"
+                    />
+                    <text
+                      x={isDesert ? 8 : 0}
+                      y={i === 0 ? 15 : isDesert ? 3 : -9}
+                      textAnchor={isDesert ? 'start' : 'middle'}
+                      fill={st.isDinosaurIsland || isDesert ? '#FDE047' : isSnowSummit ? '#C5F3FF' : '#FCE7D6'}
+                      fontSize="7.4"
+                      fontWeight="600"
+                    >
+                      {shortLabel}
+                    </text>
+                  </g>
+                );
+              })}
 
               {/* All 4 Bus Stops */}
               {BUS_STOPS.map((stop) => (
@@ -367,7 +413,12 @@ export const TransitScheduleModal: React.FC<TransitScheduleModalProps> = ({
                         <span className="text-[11px] text-[#E8C5B0]">{row.tamilName}</span>
                         {row.connectsToIceland && (
                           <span className="px-1.5 py-0.5 rounded text-[10px] bg-[#1E3B52] text-[#AEEBFF] border border-[#8DE4FF]/35">
-                            Iceland Transfer
+                            {row.stationId === 'panimalai_snow_station' ? 'Snow Kingdom' : 'Iceland Transfer'}
+                          </span>
+                        )}
+                        {row.stationId === 'thar_desert_station' && (
+                          <span className="px-1.5 py-0.5 rounded text-[10px] bg-[#4A3114] text-[#FDE68A] border border-[#F59E0B]/45">
+                            Desert Oasis
                           </span>
                         )}
                       </div>

@@ -134,6 +134,39 @@ const REGION_PA_SPECS: Record<RegionId, RegionPaVoiceSpec> = {
       'Exhibition Complex pavilions and Dinosaur Island trails await beyond the pier.',
     ],
   },
+  desert: {
+    regionTag: 'Thar Oasis Caravan Line',
+    chimeName: 'Desert Santoor Chime',
+    chimeNotes: [293.66, 369.99, 440.0, 554.37, 659.25, 440.0],
+    chimeWave: 'triangle',
+    chimeTempoSec: 0.21,
+    voicePitchHz: 204,
+    baseBustle: 0.52,
+    formants: [285, 740, 1520],
+    modulationHz: 0.26,
+    greetings: ['Welcome to Thar Golden Desert Oasis.', 'Caravan announcement beneath the sunlit dunes.'],
+    localTips: [
+      'Cool emerald oasis waters and Bedouin shade tents await east of the pyramid.',
+      'Explore the torch-lit solar relic chamber through the pyramid south portal.',
+      'Sky Taxi flights connect Thar Desert Helipad directly to En Illam and Kadalkarai Coast.',
+    ],
+  },
+  airport: {
+    regionTag: 'Dreamline International Aviation',
+    chimeName: 'Terminal Departure Chime',
+    chimeNotes: [523.25, 659.25, 783.99, 1046.5],
+    chimeWave: 'sine',
+    chimeTempoSec: 0.2,
+    voicePitchHz: 218,
+    baseBustle: 0.82,
+    formants: [310, 790, 1580],
+    modulationHz: 0.34,
+    greetings: ['Welcome to Dreamline International Airport Terminal 1.', 'Attention all travellers: Runway 09 is clear for departure.'],
+    localTips: [
+      'Board the DL-787 Dreamliner at Gate A1 to fly across the mountains and ocean skyline.',
+      'Take the Terminal 1 Underground Metro stairs for rapid subterranean transit to Midtown NYC and Central Station.',
+    ],
+  },
 };
 
 export function getStationRegionId(stationIndex: number): RegionId {
@@ -148,7 +181,10 @@ export function getStationRegionId(stationIndex: number): RegionId {
     case 'aomizu_lakeside':
       return 'lake_camp';
     case 'iceland_gateway':
+    case 'panimalai_snow_station':
       return 'snow';
+    case 'thar_desert_station':
+      return 'desert';
     case 'exhibition_complex_station':
     case 'dinosaur_island_station':
     default:
@@ -261,7 +297,7 @@ export function computeStationCrowdProfile(
   let nearestDist = Infinity;
   for (let i = 0; i < STATIONS.length; i++) {
     const st = STATIONS[i];
-    const d = Math.hypot(playerX - st.platformPos.x, playerZ - st.platformPos.z);
+    const d = Math.hypot(playerX - st.platformX, playerZ - st.platformZ);
     if (d < nearestDist) {
       nearestDist = d;
       nearestIdx = i;

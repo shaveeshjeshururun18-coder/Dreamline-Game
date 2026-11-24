@@ -21,7 +21,10 @@ export interface SkyPalette {
   sunIntensity: number;
   sunElevation: number; // radians
   sunAzimuth: number; // radians
-  lanternStrength: number; // 0..1
+  lanternStrength: number; // 0..1 (train lights & storm beacons)
+  worldLanternStrength: number; // 0..1 (non-train world lamps: warm at sunset/evening, OFF at full dark night)
+  nightDarkness: number; // 0..1 (1.0 during full dark night)
+  environmentIntensity: number; // PBR IBL intensity (0.45 day/sunset -> 0.012 full dark night)
   starOpacity: number; // 0..1
   waterTint: Rgb;
 }
@@ -57,25 +60,28 @@ interface Keyframe {
  */
 const KEYFRAMES: Keyframe[] = [
   {
-    hour: 0.0, // Midnight
+    hour: 0.0, // Midnight — starry night sky lit by warm streetlamps, stations, windows, train & player lantern
     palette: {
-      zenith: hex(0x0b1026),
-      midSky: hex(0x161d3f),
-      horizon: hex(0x282d52),
-      sunColor: hex(0xa9c3f5),
-      cloudLit: hex(0x414a75),
-      cloudShadow: hex(0x181d38),
-      fogColor: hex(0x1c213f),
-      fogDensity: 0.0042,
-      hemiSky: hex(0x43558c),
-      hemiGround: hex(0x191828),
-      hemiIntensity: 0.58,
-      sunIntensity: 0.42,
+      zenith: hex(0x030612),
+      midSky: hex(0x060c1f),
+      horizon: hex(0x0e1830),
+      sunColor: hex(0x4b689c),
+      cloudLit: hex(0x16223d),
+      cloudShadow: hex(0x050914),
+      fogColor: hex(0x081022),
+      fogDensity: 0.0056,
+      hemiSky: hex(0x1a284a),
+      hemiGround: hex(0x0a0d18),
+      hemiIntensity: 0.16,
+      sunIntensity: 0.09,
       sunElevation: 0.55,
       sunAzimuth: 0.6,
       lanternStrength: 1.0,
-      starOpacity: 1.0,
-      waterTint: hex(0x162244),
+      worldLanternStrength: 1.0,
+      nightDarkness: 1.0,
+      environmentIntensity: 0.12,
+      starOpacity: 0.96,
+      waterTint: hex(0x071022),
     },
   },
   {
@@ -96,6 +102,9 @@ const KEYFRAMES: Keyframe[] = [
       sunElevation: 0.34,
       sunAzimuth: 1.15,
       lanternStrength: 0.15,
+      worldLanternStrength: 0.15,
+      nightDarkness: 0.0,
+      environmentIntensity: 0.45,
       starOpacity: 0.0,
       waterTint: hex(0x5282a8),
     },
@@ -118,6 +127,9 @@ const KEYFRAMES: Keyframe[] = [
       sunElevation: 0.98,
       sunAzimuth: 2.2,
       lanternStrength: 0.0,
+      worldLanternStrength: 0.0,
+      nightDarkness: 0.0,
+      environmentIntensity: 0.45,
       starOpacity: 0.0,
       waterTint: hex(0x3a79b8),
     },
@@ -140,6 +152,9 @@ const KEYFRAMES: Keyframe[] = [
       sunElevation: 0.25,
       sunAzimuth: 3.75,
       lanternStrength: 0.42,
+      worldLanternStrength: 0.42,
+      nightDarkness: 0.0,
+      environmentIntensity: 0.45,
       starOpacity: 0.05,
       waterTint: hex(0x6b6c94),
     },
@@ -162,6 +177,9 @@ const KEYFRAMES: Keyframe[] = [
       sunElevation: 0.13,
       sunAzimuth: 4.15,
       lanternStrength: 0.92,
+      worldLanternStrength: 0.92,
+      nightDarkness: 0.0,
+      environmentIntensity: 0.45,
       starOpacity: 0.28,
       waterTint: hex(0x544b82),
     },
@@ -184,30 +202,36 @@ const KEYFRAMES: Keyframe[] = [
       sunElevation: 0.06,
       sunAzimuth: 4.45,
       lanternStrength: 1.0,
+      worldLanternStrength: 0.85,
+      nightDarkness: 0.08,
+      environmentIntensity: 0.34,
       starOpacity: 0.72,
       waterTint: hex(0x252c5c),
     },
   },
   {
-    hour: 21.5, // Night
+    hour: 21.5, // Night — starry dark night illuminated by warm streetlamps, stations, windows, train & player lantern
     palette: {
-      zenith: hex(0x0b1026),
-      midSky: hex(0x161d3f),
-      horizon: hex(0x282d52),
-      sunColor: hex(0xa9c3f5),
-      cloudLit: hex(0x414a75),
-      cloudShadow: hex(0x181d38),
-      fogColor: hex(0x1c213f),
-      fogDensity: 0.0042,
-      hemiSky: hex(0x43558c),
-      hemiGround: hex(0x191828),
-      hemiIntensity: 0.58,
-      sunIntensity: 0.42,
+      zenith: hex(0x030612),
+      midSky: hex(0x060c1f),
+      horizon: hex(0x0e1830),
+      sunColor: hex(0x4b689c),
+      cloudLit: hex(0x16223d),
+      cloudShadow: hex(0x050914),
+      fogColor: hex(0x081022),
+      fogDensity: 0.0056,
+      hemiSky: hex(0x1a284a),
+      hemiGround: hex(0x0a0d18),
+      hemiIntensity: 0.16,
+      sunIntensity: 0.09,
       sunElevation: 0.55,
       sunAzimuth: 0.6,
       lanternStrength: 1.0,
-      starOpacity: 1.0,
-      waterTint: hex(0x162244),
+      worldLanternStrength: 1.0,
+      nightDarkness: 1.0,
+      environmentIntensity: 0.12,
+      starOpacity: 0.96,
+      waterTint: hex(0x071022),
     },
   },
 ];
@@ -292,6 +316,24 @@ export function formatClockTime(hours: number): string {
   return `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
 }
 
+/**
+ * Computes how deeply the world is in full-dark night mode (0 = day/twilight, 1 = pitch-dark night
+ * where ambient/world lamps switch off so the train's headlights & glowing cabin dominate).
+ */
+export function computeNightBlackoutFactor(hours: number): number {
+  const h = normalizeHours(hours);
+  if (h >= 21.0 || h <= 4.5) return 1.0;
+  if (h > 19.6 && h < 21.0) {
+    const u = (h - 19.6) / 1.4;
+    return u * u * (3 - 2 * u);
+  }
+  if (h > 4.5 && h < 5.8) {
+    const u = 1 - (h - 4.5) / 1.3;
+    return u * u * (3 - 2 * u);
+  }
+  return 0.0;
+}
+
 export function computeSkyPalette(
   hours: number,
   weather: WeatherType,
@@ -318,6 +360,9 @@ export function computeSkyPalette(
   // Smoothstep for silky transitions
   const t = rawT * rawT * (3 - 2 * rawT);
 
+  const nightDarkness = computeNightBlackoutFactor(h);
+  const daylightWeight = 1 - nightDarkness * 0.94;
+
   const p: SkyPalette = {
     zenith: lerpRgb(a.palette.zenith, b.palette.zenith, t),
     midSky: lerpRgb(a.palette.midSky, b.palette.midSky, t),
@@ -334,135 +379,153 @@ export function computeSkyPalette(
     sunElevation: lerpNum(a.palette.sunElevation, b.palette.sunElevation, t),
     sunAzimuth: lerpNum(a.palette.sunAzimuth, b.palette.sunAzimuth, t),
     lanternStrength: lerpNum(a.palette.lanternStrength, b.palette.lanternStrength, t),
+    worldLanternStrength: lerpNum(a.palette.worldLanternStrength, b.palette.worldLanternStrength, t),
+    nightDarkness,
+    environmentIntensity: lerpNum(a.palette.environmentIntensity, b.palette.environmentIntensity, t),
     starOpacity: lerpNum(a.palette.starOpacity, b.palette.starOpacity, t),
     waterTint: lerpRgb(a.palette.waterTint, b.palette.waterTint, t),
   };
 
-  // Weather modifiers
+  // Weather modifiers (scaled by daylightWeight so night stays pitch-dark even in rain/snow/fog!)
   const overcastGrey = hex(0x8893ab);
   if (weather === 'cloudy') {
-    p.zenith = lerpRgb(p.zenith, overcastGrey, 0.32);
-    p.horizon = lerpRgb(p.horizon, overcastGrey, 0.25);
+    p.zenith = lerpRgb(p.zenith, overcastGrey, 0.32 * daylightWeight);
+    p.horizon = lerpRgb(p.horizon, overcastGrey, 0.25 * daylightWeight);
     p.sunIntensity *= 0.72;
     p.fogDensity *= 1.25;
     p.starOpacity *= 0.35;
   } else if (weather === 'fog') {
-    const mistTint = lerpRgb(p.horizon, hex(0xe8e4ec), 0.45);
-    p.fogColor = lerpRgb(p.fogColor, mistTint, 0.55);
+    const mistTint = lerpRgb(p.horizon, hex(0xe8e4ec), 0.45 * daylightWeight);
+    p.fogColor = lerpRgb(p.fogColor, mistTint, 0.55 * daylightWeight);
     p.fogDensity = Math.max(p.fogDensity * 2.35, 0.0095);
     p.sunIntensity *= 0.78;
     p.starOpacity *= 0.25;
   } else if (weather === 'rain') {
     const rainSlate = hex(0x4c5875);
-    p.zenith = lerpRgb(p.zenith, rainSlate, 0.48);
-    p.midSky = lerpRgb(p.midSky, rainSlate, 0.42);
-    p.fogColor = lerpRgb(p.fogColor, rainSlate, 0.45);
+    p.zenith = lerpRgb(p.zenith, rainSlate, 0.48 * daylightWeight);
+    p.midSky = lerpRgb(p.midSky, rainSlate, 0.42 * daylightWeight);
+    p.fogColor = lerpRgb(p.fogColor, rainSlate, 0.45 * daylightWeight);
     p.fogDensity = Math.max(p.fogDensity * 1.9, 0.0078);
     p.sunIntensity *= 0.58;
     p.lanternStrength = Math.max(p.lanternStrength, 0.72);
+    p.worldLanternStrength = Math.max(p.worldLanternStrength, 0.72);
     p.starOpacity *= 0.12;
   } else if (weather === 'heavy_rain') {
     const heavySlate = hex(0x37435e);
     const heavyCloud = hex(0x525e7a);
-    p.zenith = lerpRgb(p.zenith, heavySlate, 0.66);
-    p.midSky = lerpRgb(p.midSky, heavySlate, 0.6);
-    p.horizon = lerpRgb(p.horizon, heavyCloud, 0.52);
-    p.cloudLit = lerpRgb(p.cloudLit, heavyCloud, 0.65);
-    p.cloudShadow = lerpRgb(p.cloudShadow, hex(0x1f273d), 0.65);
-    p.fogColor = lerpRgb(p.fogColor, heavySlate, 0.62);
+    p.zenith = lerpRgb(p.zenith, heavySlate, 0.66 * daylightWeight);
+    p.midSky = lerpRgb(p.midSky, heavySlate, 0.6 * daylightWeight);
+    p.horizon = lerpRgb(p.horizon, heavyCloud, 0.52 * daylightWeight);
+    p.cloudLit = lerpRgb(p.cloudLit, heavyCloud, 0.65 * daylightWeight);
+    p.cloudShadow = lerpRgb(p.cloudShadow, hex(0x1f273d), 0.65 * daylightWeight);
+    p.fogColor = lerpRgb(p.fogColor, heavySlate, 0.62 * daylightWeight);
     p.fogDensity = Math.max(p.fogDensity * 2.3, 0.0098);
     p.sunIntensity *= 0.42;
     p.hemiIntensity *= 0.78;
     p.lanternStrength = Math.max(p.lanternStrength, 0.88);
+    p.worldLanternStrength = Math.max(p.worldLanternStrength, 0.88);
     p.starOpacity = 0;
   } else if (weather === 'thunderstorm') {
     const stormIndigo = hex(0x232d47);
     const stormHorizon = hex(0x404d6b);
-    p.zenith = lerpRgb(p.zenith, stormIndigo, 0.78);
-    p.midSky = lerpRgb(p.midSky, stormIndigo, 0.72);
-    p.horizon = lerpRgb(p.horizon, stormHorizon, 0.62);
-    p.cloudLit = lerpRgb(p.cloudLit, hex(0x4d5a78), 0.75);
-    p.cloudShadow = lerpRgb(p.cloudShadow, hex(0x141a2e), 0.78);
-    p.fogColor = lerpRgb(p.fogColor, stormHorizon, 0.7);
+    p.zenith = lerpRgb(p.zenith, stormIndigo, 0.78 * daylightWeight);
+    p.midSky = lerpRgb(p.midSky, stormIndigo, 0.72 * daylightWeight);
+    p.horizon = lerpRgb(p.horizon, stormHorizon, 0.62 * daylightWeight);
+    p.cloudLit = lerpRgb(p.cloudLit, hex(0x4d5a78), 0.75 * daylightWeight);
+    p.cloudShadow = lerpRgb(p.cloudShadow, hex(0x141a2e), 0.78 * daylightWeight);
+    p.fogColor = lerpRgb(p.fogColor, stormHorizon, 0.7 * daylightWeight);
     p.fogDensity = Math.max(p.fogDensity * 2.55, 0.011);
     p.sunIntensity *= 0.34;
     p.hemiIntensity *= 0.72;
     p.lanternStrength = Math.max(p.lanternStrength, 0.96);
+    p.worldLanternStrength = Math.max(p.worldLanternStrength, 0.96);
     p.starOpacity = 0;
   } else if (weather === 'ferocious_rain') {
     const tempestDark = hex(0x182136);
     const tempestMist = hex(0x323f59);
-    p.zenith = lerpRgb(p.zenith, tempestDark, 0.88);
-    p.midSky = lerpRgb(p.midSky, tempestDark, 0.84);
-    p.horizon = lerpRgb(p.horizon, tempestMist, 0.76);
-    p.cloudLit = lerpRgb(p.cloudLit, hex(0x3f4c68), 0.84);
-    p.cloudShadow = lerpRgb(p.cloudShadow, hex(0x0d1221), 0.88);
-    p.fogColor = lerpRgb(p.fogColor, tempestMist, 0.8);
+    p.zenith = lerpRgb(p.zenith, tempestDark, 0.88 * daylightWeight);
+    p.midSky = lerpRgb(p.midSky, tempestDark, 0.84 * daylightWeight);
+    p.horizon = lerpRgb(p.horizon, tempestMist, 0.76 * daylightWeight);
+    p.cloudLit = lerpRgb(p.cloudLit, hex(0x3f4c68), 0.84 * daylightWeight);
+    p.cloudShadow = lerpRgb(p.cloudShadow, hex(0x0d1221), 0.88 * daylightWeight);
+    p.fogColor = lerpRgb(p.fogColor, tempestMist, 0.8 * daylightWeight);
     p.fogDensity = Math.max(p.fogDensity * 2.95, 0.0132);
     p.sunIntensity *= 0.25;
     p.hemiIntensity *= 0.66;
     p.lanternStrength = 1.0;
+    p.worldLanternStrength = 1.0;
     p.starOpacity = 0;
   } else if (weather === 'flood') {
     const floodTeal = hex(0x2b3e52);
     const floodMist = hex(0x465d72);
-    p.zenith = lerpRgb(p.zenith, floodTeal, 0.76);
-    p.midSky = lerpRgb(p.midSky, floodTeal, 0.68);
-    p.horizon = lerpRgb(p.horizon, floodMist, 0.64);
-    p.cloudLit = lerpRgb(p.cloudLit, hex(0x586d82), 0.72);
-    p.cloudShadow = lerpRgb(p.cloudShadow, hex(0x182534), 0.76);
-    p.fogColor = lerpRgb(p.fogColor, floodMist, 0.72);
+    p.zenith = lerpRgb(p.zenith, floodTeal, 0.76 * daylightWeight);
+    p.midSky = lerpRgb(p.midSky, floodTeal, 0.68 * daylightWeight);
+    p.horizon = lerpRgb(p.horizon, floodMist, 0.64 * daylightWeight);
+    p.cloudLit = lerpRgb(p.cloudLit, hex(0x586d82), 0.72 * daylightWeight);
+    p.cloudShadow = lerpRgb(p.cloudShadow, hex(0x182534), 0.76 * daylightWeight);
+    p.fogColor = lerpRgb(p.fogColor, floodMist, 0.72 * daylightWeight);
     p.fogDensity = Math.max(p.fogDensity * 2.45, 0.0108);
     p.sunIntensity *= 0.36;
     p.hemiIntensity *= 0.76;
     p.lanternStrength = Math.max(p.lanternStrength, 0.94);
-    p.waterTint = lerpRgb(p.waterTint, hex(0x28566b), 0.65);
+    p.worldLanternStrength = Math.max(p.worldLanternStrength, 0.94);
+    p.waterTint = lerpRgb(p.waterTint, hex(0x28566b), 0.65 * daylightWeight);
     p.starOpacity = 0;
   } else if (weather === 'tsunami') {
     const surgeNavy = hex(0x16293d);
     const seaSpray = hex(0x3a5a70);
-    p.zenith = lerpRgb(p.zenith, surgeNavy, 0.84);
-    p.midSky = lerpRgb(p.midSky, surgeNavy, 0.78);
-    p.horizon = lerpRgb(p.horizon, seaSpray, 0.72);
-    p.cloudLit = lerpRgb(p.cloudLit, hex(0x527087), 0.78);
-    p.cloudShadow = lerpRgb(p.cloudShadow, hex(0x0f1e2e), 0.84);
-    p.fogColor = lerpRgb(p.fogColor, seaSpray, 0.74);
+    p.zenith = lerpRgb(p.zenith, surgeNavy, 0.84 * daylightWeight);
+    p.midSky = lerpRgb(p.midSky, surgeNavy, 0.78 * daylightWeight);
+    p.horizon = lerpRgb(p.horizon, seaSpray, 0.72 * daylightWeight);
+    p.cloudLit = lerpRgb(p.cloudLit, hex(0x527087), 0.78 * daylightWeight);
+    p.cloudShadow = lerpRgb(p.cloudShadow, hex(0x0f1e2e), 0.84 * daylightWeight);
+    p.fogColor = lerpRgb(p.fogColor, seaSpray, 0.74 * daylightWeight);
     p.fogDensity = Math.max(p.fogDensity * 2.55, 0.0112);
     p.sunIntensity *= 0.34;
     p.hemiIntensity *= 0.74;
     p.lanternStrength = 1.0;
-    p.waterTint = lerpRgb(p.waterTint, hex(0x145369), 0.75);
+    p.worldLanternStrength = 1.0;
+    p.waterTint = lerpRgb(p.waterTint, hex(0x145369), 0.75 * daylightWeight);
     p.starOpacity = 0;
   } else if (weather === 'snow') {
     const snowTint = hex(0xcbd5e8);
-    p.fogColor = lerpRgb(p.fogColor, snowTint, 0.35);
+    p.fogColor = lerpRgb(p.fogColor, snowTint, 0.35 * daylightWeight);
     p.fogDensity = Math.max(p.fogDensity * 1.7, 0.0072);
     p.sunIntensity *= 0.78;
     p.lanternStrength = Math.max(p.lanternStrength, 0.55);
+    p.worldLanternStrength = Math.max(p.worldLanternStrength, 0.55);
   }
 
-  // Seasonal colour & lighting shifts
+  // Seasonal colour & lighting shifts (muted during full-dark night so winter/autumn never brighten the blackout)
   if (season === 'summer') {
     const warmSun = hex(0xffe19c);
-    p.sunColor = lerpRgb(p.sunColor, warmSun, 0.22);
-    p.horizon = lerpRgb(p.horizon, hex(0xffdfb0), 0.14);
-    p.sunIntensity *= 1.12;
+    p.sunColor = lerpRgb(p.sunColor, warmSun, 0.22 * daylightWeight);
+    p.horizon = lerpRgb(p.horizon, hex(0xffdfb0), 0.14 * daylightWeight);
+    p.sunIntensity *= 1 + 0.12 * daylightWeight;
     p.fogDensity *= 0.88;
   } else if (season === 'autumn') {
     const amberHorizon = hex(0xf59e6c);
     const copperFog = hex(0xd48e6a);
-    p.horizon = lerpRgb(p.horizon, amberHorizon, 0.26);
-    p.fogColor = lerpRgb(p.fogColor, copperFog, 0.22);
-    p.hemiGround = lerpRgb(p.hemiGround, hex(0x8a5236), 0.35);
-    p.cloudLit = lerpRgb(p.cloudLit, hex(0xffd2a6), 0.22);
+    p.horizon = lerpRgb(p.horizon, amberHorizon, 0.26 * daylightWeight);
+    p.fogColor = lerpRgb(p.fogColor, copperFog, 0.22 * daylightWeight);
+    p.hemiGround = lerpRgb(p.hemiGround, hex(0x8a5236), 0.35 * daylightWeight);
+    p.cloudLit = lerpRgb(p.cloudLit, hex(0xffd2a6), 0.22 * daylightWeight);
   } else if (season === 'winter') {
     const frostMist = hex(0xcfdff2);
-    p.zenith = lerpRgb(p.zenith, hex(0x3a527a), 0.24);
-    p.horizon = lerpRgb(p.horizon, frostMist, 0.3);
-    p.fogColor = lerpRgb(p.fogColor, frostMist, 0.36);
+    p.zenith = lerpRgb(p.zenith, hex(0x3a527a), 0.24 * daylightWeight);
+    p.horizon = lerpRgb(p.horizon, frostMist, 0.3 * daylightWeight);
+    p.fogColor = lerpRgb(p.fogColor, frostMist, 0.36 * daylightWeight);
     p.fogDensity = Math.max(p.fogDensity * 1.28, 0.0052);
-    p.hemiSky = lerpRgb(p.hemiSky, hex(0xbcd4f2), 0.3);
+    p.hemiSky = lerpRgb(p.hemiSky, hex(0xbcd4f2), 0.3 * daylightWeight);
     p.sunIntensity *= 0.9;
+  }
+
+  // Keep ambient sky deep and atmospheric at night while world night lamps & lanterns burn at full warmth
+  if (nightDarkness > 0.001) {
+    p.worldLanternStrength = Math.max(p.worldLanternStrength, nightDarkness);
+    p.environmentIntensity = lerpNum(p.environmentIntensity, 0.12, nightDarkness);
+    p.hemiIntensity = lerpNum(p.hemiIntensity, 0.16, nightDarkness);
+    p.sunIntensity = lerpNum(p.sunIntensity, 0.09, nightDarkness);
   }
 
   return p;

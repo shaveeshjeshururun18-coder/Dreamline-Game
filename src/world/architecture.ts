@@ -8,6 +8,7 @@ import {
 } from '../game/terrain';
 import {
   CROSSING_POINT,
+  findClosestSplineT,
   RAILWAY_TOTAL_LENGTH,
   sampleRailway,
   STATIONS,
@@ -161,6 +162,41 @@ export function createWorldArchitecture(
     metalness: 0.1,
   });
 
+  // Procedural soft radial warm glow texture shared by all streetlamp halos & ground pools
+  const lampHaloCanvas = document.createElement('canvas');
+  lampHaloCanvas.width = 128;
+  lampHaloCanvas.height = 128;
+  const lhCtx = lampHaloCanvas.getContext('2d');
+  if (lhCtx) {
+    const g = lhCtx.createRadialGradient(64, 64, 2, 64, 64, 64);
+    g.addColorStop(0.0, 'rgba(255, 244, 204, 0.92)');
+    g.addColorStop(0.32, 'rgba(255, 192, 92, 0.45)');
+    g.addColorStop(0.7, 'rgba(255, 148, 48, 0.12)');
+    g.addColorStop(1.0, 'rgba(0, 0, 0, 0)');
+    lhCtx.fillStyle = g;
+    lhCtx.fillRect(0, 0, 128, 128);
+  }
+  const lampHaloTex = new THREE.CanvasTexture(lampHaloCanvas);
+  lampHaloTex.colorSpace = THREE.SRGBColorSpace;
+  const lampHaloMat = new THREE.MeshBasicMaterial({
+    map: lampHaloTex,
+    transparent: true,
+    opacity: 0,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+  });
+  const lampPoolMat = new THREE.MeshBasicMaterial({
+    map: lampHaloTex,
+    transparent: true,
+    opacity: 0,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+  });
+  const sharedLampHaloGeo = new THREE.PlaneGeometry(1.75, 1.75);
+  const sharedLampPoolGeo = new THREE.CircleGeometry(4.2, isSoftwareGl ? 16 : 22);
+  sharedLampPoolGeo.rotateX(-Math.PI / 2);
+
   disposables.push(
     woodMat,
     darkTimberMat,
@@ -180,7 +216,12 @@ export function createWorldArchitecture(
     windowGlowMat,
     lampBulbMat,
     crossingLampMat,
-    signalGreenMat
+    signalGreenMat,
+    lampHaloTex,
+    lampHaloMat,
+    lampPoolMat,
+    sharedLampHaloGeo,
+    sharedLampPoolGeo
   );
 
   const addBox = (
@@ -238,7 +279,7 @@ export function createWorldArchitecture(
     });
   };
 
-  // Helper: Composite Street / Platform Lamp Post (4 parts)
+  // Helper: Composite Street / Platform Lamp Post (6 parts + soft warm glow halo & ground pool)
   const addLampPost = (x: number, y: number, z: number, withPointLight = false) => {
     const lg = new THREE.Group();
     lg.position.set(x, y, z);
@@ -261,11 +302,24 @@ export function createWorldArchitecture(
     bulb.position.set(0.64, 3.52, 0);
     lg.add(bulb);
 
-    if (withPointLight && warmPointLights.length < 5) {
-      const pl = new THREE.PointLight(0xffb866, 4.5, 22, 1.5);
+    // Crossed warm radial glow halo planes around lamp bulb
+    const haloA = new THREE.Mesh(sharedLampHaloGeo, lampHaloMat);
+    haloA.position.set(0.64, 3.5, 0);
+    const haloB = new THREE.Mesh(sharedLampHaloGeo, lampHaloMat);
+    haloB.position.set(0.64, 3.5, 0);
+    haloB.rotation.y = Math.PI * 0.5;
+    lg.add(haloA, haloB);
+
+    // Soft golden light pool projected onto ground/platform beneath lamp
+    const pool = new THREE.Mesh(sharedLampPoolGeo, lampPoolMat);
+    pool.position.set(0.64, 0.04, 0);
+    lg.add(pool);
+
+    if (withPointLight && warmPointLights.length < 8) {
+      const pl = new THREE.PointLight(0xffbc68, 6.2, 28, 1.35);
       pl.position.set(0.64, 3.3, 0);
       lg.add(pl);
-      warmPointLights.push({ light: pl, maxIntensity: 5.2 });
+      warmPointLights.push({ light: pl, maxIntensity: 6.8 });
     }
     group.add(lg);
   };
@@ -273,7 +327,7 @@ export function createWorldArchitecture(
   // =========================================================================
   // 1. CONTINUOUS RAILWAY TRACKS, GRAVEL BALLAST, SLEEPERS, SEA BRIDGE & CATENARY
   // =========================================================================
-  const trackSegs = 560;
+  const trackSegs = 820;
   const railGaugeHalf = 0.62;
   const leftRailPts: THREE.Vector3[] = [];
   const rightRailPts: THREE.Vector3[] = [];
@@ -325,9 +379,9 @@ export function createWorldArchitecture(
   const rightCurve = new THREE.CatmullRomCurve3(rightRailPts.slice(0, -1), true);
   const wireCurve = new THREE.CatmullRomCurve3(wirePts.slice(0, -1), true);
 
-  const railGeoL = new THREE.TubeGeometry(leftCurve, 560, 0.055, 5, true);
-  const railGeoR = new THREE.TubeGeometry(rightCurve, 560, 0.055, 5, true);
-  const wireGeo = new THREE.TubeGeometry(wireCurve, 440, 0.022, 4, true);
+  const railGeoL = new THREE.TubeGeometry(leftCurve, 820, 0.055, 5, true);
+  const railGeoR = new THREE.TubeGeometry(rightCurve, 820, 0.055, 5, true);
+  const wireGeo = new THREE.TubeGeometry(wireCurve, 640, 0.022, 4, true);
   disposables.push(railGeoL, railGeoR, wireGeo);
 
   group.add(new THREE.Mesh(railGeoL, railSteelMat));
@@ -355,7 +409,7 @@ export function createWorldArchitecture(
 
   // Ocean Railway Bridge / Sea Viaduct spanning across open sea water to SSJ Dinosaur Island!
   const seaBridgeDeckSamples: Array<{ x: number; z: number; angle: number; nx: number; nz: number }> = [];
-  const bridgeCheckCount = 460;
+  const bridgeCheckCount = 620;
   for (let i = 0; i < bridgeCheckCount; i++) {
     const s = sampleRailway(i / bridgeCheckCount);
     if (isOceanAt(s.x, s.z)) {
@@ -418,7 +472,7 @@ export function createWorldArchitecture(
   }
 
   // Overhead Catenary Utility Poles & Railway Signals (every ~18m along loop)
-  const poleCount = 56;
+  const poleCount = 86;
   const catPoleGeo = new THREE.CylinderGeometry(0.09, 0.13, 6.2, 7);
   const catArmGeo = new THREE.BoxGeometry(2.8, 0.09, 0.09);
   disposables.push(catPoleGeo, catArmGeo);
@@ -433,6 +487,8 @@ export function createWorldArchitecture(
     const side = 1;
     const px = s.x + nx * 2.55 * side;
     const pz = s.z + nz * 2.55 * side;
+    // Skip catenary poles right next to station platforms so no pole clips a platform slab
+    if (STATIONS.some((st) => Math.hypot(px - st.platformX, pz - st.platformZ) < 9.2)) continue;
 
     const pg = new THREE.Group();
     pg.position.set(px, 0, pz);
@@ -499,11 +555,11 @@ export function createWorldArchitecture(
   [-5.0, 0.2, 5.2].forEach((lx) => {
     addBox(mainStationGroup, 0.85, 0.1, 0.18, lampBulbMat, lx, 3.88, 14.2, false, false);
   });
-  // Hero warm station canopy PointLight (1 of 5 max)
-  const stationLight = new THREE.PointLight(0xffbe70, 6.2, 28, 1.35);
+  // Hero warm station canopy PointLight
+  const stationLight = new THREE.PointLight(0xffbe70, 7.2, 32, 1.25);
   stationLight.position.set(0, 3.55, 13.8);
   mainStationGroup.add(stationLight);
-  warmPointLights.push({ light: stationLight, maxIntensity: 6.8 });
+  warmPointLights.push({ light: stationLight, maxIntensity: 8.5 });
 
   // Traditional Wooden Station Building behind platform (centered around x: -2.5, z: 22.8 for wide open platform plaza)
   const sbX = -2.5;
@@ -676,10 +732,18 @@ export function createWorldArchitecture(
     { id: 'fb_pier_n', minX: fbX - 1.15, maxX: fbX + 1.15, minZ: 3.2, maxZ: 4.8 }
   );
 
-  // Warm Street Lamps around Sakuragawa Plaza
-  addLampPost(-12.2, 0.85, 15.6, false);
-  addLampPost(11.6, 0.85, 15.6, false);
-  addLampPost(-9.5, 0, 22.8, true);
+  // Warm Street Lamps around Sakuragawa Plaza, Station Steps, Crossing & Paths
+  addLampPost(-12.2, 0.85, 15.6, true);
+  addLampPost(11.6, 0.85, 15.6, true);
+  addLampPost(-9.5, groundHeightAt(-9.5, 22.8), 22.8, true);
+  addLampPost(7.8, groundHeightAt(7.8, 22.2), 22.2, true);
+  addLampPost(-20.0, groundHeightAt(-20.0, 17.5), 17.5, false);
+  addLampPost(21.5, groundHeightAt(21.5, 14.5), 14.5, false);
+  addLampPost(-12.5, groundHeightAt(-12.5, 2.5), 2.5, false);
+  addLampPost(26.5, groundHeightAt(26.5, -2.5), -2.5, false);
+  addLampPost(CROSSING_POINT.x - 4.5, groundHeightAt(CROSSING_POINT.x - 4.5, CROSSING_POINT.z + 4.5), CROSSING_POINT.z + 4.5, true);
+  addLampPost(VILLAGE_CENTER.x - 6.0, groundHeightAt(VILLAGE_CENTER.x - 6.0, VILLAGE_CENTER.z + 5.0), VILLAGE_CENTER.z + 5.0, true);
+  addLampPost(VILLAGE_CENTER.x + 8.5, groundHeightAt(VILLAGE_CENTER.x + 8.5, VILLAGE_CENTER.z - 4.0), VILLAGE_CENTER.z - 4.0, false);
 
   group.add(mainStationGroup);
 
@@ -989,7 +1053,7 @@ export function createWorldArchitecture(
     const iceSignTex = textures.createStationSign(
       'Iceland Express Halt',
       'ஐஸ்லாந்து நுழைவு',
-      'Thendral Malai',
+      'Thar Desert Oasis',
       'ஷவீஷ் ஜெஷுருன் சா'
     );
     const iceSignMat = new THREE.MeshStandardMaterial({ map: iceSignTex, roughness: 0.45 });
@@ -1029,6 +1093,176 @@ export function createWorldArchitecture(
     });
   }
 
+  // =========================================================================
+  // 4D. PANIMALAI SNOW SUMMIT STATION (பனிமலை சிகரம்) — Frozen Kingdom Alpine Stop
+  // =========================================================================
+  const snowSummitStation = STATIONS.find((s) => s.id === 'panimalai_snow_station');
+  if (snowSummitStation) {
+    const snowCapMat = new THREE.MeshStandardMaterial({
+      color: 0xf2f8ff,
+      roughness: 0.72,
+      metalness: 0.04,
+    });
+    const alpineTimberMat = new THREE.MeshStandardMaterial({
+      color: 0x5c3e2b,
+      roughness: 0.82,
+      metalness: 0.05,
+    });
+    const snowGlowMat = new THREE.MeshStandardMaterial({
+      color: 0xd6f4ff,
+      emissive: new THREE.Color(0x6ad4ff),
+      emissiveIntensity: 0.88,
+      roughness: 0.24,
+      metalness: 0.14,
+    });
+    disposables.push(snowCapMat, alpineTimberMat, snowGlowMat);
+
+    const snowGroup = new THREE.Group();
+    snowGroup.position.set(snowSummitStation.platformX, 0, snowSummitStation.platformZ);
+    snowGroup.rotation.y = snowSummitStation.tangentAngle + Math.PI * 0.5;
+
+    // Raised granite & concrete alpine platform with yellow tactile safety strip
+    addBox(snowGroup, 15.0, 0.78, 3.8, stoneMat, 0, 0.39, 0);
+    addBox(snowGroup, 14.6, 0.025, 0.42, tactileMat, 0, 0.795, -1.45, false, true);
+
+    // Pitched timber chalet shelter roof topped with thick winter snow mantle
+    const leftSlope = addBox(snowGroup, 8.6, 0.18, 2.0, alpineTimberMat, 0, 3.72, -0.68);
+    leftSlope.rotation.x = -0.26;
+    const rightSlope = addBox(snowGroup, 8.6, 0.18, 2.0, alpineTimberMat, 0, 3.72, 0.96);
+    rightSlope.rotation.x = 0.26;
+    const leftSnow = addBox(snowGroup, 8.75, 0.16, 2.08, snowCapMat, 0, 3.87, -0.68);
+    leftSnow.rotation.x = -0.26;
+    const rightSnow = addBox(snowGroup, 8.75, 0.16, 2.08, snowCapMat, 0, 3.87, 0.96);
+    rightSnow.rotation.x = 0.26;
+
+    [-3.4, 0, 3.4].forEach((cx) => {
+      addBox(snowGroup, 0.22, 2.95, 0.22, alpineTimberMat, cx, 2.24, 0.25);
+    });
+    // Back timber windbreak & glowing glacier-blue fascia bar
+    addBox(snowGroup, 7.2, 1.55, 0.14, alpineTimberMat, 0, 1.56, 1.48);
+    addBox(snowGroup, 6.2, 0.12, 0.16, snowGlowMat, 0, 3.45, 0.15, false, false);
+
+    const snowSignTex = textures.createStationSign(
+      'Panimalai Snow Summit',
+      'பனிமலை சிகரம்',
+      'Thendral Malai',
+      'Thar Desert Oasis'
+    );
+    const snowSignMat = new THREE.MeshStandardMaterial({ map: snowSignTex, roughness: 0.42 });
+    disposables.push(snowSignMat);
+    addBox(snowGroup, 2.6, 1.12, 0.12, snowSignMat, 5.1, 2.25, 0.65);
+    addBox(snowGroup, 0.08, 1.85, 0.08, steelMat, 4.05, 1.68, 0.65);
+    addBox(snowGroup, 0.08, 1.85, 0.08, steelMat, 6.15, 1.68, 0.65);
+    addBox(snowGroup, 1.75, 1.15, 0.1, ttMat, -5.1, 2.1, 0.65);
+    group.add(snowGroup);
+
+    interactables.push({
+      id: 'snow_summit_transit_board',
+      kind: 'transit_board',
+      label: 'View Bus & Train Departure Map',
+      sublabel: 'Panimalai Snow Summit · AVS Snow House & Caves',
+      x: snowSummitStation.platformX,
+      y: 1.2,
+      z: snowSummitStation.platformZ,
+      radius: 4.8,
+      locationId: 'snow_peaks',
+    });
+
+    addBench(
+      snowSummitStation.platformX,
+      0.78,
+      snowSummitStation.platformZ,
+      snowSummitStation.tangentAngle + Math.PI * 0.5,
+      'bench_snow_summit_station',
+      'Rest at Panimalai Snow Summit Station',
+      'snow_peaks'
+    );
+  }
+
+  // =========================================================================
+  // 4E. THAR DESERT OASIS STATION (பாலைவன சோலை) — Golden Dunes & Pyramid Stop
+  // =========================================================================
+  const desertStation = STATIONS.find((s) => s.id === 'thar_desert_station');
+  if (desertStation) {
+    const sandstoneMat = new THREE.MeshStandardMaterial({
+      color: 0xd9a86c,
+      roughness: 0.88,
+      metalness: 0.04,
+    });
+    const carvedTerracottaMat = new THREE.MeshStandardMaterial({
+      color: 0xb95f34,
+      roughness: 0.74,
+      metalness: 0.08,
+    });
+    const brassLanternMat = new THREE.MeshStandardMaterial({
+      color: 0xffd888,
+      emissive: new THREE.Color(0xffa93a),
+      emissiveIntensity: 0.92,
+      roughness: 0.28,
+      metalness: 0.35,
+    });
+    disposables.push(sandstoneMat, carvedTerracottaMat, brassLanternMat);
+
+    const desertGroup = new THREE.Group();
+    desertGroup.position.set(desertStation.platformX, 0, desertStation.platformZ);
+    // platformSide = 1 lies on (-tz, tx), so subtracting PI/2 aims local -Z (tactile safety edge) directly at the tracks
+    desertGroup.rotation.y = desertStation.tangentAngle - Math.PI * 0.5;
+
+    // Carved sandstone desert platform with golden-yellow tactile edge
+    addBox(desertGroup, 15.5, 0.78, 3.8, sandstoneMat, 0, 0.39, 0);
+    addBox(desertGroup, 15.0, 0.025, 0.42, tactileMat, 0, 0.795, -1.45, false, true);
+
+    // Sun-shade sandstone colonnade with terracotta canopy & desert battlements
+    addBox(desertGroup, 9.2, 0.24, 3.4, carvedTerracottaMat, 0, 3.82, 0.2);
+    addBox(desertGroup, 9.5, 0.16, 3.6, sandstoneMat, 0, 4.0, 0.2);
+    // Decorative desert cornice merlons along roof front edge
+    for (let m = -4.2; m <= 4.21; m += 1.4) {
+      addBox(desertGroup, 0.48, 0.26, 0.22, sandstoneMat, m, 4.2, -1.45);
+    }
+    [-3.6, -1.2, 1.2, 3.6].forEach((cx) => {
+      addBox(desertGroup, 0.32, 3.04, 0.32, sandstoneMat, cx, 2.3, 0.28);
+      addBox(desertGroup, 0.44, 0.2, 0.44, carvedTerracottaMat, cx, 3.68, 0.28);
+    });
+    // Warm caravan lantern light strip under the shade canopy
+    addBox(desertGroup, 7.6, 0.12, 0.18, brassLanternMat, 0, 3.64, 0.16, false, false);
+
+    const desertSignTex = textures.createStationSign(
+      'Thar Desert Oasis',
+      'பாலைவன சோலை நிலையம்',
+      'Panimalai Snow Summit',
+      'Iceland Express Halt'
+    );
+    const desertSignMat = new THREE.MeshStandardMaterial({ map: desertSignTex, roughness: 0.42 });
+    disposables.push(desertSignMat);
+    addBox(desertGroup, 2.65, 1.12, 0.12, desertSignMat, 5.4, 2.25, 0.65);
+    addBox(desertGroup, 0.1, 1.85, 0.1, carvedTerracottaMat, 4.3, 1.68, 0.65);
+    addBox(desertGroup, 0.1, 1.85, 0.1, carvedTerracottaMat, 6.5, 1.68, 0.65);
+    addBox(desertGroup, 1.75, 1.15, 0.1, ttMat, -5.3, 2.1, 0.65);
+    group.add(desertGroup);
+
+    interactables.push({
+      id: 'thar_desert_transit_board',
+      kind: 'transit_board',
+      label: 'View Bus & Train Departure Map',
+      sublabel: 'Thar Desert Oasis & Pyramid Ruins · Live Timings',
+      x: desertStation.platformX,
+      y: 1.2,
+      z: desertStation.platformZ,
+      radius: 4.8,
+      locationId: 'desert_oasis',
+    });
+
+    addBench(
+      desertStation.platformX,
+      0.78,
+      desertStation.platformZ,
+      desertStation.tangentAngle + Math.PI * 0.5,
+      'bench_thar_desert_station',
+      'Rest at Thar Desert Oasis Station',
+      'desert_oasis'
+    );
+  }
+
   // Stone-Arch Railway Tunnel Portals (eastern & western ends of the northern ridge)
   const addTunnelPortal = (splineT: number) => {
     const s = sampleRailway(splineT);
@@ -1041,12 +1275,14 @@ export function createWorldArchitecture(
     addBox(tg, 7.5, 0.4, 2.9, darkTimberMat, 0, 7.6, 0);
     group.add(tg);
   };
-  addTunnelPortal(0.49);
-  addTunnelPortal(0.56);
+  addTunnelPortal(findClosestSplineT(18, -60.5));
+  addTunnelPortal(findClosestSplineT(-4, -59.0));
 
   // Open Steel Truss Railway Bridge spanning the lakeside edge (reflective water visible beneath!)
+  const lakeBridgeStartT = findClosestSplineT(52.5, -22.0);
+  const lakeBridgeSpanStepT = 3.7 / RAILWAY_TOTAL_LENGTH;
   for (let b = 0; b < 7; b++) {
-    const s = sampleRailway(0.355 + b * 0.011);
+    const s = sampleRailway((lakeBridgeStartT + b * lakeBridgeSpanStepT) % 1);
     const bg = new THREE.Group();
     bg.position.set(s.x, 0, s.z);
     bg.rotation.y = s.angle;
@@ -1299,10 +1535,15 @@ export function createWorldArchitecture(
     hourHandPivot.rotation.z = -(h / 12) * Math.PI * 2;
     minHandPivot.rotation.z = -(m / 60) * Math.PI * 2;
 
-    // Update glowing warm windows, station canopy lamps, and point lights for dusk/night
+    // Update glowing warm windows, station canopy lamps, streetlamp halos, ground pools, and point lights
     const glow = params.lanternStrength;
-    windowGlowMat.emissiveIntensity = 0.2 + glow * 1.85;
-    lampBulbMat.emissiveIntensity = 0.25 + glow * 2.35;
+    windowGlowMat.emissiveIntensity = glow > 0.02 ? 0.2 + glow * 2.15 : 0.0;
+    lampBulbMat.emissiveIntensity = glow > 0.02 ? 0.25 + glow * 2.75 : 0.0;
+    lampHaloMat.opacity = glow > 0.05 ? Math.min(0.78, glow * 0.74) : 0.0;
+    lampPoolMat.opacity = glow > 0.05 ? Math.min(0.52, glow * 0.48) : 0.0;
+    clkFaceMat.emissiveIntensity = glow > 0.02 ? 0.55 * glow : 0.0;
+    vmMat.emissiveIntensity = glow > 0.02 ? 0.65 * glow : 0.0;
+    signalGreenMat.emissiveIntensity = glow > 0.02 ? 1.8 * glow : 0.0;
     for (let i = 0; i < warmPointLights.length; i++) {
       warmPointLights[i].light.intensity = warmPointLights[i].maxIntensity * glow;
     }

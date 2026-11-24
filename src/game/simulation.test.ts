@@ -1,5 +1,101 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {
+  HERO_CHARACTERS,
+  getHeroById,
+  getHeroOutfitById,
+  cycleHeroOutfit,
+  createInitialHeroRuntimeState,
+  getAllWearableSuits,
+  filterWearableSuits,
+} from './heroCharacters';
+import {
+  createWeatherOverlayParticles,
+  resolveWeatherOverlayConfig,
+  resolveWeatherVignetteProfile,
+  stepWeatherOverlayParticles,
+} from './weatherOverlay';
+import {
+  createInitialPlayerLanternState,
+  setPlayerLanternOverride,
+  stepPlayerLantern,
+  togglePlayerLantern,
+} from './playerLantern';
+import {
+  applyScreenOrbitInput,
+  applyScreenZoomInput,
+  createInitialSmoothCameraState,
+  createInitialSmoothLocomotionState,
+  dampAngleSpring,
+  dampScalarSpring,
+  filterFrameDt,
+  filterMovementInput,
+  stepSmoothCameraOrbit,
+  stepSmoothCameraRig,
+  stepSmoothLocomotionVisuals,
+  syncSmoothCameraImmediate,
+  syncSmoothLocomotionImmediate,
+} from './smoothCameraMotion';
+import {
+  VAULT_BATMOBILE_BAY,
+  VAULT_CAR_SPECS,
+  VAULT_EXIT_TUNNEL_POS,
+  VAULT_FLOOR_Y,
+  VAULT_HALF_X,
+  VAULT_HALF_Z,
+  VAULT_HERO_PODS,
+  VAULT_SURFACE_DRIVE_EXIT,
+  clampVaultPosition,
+  createInitialHomeVaultState,
+  isInsideVaultDriveExitTunnel,
+  isPlayerInsidePersonalHome,
+  stepSecretHatchAnimation,
+  stepVaultCarState,
+  toggleSecretVaultHatch,
+  type VaultCarRuntimeState,
+} from './homeUndergroundVault';
+import {
+  AIRPORT_CENTER,
+  AIRPORT_GROUND_Y,
+  AIRPORT_RUNWAY_BOUNDS,
+  AIRPORT_SPAWN,
+  HERO_HQ_INTERSECTION_POS,
+  METRO_FLOOR_Y,
+  METRO_MEZZANINE_Y,
+  METRO_SURFACE_ENTRANCES,
+  PARACHUTE_TOWER_POS,
+  clampUndergroundMetroPosition,
+  createInitialAirlinerState,
+  createInitialParachuteState,
+  createInitialSubwayTrainState,
+  getHeroHqCollider,
+  getUndergroundMetroFloorY,
+  isInsideAirport,
+  stepAirlinerState,
+  stepParachuteGlide,
+  stepSubwayTrainState,
+} from './airportMetro';
+import {
+  createInitialBatmobileState,
+  stepBatmobileState,
+  getBatmobileExitPosition,
+  repairBatmobile,
+  BATMOBILE_MAX_SPEED,
+  type BatmobileState,
+} from './batmobile';
+import {
+  METRO_CITY_CENTER,
+  METRO_CITY_SPAWN,
+  createInitialMetroDestructionState,
+  applyDestructionImpact,
+  stepMetroDestruction,
+  getMetroBuildingColliders,
+  getMetroRooftopHeightAt,
+  findBestWebOrGrappleAnchor,
+  startWebSwing,
+  stepWebSwingPhysics,
+  isInsideMetroCity,
+} from './metroCity';
 import { getAvatarMeta, isValidBoyOutfitId, PLAYABLE_AVATARS } from './avatars';
 import {
   computePassengerActivityWeights,
@@ -14,6 +110,49 @@ import {
   stepTrainSteamPool,
 } from './trainSteam';
 import {
+  computeStationCrowdProfile,
+  generateStationAnnouncement,
+  getStationRegionId,
+} from './stationAnnouncements';
+import {
+  getActivePlantVariantForSeason,
+  getActiveTreeVariantForSeason,
+  getSeasonalFoliageProfile,
+  SEASONAL_FOLIAGE_PROFILES,
+} from './seasonalFoliage';
+import {
+  computeFlockSkyActivity,
+  createInitialBirdFlockingState,
+  FLOCK_MIN_BIRDS,
+  getFlockingStats,
+  MAX_ACTIVE_FLOCKS,
+  MAX_BIRD_SPEED,
+  MAX_FLOCK_BIRDS,
+  MIN_BIRD_SPEED,
+  refreshFlocksForFocus,
+  SEPARATION_RADIUS,
+  stepBirdFlockingSystem,
+} from './birdFlocking';
+import {
+  DESERT_HELIPAD_POS,
+  DESERT_OASIS_CENTER,
+  DESERT_OASIS_JETTY_BOUNDS,
+  DESERT_OASIS_SPAWN,
+  DESERT_PYRAMID_BASE_Y,
+  DESERT_PYRAMID_CENTER,
+  DESERT_PYRAMID_CHAMBER_Y,
+  DESERT_PYRAMID_SOUTH_PORTAL,
+  DESERT_PYRAMID_SUMMIT_Y,
+  isInsideDesertBiome,
+  isInsidePyramidChamber,
+} from './desertOasis';
+import {
+  computeCatalogueSpawnPoint,
+  getCatalogueVehiclesByCategory,
+  VEHICLE_CATALOGUE,
+} from './vehicleCatalogue';
+import {
+  COAST_CENTER,
   groundHeightAt,
   distanceToRail,
   walkableHeightAt,
@@ -90,6 +229,7 @@ import {
   isInIceland,
 } from './iceland';
 import {
+  computeNightBlackoutFactor,
   computeSkyPalette,
   getTimePeriod,
   formatClockTime,
@@ -151,6 +291,7 @@ import {
 import {
   AVS_SNOW_HOUSE_BASE_Y,
   AVS_SNOW_HOUSE_CENTER,
+  AVS_SNOW_HOUSE_ROT_Y,
   AVS_SNOW_HOUSE_SCALE,
   CAVE_CHAMBERS,
   CAVE_ENTRANCES,
@@ -248,12 +389,14 @@ test('collision solver blocks solid boxes, deep water, and world boundary', () =
   assert.equal(hitWater.collided, true);
 });
 
-test('railway spline is closed, smooth, crosses the sea to Ocean Exhibition Complex & SSJ Dinosaur Island, and links all 7 stations', () => {
-  assert.equal(STATIONS.length, 7);
+test('railway spline is closed, smooth, crosses the sea to Ocean Exhibition Complex & SSJ Dinosaur Island, and links all 9 stations including Snow Summit & Thar Desert Oasis', () => {
+  assert.equal(STATIONS.length, 9);
   assert.ok(STATIONS.some((s) => s.id === 'iceland_gateway' && s.connectsToIceland));
+  assert.ok(STATIONS.some((s) => s.id === 'panimalai_snow_station' && s.connectsToIceland));
+  assert.ok(STATIONS.some((s) => s.id === 'thar_desert_station'));
   assert.ok(STATIONS.some((s) => s.id === 'exhibition_complex_station'));
   assert.ok(STATIONS.some((s) => s.id === 'dinosaur_island_station' && s.isDinosaurIsland));
-  assert.ok(RAILWAY_TOTAL_LENGTH > 360, `Expected extended sea-bridge loop > 360m, got ${RAILWAY_TOTAL_LENGTH}`);
+  assert.ok(RAILWAY_TOTAL_LENGTH > 1200, `Expected extended snow + desert + sea loop > 1200m, got ${RAILWAY_TOTAL_LENGTH}`);
 
   let seaBridgeSamples = 0;
   for (let i = 0; i < 200; i++) {
@@ -1251,8 +1394,9 @@ test('Ocean Universal Transportation Exhibition Complex sits far offshore, inven
 });
 
 test('SSJ Tropical Sky Explorer Air Taxi patrols 5 helipads AND responds to mobile pickup/dropoff, and dual rooftop helipads launch cleanly', () => {
-  assert.equal(SKY_TAXI_STOPS.length, 5);
+  assert.equal(SKY_TAXI_STOPS.length, 6);
   assert.ok(SKY_TAXI_STOPS.some((s) => s.id === 'sky_exhibition'));
+  assert.ok(SKY_TAXI_STOPS.some((s) => s.id === 'sky_desert'));
 
   // Dual rooftop helipads (Home & AVS Snow Residence)
   const homePadCraft = createSkyExplorerAtHelipad('home');
@@ -1537,5 +1681,1062 @@ test('Procedural train steam/smoke particles scale intensity with train speed an
     'Older steam puffs must rise above the exhaust stack and trail behind the moving train'
   );
 });
+
+test('regional station platform announcements & ambient crowd murmur vary cleanly across regions, time, and weather', () => {
+  const train = createInitialTrainState();
+  const seenRegions = new Set<string>();
+  const seenChimes = new Set<string>();
+
+  for (let i = 0; i < STATIONS.length; i++) {
+    const region = getStationRegionId(i);
+    seenRegions.add(region);
+    const arrived = generateStationAnnouncement({
+      stationIndex: i,
+      eventKind: 'arrived',
+      timeHours: 17.5,
+      weather: 'clear',
+      seed: 3 + i,
+    });
+    seenChimes.add(arrived.chimeName);
+    assert.ok(arrived.text.includes(STATIONS[i].name), 'Announcement must include station name');
+    assert.ok(arrived.chimeNotes.length >= 4, 'Each region chime must contain at least 4 notes');
+  }
+  assert.equal(seenRegions.size, 6, 'All 6 regions (including Desert) must be represented across the 9 stations');
+  assert.equal(seenChimes.size, 6, 'Each region must have its own distinct melodic station chime');
+
+  const rainPa = generateStationAnnouncement({
+    stationIndex: 0,
+    eventKind: 'approaching',
+    timeHours: 14,
+    weather: 'rain',
+    seed: 11,
+  });
+  assert.ok(/rain|wet/i.test(rainPa.text), `Rain PA should include weather safety note, got: ${rainPa.text}`);
+
+  // Ambient crowd murmur swells right on the main platform, quiets at night, and drops to 0 far away
+  const st0 = STATIONS[0];
+  const rushCrowd = computeStationCrowdProfile(st0.platformX, st0.platformZ, 17.8, 'clear', train, false);
+  const nightCrowd = computeStationCrowdProfile(st0.platformX, st0.platformZ, 2.0, 'clear', train, false);
+  const farCrowd = computeStationCrowdProfile(-180, -180, 17.8, 'clear', train, false);
+  assert.ok(rushCrowd.gain > 0.06, `Expected audible rush-hour crowd murmur on platform, got ${rushCrowd.gain}`);
+  assert.ok(rushCrowd.gain > nightCrowd.gain * 1.8, 'Sunset rush crowd must exceed late-night hush');
+  assert.equal(farCrowd.gain, 0, 'Station crowd murmur must be 0 far from any platform');
+});
+
+test('both En Illam and AVS Snow Residence provide walkable routes all the way to their rooftop helipads', () => {
+  // 1. En Illam (My Home): 2F east balcony doorway -> exterior helipad stairs -> skywalk -> rooftop helipad (y = 10.4m)
+  const hx = HOME_CENTER.x;
+  const hz = HOME_CENTER.z;
+  const stepOut = resolvePlayerCollision(hx + 6.9, hz + 6.4, hx + 5.2, hz + 6.4, 0.35, [], 3.65, false);
+  assert.equal(stepOut.collided, false, 'Player must be able to step out En Illam east balcony onto helipad stairs');
+
+  let y = 3.65;
+  const stairsZs = [6.2, 4.0, 1.5, -1.0, -3.8];
+  for (const lz of stairsZs) {
+    const nextY = walkableHeightWithFloor(hx + 7.1, hz + lz, y);
+    assert.ok(nextY >= y - 0.01, `En Illam helipad stair should ascend smoothly at lz=${lz}: ${y} -> ${nextY}`);
+    y = nextY;
+  }
+  assert.ok(Math.abs(y - 10.4) < 0.15, `Top of En Illam helipad stairs must reach y=10.4m, got ${y}`);
+
+  const bridgeY = walkableHeightWithFloor(hx + 5.2, hz - 3.0, y);
+  const padCenterY = walkableHeightWithFloor(hx, hz, bridgeY);
+  assert.equal(bridgeY, 10.4, 'En Illam helipad skywalk bridge must sit at y=10.4m');
+  assert.equal(padCenterY, 10.4, 'En Illam circular rooftop helipad deck must sit at y=10.4m');
+
+  // 2. AVS Snow Residence: 1F balcony -> exterior helipad stairs -> rooftop bridge -> circular AVS helipad deck
+  const S = AVS_SNOW_HOUSE_SCALE;
+  const cosR = Math.cos(AVS_SNOW_HOUSE_ROT_Y);
+  const sinR = Math.sin(AVS_SNOW_HOUSE_ROT_Y);
+  const toAvsWorld = (lx: number, lz: number) => ({
+    x: AVS_SNOW_HOUSE_CENTER.x + (lx * cosR + lz * sinR) * S,
+    z: AVS_SNOW_HOUSE_CENTER.z + (-lx * sinR + lz * cosR) * S,
+  });
+
+  let avsY = AVS_SNOW_HOUSE_BASE_Y + 4.29 * S;
+  const avsExpectedPadY = AVS_SNOW_HOUSE_BASE_Y + 7.59 * S;
+  for (const lz of [0.5, -0.5, -2.0, -3.5, -4.9]) {
+    const wp = toAvsWorld(2.88, lz);
+    const nextY = getAvsSnowHouseFloorHeight(wp.x, wp.z, avsY);
+    assert.ok(nextY !== null && nextY >= avsY - 0.05, `AVS helipad stair must climb cleanly at local z=${lz}`);
+    avsY = nextY;
+  }
+  assert.ok(
+    Math.abs(avsY - avsExpectedPadY) < 0.25,
+    `Top of AVS helipad stairs must reach rooftop deck (${avsExpectedPadY.toFixed(2)}), got ${avsY.toFixed(2)}`
+  );
+  const avsPadCenter = toAvsWorld(0, -5.8);
+  const avsPadFloor = getAvsSnowHouseFloorHeight(avsPadCenter.x, avsPadCenter.z, avsY);
+  assert.ok(
+    avsPadFloor !== null && Math.abs(avsPadFloor - avsExpectedPadY) < 0.05,
+    'AVS circular rooftop helipad deck must be fully walkable'
+  );
+});
+
+test('Sovereign of the Tides is moored near Kadalkarai Shore with a walkable boarding pier and sails smoothly', () => {
+  const boats = createInitialBoats();
+  const sov = boats.find((b) => b.id === 'sovereign_ship');
+  assert.ok(sov, 'Sovereign of the Tides must exist in initial boats');
+
+  const distFromCoast = Math.hypot(sov.x - COAST_CENTER.x, sov.z - COAST_CENTER.z);
+  assert.ok(distFromCoast < 32, `Sovereign ship must be near Kadalkarai shore (<32m), got ${distFromCoast.toFixed(1)}m`);
+
+  // Walkable timber boarding pier connects dry sandy beach (x=104) right up to the ship (x=122)
+  for (const px of [105, 110, 116, 121.5]) {
+    assert.equal(isWaterAt(px, 48.6), false, `Sovereign boarding pier at x=${px} must be dry & walkable`);
+    assert.ok(walkableHeightAt(px, 48.6) >= 0.35, `Sovereign boarding pier deck height at x=${px} must be >= 0.35m`);
+  }
+
+  // Ship starts in navigable ocean water and sails smoothly forward when driven
+  assert.equal(isNavigableBoatWater('ocean', sov.x, sov.z), true);
+  let sailing = sov;
+  for (let i = 0; i < 45; i++) {
+    sailing = stepBoatState(sailing, 1.0, 0.15, true, 0.05);
+  }
+  const sailedDist = Math.hypot(sailing.x - sov.x, sailing.z - sov.z);
+  assert.ok(sailedDist > 12, `Sovereign of the Tides should sail smoothly when driven, moved ${sailedDist.toFixed(1)}m`);
+  assert.equal(isNavigableBoatWater('ocean', sailing.x, sailing.z), true);
+});
+
+test('Mobile Vehicle Catalogue includes all cars, bikes, ships, aircraft, train & Armoured Batmobile with safe spawn coordinates', () => {
+  assert.equal(VEHICLE_CATALOGUE.length, 13, 'Catalogue must include all 13 playable vehicles including Batmobile');
+  assert.ok(VEHICLE_CATALOGUE.some((v) => v.id === 'batmobile'), 'Catalogue must include Armoured Batmobile');
+  assert.ok(getCatalogueVehiclesByCategory('cars').length >= 4);
+  assert.ok(getCatalogueVehiclesByCategory('bikes').length >= 2);
+  assert.ok(getCatalogueVehiclesByCategory('ships').length >= 5);
+  assert.ok(getCatalogueVehiclesByCategory('air_rail').length >= 2);
+
+  for (const v of VEHICLE_CATALOGUE) {
+    const pt = computeCatalogueSpawnPoint(v.id, 0, 14, 0);
+    assert.ok(Number.isFinite(pt.x) && Number.isFinite(pt.z), `Spawn point for ${v.id} must be finite`);
+    if (v.boatId) {
+      const zone = v.boatId === 'lake_boat' ? 'lake' : 'ocean';
+      assert.equal(
+        isNavigableBoatWater(zone, pt.x, pt.z),
+        true,
+        `Watercraft ${v.id} must spawn inside navigable ${zone} water`
+      );
+    } else {
+      assert.equal(isWaterAt(pt.x, pt.z), false, `Land/air vehicle ${v.id} must spawn on dry ground`);
+    }
+  }
+});
+
+test('Thar Golden Desert Oasis & Grand Pyramid Ruins have rolling dunes, swimmable oasis, walkable jetty, pyramid stairs, secret chamber & desert helipad', () => {
+  // 1. Region classification without disturbing existing regions
+  assert.equal(isInsideDesertBiome(DESERT_OASIS_CENTER.x, DESERT_OASIS_CENTER.z), true);
+  assert.equal(getRegionAt(DESERT_OASIS_CENTER.x, DESERT_OASIS_CENTER.z), 'desert');
+  assert.equal(getRegionAt(DESERT_PYRAMID_CENTER.x, DESERT_PYRAMID_CENTER.z), 'desert');
+  assert.equal(getRegionAt(0, 10), 'sakura');
+  assert.equal(getRegionAt(-102, 48), 'sakura');
+
+  // 2. Emerald Oasis Lagoon is swimmable water while the Wooden Jetty over it is dry & walkable
+  assert.equal(isWaterAt(DESERT_OASIS_CENTER.x, DESERT_OASIS_CENTER.z), true);
+  assert.equal(isWaterAt(DESERT_OASIS_SPAWN.x, DESERT_OASIS_SPAWN.z), false);
+  const jettyMidX = (DESERT_OASIS_JETTY_BOUNDS.minX + DESERT_OASIS_JETTY_BOUNDS.maxX) * 0.5;
+  const jettyMidZ = (DESERT_OASIS_JETTY_BOUNDS.minZ + DESERT_OASIS_JETTY_BOUNDS.maxZ) * 0.5;
+  assert.equal(isWaterAt(jettyMidX, jettyMidZ), false, 'Oasis timber jetty must stay dry & walkable');
+  assert.ok(walkableHeightAt(jettyMidX, jettyMidZ) >= DESERT_OASIS_JETTY_BOUNDS.deckY);
+
+  // 3. Walkable East Processional Staircase climbs monotonically from base (0.65m) to Golden Sun Summit (14.65m)
+  let prevH = DESERT_PYRAMID_BASE_Y - 0.1;
+  for (const lx of [19.4, 15.0, 11.0, 7.0, 3.0]) {
+    const h = walkableHeightWithFloor(
+      DESERT_PYRAMID_CENTER.x + lx,
+      DESERT_PYRAMID_CENTER.z,
+      Math.max(prevH, 0.7)
+    );
+    assert.ok(h > prevH, `East Pyramid Staircase must climb at lx=${lx} (got ${h.toFixed(2)}m <= ${prevH.toFixed(2)}m)`);
+    prevH = h;
+  }
+  const summitH = walkableHeightWithFloor(DESERT_PYRAMID_CENTER.x, DESERT_PYRAMID_CENTER.z, 13.5);
+  assert.ok(
+    Math.abs(summitH - DESERT_PYRAMID_SUMMIT_Y) < 0.05,
+    `Pyramid Summit platform must sit at ${DESERT_PYRAMID_SUMMIT_Y}m, got ${summitH}`
+  );
+
+  // 4. South Monumental Portal leads into hollow Torch-Lit Secret Solar Relic Chamber at ground level
+  assert.equal(isInsidePyramidChamber(DESERT_PYRAMID_SOUTH_PORTAL.x, DESERT_PYRAMID_CENTER.z + 12.0, 0.9), true);
+  assert.equal(isInsidePyramidChamber(DESERT_PYRAMID_CENTER.x, DESERT_PYRAMID_CENTER.z, 0.9), true);
+  const chamberH = walkableHeightWithFloor(DESERT_PYRAMID_CENTER.x, DESERT_PYRAMID_CENTER.z, 0.9);
+  assert.ok(
+    Math.abs(chamberH - DESERT_PYRAMID_CHAMBER_Y) < 0.05,
+    `Secret Chamber floor must be walkable at ${DESERT_PYRAMID_CHAMBER_Y}m, got ${chamberH}`
+  );
+
+  // 5. Desert Sandstone Helipad & rolling outer dunes
+  const padH = walkableHeightWithFloor(DESERT_HELIPAD_POS.x, DESERT_HELIPAD_POS.z, 1.5);
+  assert.ok(Math.abs(padH - DESERT_HELIPAD_POS.y) < 0.05);
+  const outerDuneH = groundHeightAt(-285, 175);
+  assert.ok(outerDuneH > 2.0, `Outer Thar sand dunes should rise above 2.0m, got ${outerDuneH.toFixed(2)}m`);
+});
+
+test('seasonal foliage profiles dynamically swap distinct 3D tree and plant models across all 4 seasons', () => {
+  const seasons = ['spring', 'summer', 'autumn', 'winter'] as const;
+  const treeVariants = new Set(seasons.map((s) => getActiveTreeVariantForSeason(s)));
+  const plantVariants = new Set(seasons.map((s) => getActivePlantVariantForSeason(s)));
+
+  assert.equal(treeVariants.size, 4, 'Each season must map to its own distinct 3D tree model variant');
+  assert.equal(plantVariants.size, 4, 'Each season must map to its own distinct 3D ground plant variant');
+
+  const spring = getSeasonalFoliageProfile('spring');
+  const summer = getSeasonalFoliageProfile('summer');
+  const autumn = getSeasonalFoliageProfile('autumn');
+  const winter = getSeasonalFoliageProfile('winter');
+
+  assert.equal(spring.treeModelVariant, 'cherry_blossom');
+  assert.equal(spring.plantModelVariant, 'spring_tulip');
+  assert.equal(spring.hasCherryBlossoms, true);
+  assert.equal(spring.hasSnowDusting, false);
+
+  assert.equal(summer.treeModelVariant, 'summer_broadleaf');
+  assert.equal(summer.plantModelVariant, 'summer_sunflower');
+  assert.ok(summer.grassScaleY > winter.grassScaleY, 'Summer grass must stand taller than frosted winter grass');
+
+  assert.equal(autumn.treeModelVariant, 'autumn_maple');
+  assert.equal(autumn.plantModelVariant, 'autumn_mushroom_fern');
+
+  assert.equal(winter.treeModelVariant, 'snow_pine');
+  assert.equal(winter.plantModelVariant, 'winter_frost_shrub');
+  assert.equal(winter.hasSnowDusting, true);
+  assert.equal(Object.keys(SEASONAL_FOLIAGE_PROFILES).length, 4);
+});
+
+test('extended Dreamline railway reaches both Panimalai Snow Summit and Thar Desert Oasis with flat graded tracks, platforms, PA chimes, and routing', () => {
+  const snowSt = STATIONS.find((s) => s.id === 'panimalai_snow_station');
+  const desertSt = STATIONS.find((s) => s.id === 'thar_desert_station');
+  assert.ok(snowSt, 'Panimalai Snow Summit station must exist on railway loop');
+  assert.ok(desertSt, 'Thar Desert Oasis station must exist on railway loop');
+
+  // Stations lie cleanly inside their target biomes
+  assert.equal(getRegionAt(snowSt.worldX, snowSt.worldZ), 'snow');
+  assert.equal(getRegionAt(desertSt.worldX, desertSt.worldZ), 'desert');
+
+  // Track bed is graded flat (not buried under dunes or snow slopes) and platforms are elevated & walkable
+  const snowRailY = groundHeightAt(snowSt.worldX, snowSt.worldZ);
+  const desertRailY = groundHeightAt(desertSt.worldX, desertSt.worldZ);
+  assert.ok(Math.abs(snowRailY) < 0.35, `Expected flat graded rail bed at Snow Summit, got y=${snowRailY.toFixed(2)}`);
+  assert.ok(Math.abs(desertRailY) < 0.35, `Expected flat graded rail bed at Thar Desert, got y=${desertRailY.toFixed(2)}`);
+  assert.ok(walkableHeightAt(snowSt.platformX, snowSt.platformZ) >= 0.75, 'Snow Summit platform must be elevated');
+  assert.ok(walkableHeightAt(desertSt.platformX, desertSt.platformZ) >= 0.75, 'Thar Desert platform must be elevated');
+
+  // Regional PA chimes match Snow and Desert biomes
+  const snowIdx = STATIONS.findIndex((s) => s.id === 'panimalai_snow_station');
+  const desertIdx = STATIONS.findIndex((s) => s.id === 'thar_desert_station');
+  assert.equal(getStationRegionId(snowIdx), 'snow');
+  assert.equal(getStationRegionId(desertIdx), 'desert');
+  const snowPa = generateStationAnnouncement({
+    stationIndex: snowIdx,
+    eventKind: 'approaching',
+    timeHours: 14.0,
+    weather: 'clear',
+    seed: 1,
+  });
+  const desertPa = generateStationAnnouncement({
+    stationIndex: desertIdx,
+    eventKind: 'approaching',
+    timeHours: 14.0,
+    weather: 'clear',
+    seed: 2,
+  });
+  assert.equal(snowPa.chimeName, 'Glacier Celesta Chime');
+  assert.equal(desertPa.chimeName, 'Desert Santoor Chime');
+
+  // Selective-stop route planning from Sakuragawa -> Panimalai Snow Summit -> Thar Desert Oasis
+  const originIdx = STATIONS.findIndex((s) => s.id === 'sakuragawa_station');
+  const plan = createTrainRoutePlan(originIdx, [snowIdx], desertIdx, 14.0);
+  assert.deepEqual(plan.selectedStopIndices, [snowIdx, desertIdx]);
+  assert.equal(plan.includesIcelandTransfer, true);
+});
+
+test('distant countryside bird flocking system applies Boids separation, alignment, cohesion, periodic spawning, and weather/night gating', () => {
+  // 1. Initial scenic distant flock spawns safely above terrain with articulated birds
+  const state = createInitialBirdFlockingState(0.6, 13.3, 'spring');
+  const initialStats = getFlockingStats(state);
+  assert.equal(initialStats.activeFlocks, 1);
+  assert.ok(
+    initialStats.activeBirds >= FLOCK_MIN_BIRDS && initialStats.activeBirds <= MAX_FLOCK_BIRDS,
+    `Expected ${FLOCK_MIN_BIRDS}..${MAX_FLOCK_BIRDS} initial flocking birds, got ${initialStats.activeBirds}`
+  );
+  const firstFlock = state.flocks[0];
+  assert.equal(firstFlock.species, 'countryside_swallow');
+  for (const b of firstFlock.birds) {
+    const minSafeY = groundHeightAt(b.x, b.z) + 8.5;
+    assert.ok(b.y >= minSafeY, `Flock bird must stay clear above countryside terrain (y=${b.y}, min=${minSafeY})`);
+  }
+
+  // 2. Boids Separation rule: two birds placed closer than SEPARATION_RADIUS steer apart
+  const b0 = firstFlock.birds[0];
+  const b1 = firstFlock.birds[1];
+  b1.x = b0.x + 0.6;
+  b1.y = b0.y;
+  b1.z = b0.z;
+  b1.vx = b0.vx;
+  b1.vy = b0.vy;
+  b1.vz = b0.vz;
+  const startPairDist = Math.hypot(b1.x - b0.x, b1.y - b0.y, b1.z - b0.z);
+  assert.ok(startPairDist < SEPARATION_RADIUS);
+
+  // 3. Boids Alignment & Cohesion rule: stray bird heading off-course turns back toward flockmates
+  const stray = firstFlock.birds[firstFlock.birds.length - 1];
+  stray.x = firstFlock.anchorX - 9.0;
+  stray.z = firstFlock.anchorZ - 4.0;
+  stray.vx = -firstFlock.dirX * 8.0;
+  stray.vz = -firstFlock.dirZ * 8.0;
+
+  let elapsed = 0;
+  for (let i = 0; i < 40; i++) {
+    elapsed += 0.05;
+    stepBirdFlockingSystem(state, 0.05, elapsed, 17.5, 'clear', 'spring', 0.6, 13.3);
+  }
+
+  const endPairDist = Math.hypot(b1.x - b0.x, b1.y - b0.y, b1.z - b0.z);
+  assert.ok(
+    endPairDist > startPairDist + 0.35,
+    `Expected Boids separation to push overly close birds apart (${startPairDist.toFixed(2)} -> ${endPairDist.toFixed(2)})`
+  );
+
+  // Stray bird aligns with flock direction
+  const alignedDot = stray.vx * firstFlock.dirX + stray.vz * firstFlock.dirZ;
+  assert.ok(alignedDot > 0, `Expected stray bird to align with flock travel vector, dot=${alignedDot.toFixed(2)}`);
+
+  // All speeds remain clamped within realistic flight envelope and altitudes remain clear of terrain
+  for (const flock of state.flocks) {
+    for (const b of flock.birds) {
+      const spd = Math.hypot(b.vx, b.vy, b.vz);
+      assert.ok(
+        spd >= MIN_BIRD_SPEED - 0.05 && spd <= MAX_BIRD_SPEED + 0.05,
+        `Bird speed ${spd.toFixed(2)} out of [${MIN_BIRD_SPEED}, ${MAX_BIRD_SPEED}]`
+      );
+      assert.ok(
+        b.y >= groundHeightAt(b.x, b.z) + 8.5,
+        `Bird altitude ${b.y.toFixed(2)} dipped too close to ground`
+      );
+    }
+  }
+
+  // 4. Periodic distant spawning & recycling over ~45 seconds never exceeds caps
+  let maxObservedFlocks = 0;
+  let maxObservedBirds = 0;
+  for (let i = 0; i < 900; i++) {
+    elapsed += 0.05;
+    stepBirdFlockingSystem(state, 0.05, elapsed, 14.0, 'clear', 'autumn', 0.6, 13.3);
+    const s = getFlockingStats(state);
+    if (s.activeFlocks > maxObservedFlocks) maxObservedFlocks = s.activeFlocks;
+    if (s.activeBirds > maxObservedBirds) maxObservedBirds = s.activeBirds;
+  }
+  const midStats = getFlockingStats(state);
+  assert.ok(
+    midStats.totalSpawnedFlocks >= 3,
+    `Expected periodic spawning of multiple flocks over 45s, got ${midStats.totalSpawnedFlocks}`
+  );
+  assert.ok(maxObservedFlocks <= MAX_ACTIVE_FLOCKS, `Exceeded MAX_ACTIVE_FLOCKS (${maxObservedFlocks})`);
+  assert.ok(maxObservedBirds <= MAX_FLOCK_BIRDS, `Exceeded MAX_FLOCK_BIRDS (${maxObservedBirds})`);
+
+  // 5. Weather and deep-night gating pause spawns and gracefully clear flocks
+  assert.equal(computeFlockSkyActivity(14.0, 'clear'), 1);
+  assert.equal(computeFlockSkyActivity(17.7, 'clear'), 1);
+  assert.equal(computeFlockSkyActivity(23.0, 'clear'), 0);
+  assert.equal(computeFlockSkyActivity(14.0, 'thunderstorm'), 0);
+  assert.equal(computeFlockSkyActivity(14.0, 'ferocious_rain'), 0);
+
+  const spawnedBeforeStorm = state.totalSpawnedFlocks;
+  for (let i = 0; i < 120; i++) {
+    elapsed += 0.05;
+    stepBirdFlockingSystem(state, 0.05, elapsed, 14.0, 'thunderstorm', 'autumn', 0.6, 13.3);
+  }
+  assert.equal(state.totalSpawnedFlocks, spawnedBeforeStorm, 'No new flocks should spawn during a thunderstorm');
+  assert.equal(state.flocks.length, 0, 'Existing flocks should gracefully depart when a thunderstorm hits');
+
+  // 6. Fast-travel across the world prunes out-of-sight flocks and seeds a fresh distant horizon flock
+  refreshFlocksForFocus(state, 240, -180, 14.0, 'clear', 'summer');
+  assert.equal(state.flocks.length, 1);
+  assert.equal(state.flocks[0].species, 'meadow_swift');
+  assert.ok(
+    Math.hypot(state.flocks[0].anchorX - 240, state.flocks[0].anchorZ - -180) <= 105,
+    'Fast-travel should seed a distant flock over the new destination horizon'
+  );
+});
+
+test('Hero Character roster covers all 7 heroes, 15 outfits (>=2 per hero), balanced attributes, and multi-suit cycling', () => {
+  assert.equal(HERO_CHARACTERS.length, 7);
+  const ids = HERO_CHARACTERS.map((h) => h.id);
+  for (const requiredId of [
+    'steve_harrington',
+    'iron_man_classic',
+    'iron_man_advanced',
+    'hulkbuster',
+    'batman',
+    'spider_man',
+    'superman',
+  ] as const) {
+    assert.ok(ids.includes(requiredId), `Missing required hero ${requiredId}`);
+  }
+
+  const totalOutfits = HERO_CHARACTERS.reduce((sum, h) => sum + h.outfits.length, 0);
+  assert.equal(totalOutfits, 15);
+
+  // Every hero has non-uniform balanced stats within [1, 100], valid reference portrait, and >= 2 switchable variations
+  for (const h of HERO_CHARACTERS) {
+    const vals = Object.values(h.stats);
+    assert.ok(vals.every((v) => v >= 1 && v <= 100));
+    assert.ok(h.referenceImage.startsWith('/assets/aistudio/'));
+    assert.ok(h.outfits.length >= 2, `Hero ${h.id} must have at least 2 switchable suit variations`);
+    assert.ok(h.abilities.length >= 4);
+  }
+
+  // Steve Harrington toggles between Grey Jacket & Scoops Ahoy
+  const steve = getHeroById('steve_harrington');
+  assert.equal(steve.outfits.length, 2);
+  const steveFirst = getHeroOutfitById('steve_harrington', steve.defaultOutfitId);
+  const steveSecond = cycleHeroOutfit('steve_harrington', steveFirst.id);
+  assert.equal(steveFirst.id, 'steve_grey_jacket');
+  assert.equal(steveSecond.id, 'steve_scoops_ahoy');
+  assert.equal(cycleHeroOutfit('steve_harrington', steveSecond.id).id, 'steve_grey_jacket');
+
+  // Spider-Man cycles through Classic -> Remastered Advanced -> Iron Spider -> Classic
+  const spidey = getHeroById('spider_man');
+  assert.equal(spidey.outfits.length, 3);
+  assert.equal(spidey.mobility.canWebSwing, true);
+  assert.equal(spidey.mobility.hasIronSpiderArms, true);
+  const s1 = cycleHeroOutfit('spider_man', 'spider_classic');
+  const s2 = cycleHeroOutfit('spider_man', s1.id);
+  const s3 = cycleHeroOutfit('spider_man', s2.id);
+  assert.equal(s1.id, 'spider_advanced');
+  assert.equal(s2.id, 'spider_iron');
+  assert.equal(s3.id, 'spider_classic');
+
+  // Hulkbuster towers over standard heroes & Iron Man suits fly with helmet toggle
+  const hb = getHeroById('hulkbuster');
+  const mk85 = getHeroById('iron_man_classic');
+  const batman = getHeroById('batman');
+  assert.ok(hb.mobility.scaleMultiplier > 1.4 && hb.mobility.heavyFootsteps);
+  assert.ok(mk85.mobility.canFly && mk85.mobility.hasHelmetToggle);
+  assert.ok(batman.mobility.canCapeGlide && batman.mobility.hasBatmobileLink);
+
+  const initRuntime = createInitialHeroRuntimeState();
+  assert.equal(initRuntime.activeHeroId, null);
+  assert.equal(initRuntime.isFlying, false);
+});
+
+test('Armoured Batmobile accelerates with jet afterburner, steers, rams, exits safely, and repairs', () => {
+  let bat: BatmobileState = {
+    ...createInitialBatmobileState(),
+    x: 0,
+    y: 0,
+    z: 0,
+    heading: 0,
+    inVault: false,
+  };
+  assert.equal(bat.integrity, 100);
+  const startX = bat.x;
+  const startZ = bat.z;
+
+  // Accelerate with Jet Afterburner + slight right steer
+  for (let i = 0; i < 120; i++) {
+    const res = stepBatmobileState(bat, 1, 0.35, true, false, 0.05);
+    bat = res.state;
+  }
+  const dist = Math.hypot(bat.x - startX, bat.z - startZ);
+  assert.ok(dist > 45, `Expected Batmobile to surge forward with jet boost, moved ${dist.toFixed(1)}m`);
+  const maxBoostKmh = Math.round(BATMOBILE_MAX_SPEED * 3.6);
+  assert.ok(
+    bat.speedKmh > 120 && bat.speedKmh <= maxBoostKmh + 2,
+    `Expected high jet-boost speed > 120 km/h, got ${bat.speedKmh} km/h`
+  );
+  assert.equal(bat.boostActive, true);
+  assert.ok(Math.abs(bat.steerAngle) > 0.05);
+
+  // Handbrake decelerates cleanly
+  for (let i = 0; i < 60; i++) {
+    bat = stepBatmobileState(bat, 0, 0, false, true, 0.05).state;
+  }
+  assert.ok(bat.speedKmh < 15, `Expected handbrake to stop Batmobile, got ${bat.speedKmh} km/h`);
+
+  const exit = getBatmobileExitPosition(bat);
+  assert.ok(Math.hypot(exit.x - bat.x, exit.z - bat.z) >= 2.2);
+
+  bat.integrity = 64;
+  bat = repairBatmobile(bat);
+  assert.equal(bat.integrity, 100);
+});
+
+test('Metro City is completely removed from open-world regions & locations while open-sky Spider-Man web-swinging still works anywhere', () => {
+  // Confirm Metro City is completely removed from regions & location labels
+  assert.notEqual(getRegionAt(METRO_CITY_CENTER.x, METRO_CITY_CENTER.z), 'metro_city' as string);
+  assert.equal(
+    LOCATIONS.some((l) => (l.id as string) === 'metro_city'),
+    false,
+    'Metro City must not appear in world LOCATIONS'
+  );
+
+  // Open-sky Spider-Man Web-Swinging works cleanly with empty building anchors anywhere across the world
+  const emptyMetro = {
+    ...createInitialMetroDestructionState(),
+    buildings: [],
+    props: [],
+  };
+  const anchor = findBestWebOrGrappleAnchor(emptyMetro, 0, 8, 0, Math.PI);
+  assert.equal(anchor.buildingId, null, 'Open-sky web-swinging uses high aerial anchor without city buildings');
+  assert.ok(anchor.y >= 24, 'Aerial web anchor should sit high above the hero');
+
+  let swing = startWebSwing(emptyMetro, 0, 10, 0, Math.PI, 0, -12, 1);
+  let sx = 0;
+  let sy = 10;
+  let sz = 0;
+  for (let i = 0; i < 20; i++) {
+    const res = stepWebSwingPhysics(swing, sx, sy, sz, 1, 0, 0, false, 0.05);
+    swing = res.swing;
+    sx = res.x;
+    sy = res.y;
+    sz = res.z;
+  }
+  assert.ok(Math.hypot(sx, sz) > 8, 'Web swing should carry hero forward cleanly across the open world');
+});
+
+test('Wearable Suit Wardrobe enumerates all 15 hero suit skins and filters accurately by category and active character', () => {
+  const allSuits = getAllWearableSuits();
+  assert.equal(allSuits.length, 15, `Expected 15 total wearable hero suits, got ${allSuits.length}`);
+
+  const uniqueOutfitIds = new Set(allSuits.map((s) => s.outfit.id));
+  assert.equal(uniqueOutfitIds.size, 15, 'Every wearable suit must have a unique outfit ID');
+
+  const spideyOnly = filterWearableSuits('current_hero', 'spider_man');
+  assert.equal(spideyOnly.length, 3, 'Spider-Man should filter to all 3 wearable suits');
+  assert.ok(spideyOnly.some((s) => s.outfit.id === 'spider_iron'));
+
+  const steveOnly = filterWearableSuits('current_hero', 'steve_harrington');
+  assert.equal(steveOnly.length, 2, 'Steve Harrington should filter to Grey Jacket and Scoops Ahoy');
+
+  const ironClassicOnly = filterWearableSuits('current_hero', 'iron_man_classic');
+  assert.equal(ironClassicOnly.length, 2, 'Iron Man Classic should filter to Mark 85 and Mark 42 Gold');
+
+  const armourSuits = filterWearableSuits('armour', 'iron_man_classic');
+  assert.equal(armourSuits.length, 8, 'Powered Armour filter should include all 8 armoured suits');
+  assert.ok(armourSuits.every((s) => s.category === 'armour'));
+
+  const streetSuits = filterWearableSuits('street_stealth', 'iron_man_classic');
+  assert.equal(streetSuits.length, 7, 'Street & Stealth filter should include remaining 7 wearable suits');
+  assert.equal(armourSuits.length + streetSuits.length, allSuits.length);
+});
+
+test('Underground Metro Line M1 provides 2 surface entrances (Central <-> Airport), 2-level subterranean walkability, and live subway train cycle', () => {
+  assert.equal(METRO_SURFACE_ENTRANCES.length, 2);
+  const stationIds = METRO_SURFACE_ENTRANCES.map((s) => s.id);
+  assert.deepEqual(stationIds, ['metro_central', 'metro_airport']);
+
+  // Lower platform (-18m), central escalator ramp (sloping cleanly), and upper mezzanine (-13.2m)
+  assert.equal(getUndergroundMetroFloorY(0, 0), METRO_FLOOR_Y);
+  const rampMidY = getUndergroundMetroFloorY(0, 7.8);
+  assert.ok(
+    rampMidY > METRO_FLOOR_Y && rampMidY < METRO_MEZZANINE_Y,
+    `Escalator ramp midpoint should slope smoothly between platform and mezzanine, got ${rampMidY}`
+  );
+  assert.equal(getUndergroundMetroFloorY(0, 14), METRO_MEZZANINE_Y);
+
+  // Track trench (z=-9) is fenced off from walking
+  const clamped = clampUndergroundMetroPosition(0, -9, 0, -4);
+  assert.equal(clamped.collided, true);
+  assert.ok(clamped.z >= -5.6, `Player must not fall into underground subway track trench, got z=${clamped.z}`);
+
+  // Live Subway Train approaches, stops with sliding doors open, departs into tunnel, and returns
+  let subway = createInitialSubwayTrainState();
+  let sawStopped = false;
+  let sawDoorsOpen = false;
+  let sawDeparting = false;
+  for (let i = 0; i < 400; i++) {
+    subway = stepSubwayTrainState(subway, 0.05);
+    if (subway.phase === 'stopped') sawStopped = true;
+    if (subway.doorOpen > 0.7) sawDoorsOpen = true;
+    if (subway.phase === 'departing') sawDeparting = true;
+  }
+  assert.equal(sawStopped, true, 'Subway train must stop at underground platform');
+  assert.equal(sawDoorsOpen, true, 'Subway train doors must slide open while stopped');
+  assert.equal(sawDeparting, true, 'Subway train must depart into the tunnel after dwell');
+});
+
+test('Dreamline International Airport sits on flat NE tarmac and DL-787 Dreamliner takes off, climbs, retracts gear, and lands', () => {
+  assert.equal(isInsideAirport(AIRPORT_CENTER.x, AIRPORT_CENTER.z), true);
+  assert.equal(getRegionAt(AIRPORT_CENTER.x, AIRPORT_CENTER.z), 'airport');
+  assert.equal(getLocationAt(AIRPORT_SPAWN.x, AIRPORT_SPAWN.z).id, 'dreamline_airport');
+
+  const runwayY = groundHeightAt(
+    (AIRPORT_RUNWAY_BOUNDS.minX + AIRPORT_RUNWAY_BOUNDS.maxX) * 0.5,
+    AIRPORT_RUNWAY_BOUNDS.centerZ
+  );
+  assert.ok(
+    Math.abs(runwayY - AIRPORT_GROUND_Y) < 0.05,
+    `Airport runway should be flat at y=${AIRPORT_GROUND_Y}, got ${runwayY}`
+  );
+
+  // Accelerate down Runway 09 with afterburner & climb into the sky
+  let jet = createInitialAirlinerState();
+  assert.equal(jet.onGround, true);
+  assert.equal(jet.landingGearDown, true);
+
+  for (let i = 0; i < 120; i++) {
+    jet = stepAirlinerState(jet, 1, 0, i > 45, false, true, 0.05, groundHeightAt);
+  }
+  assert.equal(jet.onGround, false, 'DL-787 Dreamliner should lift off cleanly at takeoff speed');
+  assert.ok(jet.altitudeM > 15, `Expected DL-787 climb altitude > 15m, got ${jet.altitudeM}m`);
+  assert.ok(jet.speedKmh > 140, `Expected high jet cruise speed > 140 km/h, got ${jet.speedKmh} km/h`);
+  assert.equal(jet.landingGearDown, false, 'Landing gear should retract cleanly once airborne above climb threshold');
+});
+
+test('En Illam 3rd Floor Hero Hall (y=7.0m) preserves continuous Rooftop Helipad (y=10.4m), Parachute glides anywhere, and Hero HQ stands at intersection', () => {
+  // En Illam 3rd Floor Hero Character-Switching Hall sits at y=7.0m
+  const heroHallY = walkableHeightWithFloor(HOME_CENTER.x, HOME_CENTER.z, 7.0);
+  assert.ok(
+    Math.abs(heroHallY - 7.0) < 0.15,
+    `Expected En Illam 3rd Floor Hero Hall deck at y=7.0m, got ${heroHallY}`
+  );
+  // Rooftop Helipad remains continuously walkable above at y=10.4m
+  const helipadY = walkableHeightWithFloor(HOME_CENTER.x, HOME_CENTER.z, 10.4);
+  assert.ok(
+    Math.abs(helipadY - 10.4) < 0.15,
+    `Expected En Illam Rooftop Helipad deck preserved at y=10.4m, got ${helipadY}`
+  );
+
+  // Parachute glide descends smoothly from Airport Parachute Test Tower outside Metro City and lands gently
+  let chute = { ...createInitialParachuteState(), active: true };
+  let px: number = PARACHUTE_TOWER_POS.x;
+  let py: number = PARACHUTE_TOWER_POS.deckY;
+  let pz: number = PARACHUTE_TOWER_POS.z;
+  let landed = false;
+  for (let i = 0; i < 220; i++) {
+    const res = stepParachuteGlide(chute, px, py, pz, 1, 0.25, 0, AIRPORT_GROUND_Y, 0.05);
+    px = res.x;
+    py = res.y;
+    pz = res.z;
+    chute = res.state;
+    if (res.landed) {
+      landed = true;
+      break;
+    }
+  }
+  assert.equal(landed, true, 'Parachute must glide smoothly down from Airport Test Tower and land safely');
+  assert.equal(chute.active, false, 'Parachute must auto-fold cleanly on touchdown');
+  assert.ok(
+    Math.hypot(px - PARACHUTE_TOWER_POS.x, pz - PARACHUTE_TOWER_POS.z) > 25,
+    'Parachute glide should carry the player horizontally across the airfield'
+  );
+
+  // Hero Command HQ stands at the Superheroes Intersection with solid structural collider
+  const hqCol = getHeroHqCollider();
+  assert.ok(
+    HERO_HQ_INTERSECTION_POS.x > hqCol.minX && HERO_HQ_INTERSECTION_POS.x < hqCol.maxX &&
+    HERO_HQ_INTERSECTION_POS.z > hqCol.minZ && HERO_HQ_INTERSECTION_POS.z < hqCol.maxZ
+  );
+});
+
+test('WeatherEffectsOverlay resolves all weather types, adapts seasonally, and wraps 2D particles cleanly across ticks', () => {
+  const springBreeze = resolveWeatherOverlayConfig('breeze', 'spring', 'sunset');
+  assert.equal(springBreeze.kind, 'sakura_petals');
+  assert.ok(springBreeze.count >= 40);
+
+  const autumnBreeze = resolveWeatherOverlayConfig('breeze', 'autumn', 'golden');
+  assert.equal(autumnBreeze.kind, 'autumn_leaves');
+
+  const gentleRain = resolveWeatherOverlayConfig('rain', 'spring', 'afternoon');
+  assert.equal(gentleRain.kind, 'rain_streaks');
+  assert.equal(gentleRain.splashEnabled, true);
+
+  const ferocious = resolveWeatherOverlayConfig('ferocious_rain', 'spring', 'night');
+  assert.equal(ferocious.kind, 'storm_rain');
+  assert.ok(ferocious.count > gentleRain.count, 'Ferocious rain should spawn denser streaks than gentle rain');
+  assert.ok(ferocious.fallVyMax > gentleRain.fallVyMax);
+  assert.ok(ferocious.lightningRate > 0);
+
+  const snow = resolveWeatherOverlayConfig('snow', 'winter', 'night');
+  assert.equal(snow.kind, 'snowflakes');
+  assert.ok(snow.count >= 70);
+
+  const fog = resolveWeatherOverlayConfig('fog', 'autumn', 'morning');
+  assert.equal(fog.kind, 'fog_wisps');
+
+  const clearSpring = resolveWeatherOverlayConfig('clear', 'spring', 'sunset');
+  assert.equal(clearSpring.kind, 'sakura_petals');
+  assert.ok(clearSpring.count < springBreeze.count, 'Clear sky petals should stay subtler than breeze');
+
+  // Step seeded particles for 4 seconds and verify finite, wrapped viewport coordinates & movement
+  const width = 1440;
+  const height = 900;
+  const rainParticles = createWeatherOverlayParticles(gentleRain, width, height);
+  assert.equal(rainParticles.length, gentleRain.count);
+  const initialY0 = rainParticles[0].y;
+  for (let i = 0; i < 80; i++) {
+    stepWeatherOverlayParticles(rainParticles, gentleRain, width, height, 0.05, i * 0.05);
+  }
+  assert.notEqual(rainParticles[0].y, initialY0, 'Rain particles must move across frames');
+  for (const p of rainParticles) {
+    assert.ok(Number.isFinite(p.x) && Number.isFinite(p.y));
+    assert.ok(p.x >= -60 && p.x <= width + 60, `Particle x out of wrap bounds: ${p.x}`);
+    assert.ok(p.y >= -60 && p.y <= height + 60, `Particle y out of wrap bounds: ${p.y}`);
+  }
+
+  // Vignette profile intensifies during stormy & snowy weather and adds icy frost rim for snow
+  const clearVignette = resolveWeatherVignetteProfile('clear', 'spring', 'afternoon');
+  const rainVignette = resolveWeatherVignetteProfile('rain', 'spring', 'afternoon');
+  const heavyRainVignette = resolveWeatherVignetteProfile('heavy_rain', 'spring', 'afternoon');
+  const thunderVignette = resolveWeatherVignetteProfile('thunderstorm', 'spring', 'afternoon');
+  const ferociousVignette = resolveWeatherVignetteProfile('ferocious_rain', 'spring', 'night');
+  const snowVignette = resolveWeatherVignetteProfile('snow', 'winter', 'afternoon');
+
+  assert.equal(clearVignette.tone, 'calm');
+  assert.equal(rainVignette.tone, 'rain');
+  assert.equal(heavyRainVignette.tone, 'storm');
+  assert.equal(thunderVignette.tone, 'deluge');
+  assert.equal(ferociousVignette.tone, 'deluge');
+  assert.equal(ferociousVignette.nightDeepened, true);
+  assert.equal(snowVignette.tone, 'snow');
+  assert.equal(snowVignette.frostRim, true);
+  assert.equal(thunderVignette.frostRim, false);
+
+  assert.ok(
+    rainVignette.intensity > clearVignette.intensity &&
+      heavyRainVignette.intensity > rainVignette.intensity &&
+      thunderVignette.intensity > heavyRainVignette.intensity &&
+      ferociousVignette.intensity >= thunderVignette.intensity,
+    'Vignette intensity must escalate monotonically from clear -> rain -> storm -> deluge'
+  );
+  assert.ok(
+    snowVignette.intensity > clearVignette.intensity + 0.4,
+    'Snow vignette should substantially intensify over clear sky'
+  );
+});
+
+test('Night mode maintains a deep starry night sky while lighting up both world night lamps and train lights at full warmth', () => {
+  assert.equal(computeNightBlackoutFactor(13.0), 0);
+  assert.equal(computeNightBlackoutFactor(17.75), 0);
+  assert.equal(computeNightBlackoutFactor(22.0), 1);
+  assert.equal(computeNightBlackoutFactor(1.5), 1);
+
+  const nightClear = computeSkyPalette(TIME_PRESET_HOURS.night, 'clear', 'spring');
+  const nightWinterSnow = computeSkyPalette(TIME_PRESET_HOURS.night, 'snow', 'winter');
+  const sunsetClear = computeSkyPalette(TIME_PRESET_HOURS.sunset, 'clear', 'spring');
+  const middayClear = computeSkyPalette(TIME_PRESET_HOURS.afternoon, 'clear', 'spring');
+
+  // At full night, sky stays dark & starry while BOTH world street/station lamps and train lights shine at 1.0
+  assert.equal(nightClear.nightDarkness, 1);
+  assert.ok(nightClear.hemiIntensity <= 0.2, `Expected dark night hemiIntensity <= 0.2, got ${nightClear.hemiIntensity}`);
+  assert.ok(nightClear.sunIntensity <= 0.12, `Expected subtle moonlight sunIntensity <= 0.12, got ${nightClear.sunIntensity}`);
+  assert.ok(nightClear.starOpacity > 0.9, 'Stars should shine vividly at night');
+  assert.equal(nightClear.worldLanternStrength, 1.0, 'World streetlamps & station lights must illuminate at night');
+  assert.equal(nightClear.lanternStrength, 1.0, 'Train lighting must remain at full 1.0 strength at night');
+
+  // Winter snow at night also keeps world lamps brightly illuminated
+  assert.equal(nightWinterSnow.nightDarkness, 1);
+  assert.equal(nightWinterSnow.worldLanternStrength, 1.0);
+  assert.equal(nightWinterSnow.lanternStrength, 1.0);
+
+  // Midday turns world lamps off, while sunset warms them up cleanly
+  assert.equal(middayClear.worldLanternStrength, 0);
+  assert.equal(sunsetClear.nightDarkness, 0);
+  assert.ok(sunsetClear.worldLanternStrength > 0.7);
+});
+
+test('Personal player lantern auto-illuminates at night, honors manual toggles, flickers warmly, sways on movement, and stows in enclosed vehicles', () => {
+  let state = createInitialPlayerLanternState();
+  assert.equal(state.isOn, false);
+  assert.equal(state.manualOverride, null);
+
+  // Daytime & Sunset (17:43) -> lantern stays off & hidden until Night falls
+  state = stepPlayerLantern(state, {
+    dt: 0.1,
+    elapsed: 1.0,
+    worldLanternStrength: 0.0,
+    nightDarkness: 0.0,
+    inDarkInterior: false,
+    playerSpeed: 0,
+    turnRate: 0,
+    stowedInVehicle: false,
+  });
+  assert.equal(state.isOn, false);
+  assert.equal(state.effectiveIntensity, 0);
+
+  state = stepPlayerLantern(state, {
+    dt: 0.1,
+    elapsed: 1.5,
+    worldLanternStrength: 0.92,
+    nightDarkness: 0.0,
+    inDarkInterior: false,
+    playerSpeed: 2.0,
+    turnRate: 0,
+    stowedInVehicle: false,
+  });
+  assert.equal(state.isOn, false, 'Lantern must stay hidden at Sunset and only auto-appear at Night');
+  assert.equal(state.effectiveIntensity, 0);
+
+  // Night falls -> lantern turns on automatically and ramps brightness smoothly
+  for (let i = 0; i < 12; i++) {
+    state = stepPlayerLantern(state, {
+      dt: 0.05,
+      elapsed: 2.0 + i * 0.05,
+      worldLanternStrength: 1.0,
+      nightDarkness: 1.0,
+      inDarkInterior: false,
+      playerSpeed: 4.5,
+      turnRate: 0.9,
+      stowedInVehicle: false,
+    });
+  }
+  assert.equal(state.isOn, true, 'Lantern should auto-light at night');
+  assert.ok(state.brightness > 0.9, `Expected lantern brightness > 0.9, got ${state.brightness}`);
+  assert.ok(state.effectiveIntensity > 8.0, `Expected warm night intensity > 8.0, got ${state.effectiveIntensity}`);
+  assert.ok(state.effectiveRange >= 28, `Expected generous night throw >= 28m, got ${state.effectiveRange}`);
+  assert.ok(state.flickerFactor > 0.88 && state.flickerFactor < 1.12, 'Flicker should stay natural');
+  assert.ok(Math.abs(state.swingAngleX) > 0.01 && Math.abs(state.swingAngleZ) > 0.01, 'Lantern should sway with walking and turning');
+
+  // Manual toggle turns lantern OFF even at night
+  state = togglePlayerLantern(state);
+  assert.equal(state.isOn, false);
+  assert.equal(state.manualOverride, false);
+  for (let i = 0; i < 15; i++) {
+    state = stepPlayerLantern(state, {
+      dt: 0.05,
+      elapsed: 4.0 + i * 0.05,
+      worldLanternStrength: 1.0,
+      nightDarkness: 1.0,
+      inDarkInterior: false,
+      playerSpeed: 0,
+      turnRate: 0,
+      stowedInVehicle: false,
+    });
+  }
+  assert.equal(state.isOn, false, 'Manual OFF override must stay OFF at night');
+  assert.ok(state.brightness < 0.05, 'Lantern brightness should fade smoothly to 0');
+
+  // Manual toggle turns lantern ON even in broad daylight
+  state = togglePlayerLantern(state);
+  assert.equal(state.isOn, true);
+  assert.equal(state.manualOverride, true);
+  for (let i = 0; i < 12; i++) {
+    state = stepPlayerLantern(state, {
+      dt: 0.05,
+      elapsed: 6.0 + i * 0.05,
+      worldLanternStrength: 0.0,
+      nightDarkness: 0.0,
+      inDarkInterior: false,
+      playerSpeed: 0,
+      turnRate: 0,
+      stowedInVehicle: false,
+    });
+  }
+  assert.equal(state.isOn, true);
+  assert.ok(state.effectiveIntensity > 5.0, 'Manual lantern ON should still emit warm glow in daytime');
+
+  // Stowing inside enclosed vehicle fades out handheld lantern cleanly without losing user toggle
+  for (let i = 0; i < 15; i++) {
+    state = stepPlayerLantern(state, {
+      dt: 0.05,
+      elapsed: 8.0 + i * 0.05,
+      worldLanternStrength: 1.0,
+      nightDarkness: 1.0,
+      inDarkInterior: false,
+      playerSpeed: 10,
+      turnRate: 0,
+      stowedInVehicle: true,
+    });
+  }
+  assert.ok(state.brightness < 0.05, 'Lantern should tuck away inside enclosed vehicle');
+  state = setPlayerLanternOverride(state, null);
+  assert.equal(state.manualOverride, null);
+});
+
+test('Smooth moving-screen camera & locomotion spring-dampers converge monotonically without overshoot across 30/60/144Hz', () => {
+  // 1. Frame dt filter rejects huge tab-switch spikes
+  const spikeDt = filterFrameDt(0.016, 0.85, false);
+  assert.ok(spikeDt < 0.06, `Expected dt spike filtered smoothly, got ${spikeDt}`);
+
+  // 2. Critically damped scalar spring converges to target with zero overshoot across 30Hz and 144Hz
+  for (const hz of [30, 60, 144]) {
+    const dt = 1 / hz;
+    let val = 0;
+    let vel = 0;
+    let maxVal = 0;
+    const steps = Math.round(1.5 * hz);
+    for (let i = 0; i < steps; i++) {
+      const next = dampScalarSpring(val, 10, vel, 0.14, dt);
+      val = next.value;
+      vel = next.velocity;
+      if (val > maxVal) maxVal = val;
+    }
+    assert.ok(Math.abs(val - 10) < 0.05, `At ${hz}Hz spring must converge to 10, got ${val}`);
+    assert.ok(maxVal <= 10.02, `Critically damped spring must not overshoot at ${hz}Hz, max=${maxVal}`);
+  }
+
+  // 3. Angle spring wraps cleanly across ±PI boundary without spinning the long way
+  let angle = Math.PI - 0.15;
+  let angVel = 0;
+  const targetAngle = -Math.PI + 0.15;
+  for (let i = 0; i < 40; i++) {
+    const next = dampAngleSpring(angle, targetAngle, angVel, 0.1, 1 / 60);
+    angle = next.value;
+    angVel = next.velocity;
+    assert.ok(Math.abs(angle) > 2.5, `Angle spring must cross ±PI directly, wandered to ${angle}`);
+  }
+
+  // 4. Decoupled screen orbit responds smoothly with inertia & asymmetric boom pull-in/recovery + flight FOV
+  const cam = createInitialSmoothCameraState(0, 0.25, 6.0);
+  syncSmoothCameraImmediate(cam, {
+    yaw: 0,
+    pitch: 0.25,
+    distance: 6.0,
+    posX: 0,
+    posY: 3.0,
+    posZ: 6.0,
+    lookX: 0,
+    lookY: 1.4,
+    lookZ: 0,
+    anchorX: 0,
+    anchorY: 0,
+    anchorZ: 0,
+    fov: 52,
+  });
+  applyScreenOrbitInput(cam, 120, -25, 1.0, 1 / 60);
+  applyScreenZoomInput(cam, 120);
+  const yawBefore = cam.yaw;
+  stepSmoothCameraOrbit(cam, {
+    dt: 1 / 60,
+    isDragging: false,
+    autoFollowYaw: null,
+    autoFollowStrength: 0,
+    minPitch: -0.18,
+    maxPitch: 1.05,
+  });
+  assert.notEqual(cam.yaw, yawBefore, 'Smoothed screen orbit must move cleanly toward pointer target');
+
+  // Wall pull-in snaps fast while open recovery eases gently
+  const pullIn = stepSmoothCameraRig(cam, {
+    dt: 0.05,
+    anchorX: 2,
+    anchorY: 0,
+    anchorZ: 0,
+    velX: 12,
+    velY: 0,
+    velZ: 0,
+    baseDistance: 6.0,
+    focusHeight: 1.4,
+    desiredBoomScale: 0.4,
+    minCamY: 0.6,
+    baseFov: 52,
+    verticalLift: 0.35,
+    isFlying: true,
+    isWebSwinging: false,
+    isSprinting: true,
+    isHero: true,
+  });
+  assert.ok(cam.boomScale < 0.72, `Boom must pull in rapidly on wall collision, got ${cam.boomScale}`);
+  assert.ok(pullIn.fov > 52.0, `Dynamic hero flight FOV should widen smoothly above 52, got ${pullIn.fov}`);
+
+  // 5. Smooth locomotion filters start/stop ramps and smooths visual Y across stairs
+  const loco = createInitialSmoothLocomotionState(0, 0);
+  syncSmoothLocomotionImmediate(loco, 0, 0, 0, 0);
+  const move1 = filterMovementInput(loco, 1, 0, 0.016);
+  assert.ok(move1.forward > 0 && move1.forward < 0.7, 'Start ramp must ease smoothly instead of snapping to 1');
+  const visStep = stepSmoothLocomotionVisuals(loco, {
+    dt: 0.016,
+    physX: 1,
+    physY: 0.45,
+    physZ: 0,
+    targetHeading: Math.PI * 0.5,
+    hasHeadingTarget: true,
+    speed: 6.5,
+    verticalVel: 0,
+    isAirborne: false,
+    isFlying: false,
+    isGliding: false,
+    isWebSwinging: false,
+    isHero: true,
+    turnSmoothTime: 0.085,
+  });
+  assert.ok(visStep.visualY > 0 && visStep.visualY < 0.45, 'Stair step visual Y must glide smoothly without popping');
+});
+
+test('Secret Underground House Floor stays hidden until house button is pressed, holds all 7 Hero Costumes, and drives 4 garage cars out to the surface', () => {
+  // 1. Starts completely hidden flush beneath En Illam floor
+  let vault = createInitialHomeVaultState();
+  assert.equal(vault.hatchUnlocked, false);
+  assert.equal(vault.hatchOpenProgress, 0);
+  assert.equal(vault.inVault, false);
+  assert.equal(vault.cars.length, 3);
+  assert.equal(VAULT_CAR_SPECS.length, 3);
+  assert.equal(VAULT_HERO_PODS.length, HERO_CHARACTERS.length, 'All 7 superhero costumes must be ready to wear in underground pods');
+
+  // Inside En Illam detection works on surface and returns false underground
+  assert.equal(isPlayerInsidePersonalHome(HOME_CENTER.x, 0.5, HOME_CENTER.z, false), true);
+  assert.equal(isPlayerInsidePersonalHome(HOME_CENTER.x, VAULT_FLOOR_Y, HOME_CENTER.z, true), false);
+  assert.equal(isPlayerInsidePersonalHome(120, 0.5, 120, false), false);
+
+  // 2. Clicking the hidden house button opens the sliding floor hatch smoothly from 0 -> 1
+  vault = toggleSecretVaultHatch(vault);
+  assert.equal(vault.hatchUnlocked, true);
+  for (let i = 0; i < 20; i++) {
+    vault = stepSecretHatchAnimation(vault, 0.05);
+  }
+  assert.equal(vault.hatchOpenProgress, 1, 'Secret floor hatch must open fully to 1.0');
+
+  // 3. Large 56m x 48m underground bunker clamps walking/driving cleanly within walls
+  const clamped = clampVaultPosition(99, -99, 1.4);
+  assert.equal(clamped.hitWall, true);
+  assert.equal(clamped.x, VAULT_HALF_X - 1.4);
+  assert.equal(clamped.z, -VAULT_HALF_Z + 1.4);
+
+  // 4. Driving an underground vault car inside the garage and straight out the East Exit Tunnel onto the surface
+  let car: VaultCarRuntimeState = {
+    ...vault.cars[0],
+    x: VAULT_EXIT_TUNNEL_POS.x - 4.0,
+    z: VAULT_EXIT_TUNNEL_POS.z,
+    heading: Math.PI * 0.5, // Facing +X directly toward East Exit Tunnel
+    inVault: true,
+  };
+  let exitedSurface = false;
+  for (let i = 0; i < 40; i++) {
+    const res = stepVaultCarState(car, 1, 0, true, false, 0.05);
+    car = res.state;
+    if (res.exitedToSurface) {
+      exitedSurface = true;
+      break;
+    }
+  }
+  assert.equal(exitedSurface, true, 'Driving a Vault Car through the East Exit Tunnel must seamlessly emerge onto the surface');
+  assert.equal(car.inVault, false);
+  assert.equal(Math.round(car.x), Math.round(VAULT_SURFACE_DRIVE_EXIT.x));
+  assert.equal(Math.round(car.z), Math.round(VAULT_SURFACE_DRIVE_EXIT.z));
+
+  // 5. Batmobile starts parked in Underground Vault Bay 4 and can also drive seamlessly out through East Exit Tunnel
+  let bat = createInitialBatmobileState();
+  assert.equal(bat.inVault, true);
+  assert.equal(bat.x, VAULT_BATMOBILE_BAY.x);
+  assert.equal(bat.y, VAULT_FLOOR_Y);
+  assert.equal(isInsideVaultDriveExitTunnel(VAULT_EXIT_TUNNEL_POS.x, VAULT_EXIT_TUNNEL_POS.z), true);
+  bat = {
+    ...bat,
+    x: VAULT_EXIT_TUNNEL_POS.x - 4.0,
+    z: VAULT_EXIT_TUNNEL_POS.z,
+    heading: Math.PI * 0.5,
+    inVault: true,
+  };
+  let batExited = false;
+  for (let i = 0; i < 40; i++) {
+    const res = stepBatmobileState(bat, 1, 0, true, false, 0.05);
+    bat = res.state;
+    if (res.exitedToSurface) {
+      batExited = true;
+      break;
+    }
+  }
+  assert.equal(batExited, true, 'Driving Batmobile through East Exit Tunnel must emerge onto surface driveway');
+  assert.equal(bat.inVault, false);
+});
+
+
+
+
+
+
+
+
+
 
 

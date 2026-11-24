@@ -7,6 +7,7 @@ import {
   SNOW_PEAK_CENTER,
   WATERFALL_CENTER,
   WATER_LEVEL,
+  distanceToRail,
   groundHeightAt,
   type AabbCollider,
 } from '../game/terrain';
@@ -150,6 +151,50 @@ export function buildRegionsWorld(textures: ProceduralTextureSet): RegionsWorldS
   oceanMesh.position.set(305, WATER_LEVEL + 0.03, 165);
   group.add(oceanMesh);
 
+  // Seamless Infinite Horizon Ocean extending 7,000m to the horizon across east & south seas!
+  const infiniteOceanMat = new THREE.ShaderMaterial({
+    transparent: false,
+    uniforms: oceanUniforms,
+    vertexShader: `
+      varying vec3 vWorldPos;
+      void main() {
+        vec4 worldPos = modelMatrix * vec4(position, 1.0);
+        vWorldPos = worldPos.xyz;
+        gl_Position = projectionMatrix * viewMatrix * worldPos;
+      }
+    `,
+    fragmentShader: `
+      uniform float uTime;
+      uniform vec3 uSkyColor;
+      uniform vec3 uSunColor;
+      uniform vec3 uSunDir;
+      varying vec3 vWorldPos;
+      void main() {
+        float w1 = sin(vWorldPos.x * 0.045 + uTime * 0.9) * cos(vWorldPos.z * 0.045 - uTime * 0.7);
+        vec3 normal = normalize(vec3(w1 * 0.05, 1.0, w1 * 0.05));
+        vec3 viewDir = normalize(cameraPosition - vWorldPos);
+        float dist = length(cameraPosition.xz - vWorldPos.xz);
+        float fresnel = pow(1.0 - max(dot(viewDir, normal), 0.0), 2.8);
+        vec3 deepCol = vec3(0.06, 0.24, 0.44);
+        vec3 reflectDir = reflect(-normalize(uSunDir), normal);
+        float spec = pow(max(dot(viewDir, reflectDir), 0.0), 42.0);
+        float horizonBlend = smoothstep(420.0, 2200.0, dist);
+        vec3 col = mix(deepCol, uSkyColor, clamp(fresnel * 0.65 + horizonBlend * 0.92, 0.0, 1.0));
+        col += uSunColor * spec * (1.0 - horizonBlend) * 0.85;
+        gl_FragColor = vec4(col, 1.0);
+      }
+    `,
+  });
+  // East infinite ocean expanse (x: 118..7118, z: -2600..4400)
+  const infOceanEast = new THREE.Mesh(new THREE.PlaneGeometry(7000, 7000, 1, 1), infiniteOceanMat);
+  infOceanEast.rotation.x = -Math.PI / 2;
+  infOceanEast.position.set(3618, WATER_LEVEL - 0.05, 900);
+  // South infinite ocean expanse (x: -2400..4600, z: 452..5452)
+  const infOceanSouth = new THREE.Mesh(new THREE.PlaneGeometry(7000, 5000, 1, 1), infiniteOceanMat);
+  infOceanSouth.rotation.x = -Math.PI / 2;
+  infOceanSouth.position.set(1100, WATER_LEVEL - 0.06, 2952);
+  group.add(infOceanEast, infOceanSouth);
+
   // Tall Red-and-White Kadalkarai Lighthouse at (114, 42)
   const lhGroup = new THREE.Group();
   const lhX = 114;
@@ -226,33 +271,6 @@ export function buildRegionsWorld(textures: ProceduralTextureSet): RegionsWorldS
   const harbourBulb = new THREE.Mesh(new THREE.SphereGeometry(0.22, 8, 8), warmWinMat);
   harbourBulb.position.set(118.6, 3.9, 60.1);
   group.add(harbourLampPost, harbourBulb);
-
-  // Sovereign of the Tides Dedicated Timber Boarding Pier & Gangway (x: 103.5..123.0, z: 46.2..51.0)
-  const sovPierDeck = new THREE.Mesh(new THREE.BoxGeometry(19.6, 0.26, 4.6), darkWoodMat);
-  sovPierDeck.position.set(113.2, 0.23, 48.6);
-  sovPierDeck.receiveShadow = true;
-  group.add(sovPierDeck);
-  const sovGangway = new THREE.Mesh(new THREE.BoxGeometry(2.8, 0.14, 2.2), woodMat);
-  sovGangway.position.set(123.2, 0.42, 48.6);
-  sovGangway.rotation.z = 0.08;
-  group.add(sovGangway);
-  for (const px of [104.5, 108.5, 112.5, 116.5, 120.5, 122.4]) {
-    for (const pz of [46.5, 50.7]) {
-      const piling = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.22, 2.5, 8), darkWoodMat);
-      piling.position.set(px, -0.22, pz);
-      group.add(piling);
-      const bollard = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.16, 0.72, 8), woodMat);
-      bollard.position.set(px, 0.72, pz);
-      group.add(bollard);
-    }
-  }
-  for (const lx of [106.0, 121.6]) {
-    const lPost = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.1, 3.3, 8), darkWoodMat);
-    lPost.position.set(lx, 1.95, 46.7);
-    const lBulb = new THREE.Mesh(new THREE.SphereGeometry(0.22, 8, 8), warmWinMat);
-    lBulb.position.set(lx, 3.68, 46.7);
-    group.add(lPost, lBulb);
-  }
 
   // Sovereign of the Tides Dedicated Timber Boarding Pier & Gangway (x: 103.5..123.0, z: 46.2..51.0)
   // Connects Kadalkarai sandy beach straight to the moored 3-masted historical ship!
@@ -415,11 +433,11 @@ export function buildRegionsWorld(textures: ProceduralTextureSet): RegionsWorldS
   frozenLake.position.set(FROZEN_LAKE_CENTER.x, 2.95, FROZEN_LAKE_CENTER.z);
   group.add(frozenLake);
 
-  // Alpine Snowy Crag Peaks around SNOW_PEAK_CENTER
+  // Alpine Snowy Crag Peaks framing Panimalai Snow Summit Station & Frozen Kingdom (clear of rails & station!)
   const peakSpecs = [
-    { x: SNOW_PEAK_CENTER.x, z: SNOW_PEAK_CENTER.z, r: 22, h: 28 },
-    { x: -134, z: -84, r: 17, h: 22 },
-    { x: -94, z: -126, r: 19, h: 24 },
+    { x: SNOW_PEAK_CENTER.x, z: SNOW_PEAK_CENTER.z, r: 15.5, h: 25 },
+    { x: -136, z: -64, r: 15, h: 22 },
+    { x: -72, z: -158, r: 20, h: 28 },
   ];
   for (const pk of peakSpecs) {
     const py = groundHeightAt(pk.x, pk.z);
@@ -453,6 +471,8 @@ export function buildRegionsWorld(textures: ProceduralTextureSet): RegionsWorldS
     if (Math.hypot(rx + 80, rz + 84) < 24) continue;
     if (isNearFrozenKingdomClearing(rx, rz)) continue;
     if (Math.hypot(rx - ICELAND_RETURN_GATE_POS.x, rz - ICELAND_RETURN_GATE_POS.z) < 9) continue;
+    if (distanceToRail(rx, rz) < 9.5) continue;
+    if (Math.hypot(rx + 100, rz + 128) < 15.5) continue;
     const py = groundHeightAt(rx, rz);
     const sc = 0.85 + ((i * 17) % 10) * 0.06;
 

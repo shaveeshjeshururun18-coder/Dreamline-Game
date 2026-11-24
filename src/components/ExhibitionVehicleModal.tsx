@@ -15,6 +15,7 @@ import type {
   ExhibitionVehicleEntry,
   ExhibitionVehicleId,
 } from '../game/exhibitionComplex';
+import { getVehiclePreviewImage } from './vehiclePreviews';
 
 interface ExhibitionVehicleModalProps {
   vehicle: ExhibitionVehicleEntry;
@@ -124,6 +125,26 @@ export const ExhibitionVehicleModal: React.FC<ExhibitionVehicleModalProps> = ({
 
         {/* Body */}
         <div className="p-5 space-y-4">
+          {/* Generated Showroom Vehicle Preview Thumbnail */}
+          <div className="relative h-36 w-full rounded-xl overflow-hidden border border-white/15 bg-[#0a0f1c] shadow-lg">
+            <img
+              src={getVehiclePreviewImage(vehicle.id)}
+              alt={vehicle.name}
+              referrerPolicy="no-referrer"
+              data-testid={`exhibition-preview-${vehicle.id}`}
+              className="w-full h-full object-cover"
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-[#111622]/85 via-transparent to-transparent pointer-events-none" />
+            <div className="absolute bottom-2 left-3 right-3 flex items-center justify-between text-[11px]">
+              <span className="font-semibold text-white/95 drop-shadow">
+                {vehicle.specs.originRegion}
+              </span>
+              <span className="px-2 py-0.5 rounded bg-slate-950/80 border border-white/15 font-mono text-[10px] text-amber-200">
+                {vehicle.specs.topSpeed}
+              </span>
+            </div>
+          </div>
+
           {tab === 'overview' ? (
             <>
               <p className="text-sm text-slate-200/90 leading-relaxed">

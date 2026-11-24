@@ -99,6 +99,7 @@ export function computeEffectiveTemperatureC(
 
   // Regional microclimate offset
   if (regionId === 'snow') base -= 13;
+  else if (regionId === 'desert') base += 9.5;
   else if (regionId === 'coastal') base -= 1.5;
   else if (regionId === 'lake_camp') base -= 1.0;
   else if (regionId === 'countryside') base += 0.5;

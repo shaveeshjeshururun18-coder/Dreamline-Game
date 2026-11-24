@@ -1,7 +1,6 @@
 import type { TimePeriod, WeatherType } from '../game/types';
 import { getWeatherProfile } from '../game/extremeWeather';
 import type { StationAnnouncement, StationCrowdProfile } from '../game/stationAnnouncements';
-import type { StationAnnouncement, StationCrowdProfile } from '../game/stationAnnouncements';
 
 /**
  * 100% Procedural Web Audio API soundscape engine for DREAMLINE:
@@ -442,97 +441,6 @@ export class DreamlineAudio {
       osc.start(t);
       osc.stop(t + 0.95);
     });
-  }
-
-  /**
-   * Procedurally synthesizes a region-specific station platform PA announcement:
-   * 1) Signature regional hassha melody chime
-   * 2) Soft vintage platform loudspeaker cadence (bandpass-filtered formant syllables + slapback echo)
-   */
-  public playStationAnnouncement(announcement: StationAnnouncement): void {
-    if (!this.unlocked || !this.ctx || !this.masterSfx || this.muted) return;
-    const ctx = this.ctx;
-    const now = ctx.currentTime;
-
-    const notes = announcement.chimeNotes;
-    const step = announcement.chimeTempoSec;
-    for (let i = 0; i < notes.length; i++) {
-      const t = now + i * step;
-      const osc = ctx.createOscillator();
-      const harm = ctx.createOscillator();
-      const gain = ctx.createGain();
-      const hGain = ctx.createGain();
-      osc.type = announcement.chimeWave;
-      harm.type = 'sine';
-      osc.frequency.setValueAtTime(notes[i], t);
-      harm.frequency.setValueAtTime(notes[i] * 2, t);
-      hGain.gain.value = 0.22;
-
-      gain.gain.setValueAtTime(0.0008, t);
-      gain.gain.linearRampToValueAtTime(0.072, t + 0.02);
-      gain.gain.exponentialRampToValueAtTime(0.0007, t + 0.88);
-
-      osc.connect(gain);
-      harm.connect(hGain);
-      hGain.connect(gain);
-      gain.connect(this.masterSfx);
-      osc.start(t);
-      harm.start(t);
-      osc.stop(t + 0.92);
-      harm.stop(t + 0.92);
-    }
-
-    const paStart = now + notes.length * step + 0.26;
-    const paBus = ctx.createBiquadFilter();
-    paBus.type = 'bandpass';
-    paBus.frequency.value = 1180;
-    paBus.Q.value = 1.4;
-
-    const paMaster = ctx.createGain();
-    paMaster.gain.value = 0.042;
-    paBus.connect(paMaster);
-    paMaster.connect(this.masterSfx);
-
-    const echoDelay = ctx.createDelay(0.3);
-    echoDelay.delayTime.value = 0.125;
-    const echoGain = ctx.createGain();
-    echoGain.gain.value = 0.34;
-    paMaster.connect(echoDelay);
-    echoDelay.connect(echoGain);
-    echoGain.connect(this.masterSfx);
-
-    const syllables = Math.min(10, Math.max(5, Math.round(announcement.syllableCount * 0.65)));
-    let cursor = paStart;
-    for (let s = 0; s < syllables; s++) {
-      const isPause = s === Math.floor(syllables / 2);
-      if (isPause) cursor += 0.11;
-      const dur = 0.095 + ((s * 37) % 5) * 0.014;
-      const intonation = 1 + Math.sin((s / syllables) * Math.PI) * 0.14 - (s === syllables - 1 ? 0.16 : 0);
-      const pitch = announcement.voicePitchHz * intonation;
-
-      const vOsc = ctx.createOscillator();
-      vOsc.type = 'sawtooth';
-      vOsc.frequency.setValueAtTime(pitch, cursor);
-      vOsc.frequency.linearRampToValueAtTime(pitch * (s % 2 === 0 ? 1.05 : 0.94), cursor + dur);
-
-      const vowelFilter = ctx.createBiquadFilter();
-      vowelFilter.type = 'bandpass';
-      vowelFilter.frequency.setValueAtTime(620 + ((s * 211) % 720), cursor);
-      vowelFilter.Q.value = 3.6;
-
-      const sGain = ctx.createGain();
-      sGain.gain.setValueAtTime(0.0006, cursor);
-      sGain.gain.linearRampToValueAtTime(0.65, cursor + 0.018);
-      sGain.gain.exponentialRampToValueAtTime(0.0008, cursor + dur);
-
-      vOsc.connect(vowelFilter);
-      vowelFilter.connect(sGain);
-      sGain.connect(paBus);
-      vOsc.start(cursor);
-      vOsc.stop(cursor + dur + 0.02);
-
-      cursor += dur + 0.042;
-    }
   }
 
   /**
@@ -1027,6 +935,66 @@ export class DreamlineAudio {
     gain.connect(this.masterSfx);
     osc.start(now);
     osc.stop(now + 0.92);
+  }
+
+  public playRepulsorBlast(): void {
+    if (!this.unlocked || !this.ctx || !this.masterSfx || this.muted) return;
+    const now = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(980, now);
+    osc.frequency.exponentialRampToValueAtTime(160, now + 0.34);
+    gain.gain.setValueAtTime(0.001, now);
+    gain.gain.linearRampToValueAtTime(0.16, now + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.36);
+    osc.connect(gain);
+    gain.connect(this.masterSfx);
+    osc.start(now);
+    osc.stop(now + 0.38);
+  }
+
+  public playWebShoot(): void {
+    if (!this.unlocked || !this.ctx || !this.masterSfx || this.muted) return;
+    const now = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(1450, now);
+    osc.frequency.exponentialRampToValueAtTime(420, now + 0.14);
+    gain.gain.setValueAtTime(0.001, now);
+    gain.gain.linearRampToValueAtTime(0.11, now + 0.01);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.16);
+    osc.connect(gain);
+    gain.connect(this.masterSfx);
+    osc.start(now);
+    osc.stop(now + 0.18);
+  }
+
+  public playSeismicSlam(): void {
+    if (!this.unlocked || !this.ctx || !this.masterSfx || this.muted) return;
+    this.playWallBreakBoom(3);
+  }
+
+  public playBatSmash(): void {
+    if (!this.unlocked || !this.ctx || !this.masterSfx || this.muted) return;
+    const now = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.type = 'square';
+    osc.frequency.setValueAtTime(240, now);
+    osc.frequency.exponentialRampToValueAtTime(68, now + 0.16);
+    gain.gain.setValueAtTime(0.001, now);
+    gain.gain.linearRampToValueAtTime(0.14, now + 0.012);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.18);
+    osc.connect(gain);
+    gain.connect(this.masterSfx);
+    osc.start(now);
+    osc.stop(now + 0.2);
+  }
+
+  public playDestructionCrash(): void {
+    this.playWallBreakBoom(2);
   }
 
   public dispose(): void {

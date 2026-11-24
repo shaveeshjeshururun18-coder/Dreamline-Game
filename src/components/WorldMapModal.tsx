@@ -11,6 +11,7 @@ import {
   Plane,
   Ship,
   Sparkles,
+  TrainFront,
   Wind,
   X,
 } from 'lucide-react';
@@ -40,9 +41,22 @@ import {
   EXHIBITION_ISLAND_CENTER,
   EXHIBITION_PLAZA_SPAWN,
 } from '../game/exhibitionComplex';
+import {
+  DESERT_BIOME_CENTER,
+  DESERT_HELIPAD_POS,
+  DESERT_OASIS_CENTER,
+  DESERT_OASIS_RX,
+  DESERT_OASIS_RZ,
+  DESERT_OASIS_SPAWN,
+  DESERT_PYRAMID_CENTER,
+} from '../game/desertOasis';
 import { sampleNavigationPath, type NavigationTarget } from '../game/navigation';
 import type { BusRideDestination } from '../game/busHailing';
 import type { SkyExplorerPadId } from '../game/skyExplorer';
+import {
+  AIRPORT_CENTER,
+  METRO_SURFACE_ENTRANCES,
+} from '../game/airportMetro';
 
 interface WorldMapModalProps {
   hud: HudSnapshot;
@@ -57,6 +71,9 @@ interface WorldMapModalProps {
   onBoardSkyExplorer: (pad?: SkyExplorerPadId) => void;
   onBoardSkyTaxi: () => void;
   onDriveCamper: () => void;
+  onEnterUndergroundMetro: () => void;
+  onBoardAirliner: () => void;
+  onTeleportMidnightFrontier: () => void;
   onClose: () => void;
 }
 
@@ -91,11 +108,14 @@ export const WorldMapModal: React.FC<WorldMapModalProps> = ({
   onBoardSkyExplorer,
   onBoardSkyTaxi,
   onDriveCamper,
+  onEnterUndergroundMetro,
+  onBoardAirliner,
+  onTeleportMidnightFrontier,
   onClose,
 }) => {
   const railPath = useMemo(() => {
     const pts: string[] = [];
-    const steps = 110;
+    const steps = 160;
     for (let i = 0; i <= steps; i++) {
       const s = sampleRailway(i / steps);
       pts.push(`${i === 0 ? 'M' : 'L'} ${toMapX(s.x).toFixed(1)} ${toMapY(s.z).toFixed(1)}`);
@@ -280,6 +300,54 @@ export const WorldMapModal: React.FC<WorldMapModalProps> = ({
                 Pachai Vayal Waterfall
               </text>
 
+              {/* Thar Golden Desert Oasis & Grand Pyramid Ruins (Southwest Expanse) */}
+              <ellipse
+                cx={toMapX(DESERT_BIOME_CENTER.x)}
+                cy={toMapY(DESERT_BIOME_CENTER.z)}
+                rx="66"
+                ry="54"
+                fill="#D99B4E"
+                fillOpacity="0.32"
+                stroke="#F6C873"
+                strokeWidth="1.2"
+                strokeDasharray="4 3"
+              />
+              <ellipse
+                cx={toMapX(DESERT_OASIS_CENTER.x)}
+                cy={toMapY(DESERT_OASIS_CENTER.z)}
+                rx={DESERT_OASIS_RX * MAP_SCALE}
+                ry={DESERT_OASIS_RZ * MAP_SCALE}
+                fill="#1FA896"
+                fillOpacity="0.72"
+                stroke="#8FF4E1"
+                strokeWidth="1.2"
+              />
+              {/* Grand Sandstone Pyramid Marker */}
+              <g transform={`translate(${toMapX(DESERT_PYRAMID_CENTER.x)}, ${toMapY(DESERT_PYRAMID_CENTER.z)})`}>
+                <polygon points="0,-9 10,7 -10,7" fill="#E8B85C" stroke="#5C3A16" strokeWidth="1.3" />
+                <polygon points="0,-9 3,7 -10,7" fill="#C98F3B" fillOpacity="0.45" />
+                <text x="0" y="17" textAnchor="middle" fill="#FFE6A8" fontSize="7.4" fontWeight="700">
+                  Grand Pyramid
+                </text>
+              </g>
+              {/* Desert Helipad Sky Pad */}
+              <g transform={`translate(${toMapX(DESERT_HELIPAD_POS.x)}, ${toMapY(DESERT_HELIPAD_POS.z)})`}>
+                <circle r="4.2" fill="#F59E0B" stroke="#1E293B" strokeWidth="1.1" />
+                <text x="0" y="2.3" textAnchor="middle" fill="#0F172A" fontSize="5.5" fontWeight="800">
+                  H
+                </text>
+              </g>
+              <text
+                x={toMapX(DESERT_BIOME_CENTER.x + 8)}
+                y={toMapY(DESERT_BIOME_CENTER.z) - 60}
+                textAnchor="middle"
+                fill="#FDE68A"
+                fontSize="8.8"
+                fontWeight="700"
+              >
+                THAR GOLDEN DESERT OASIS
+              </text>
+
               {/* Kadalkarai Turquoise Open Sea & Far-Offshore SSJ Dinosaur Island (E/SE) */}
               <path
                 d={`M ${toMapX(118)} ${toMapY(-26)} Q ${toMapX(114)} ${toMapY(14)} ${toMapX(110)} ${toMapY(40)} Q ${toMapX(106)} ${toMapY(112)} ${toMapX(94)} 420 L 480 420 L 480 ${toMapY(-26)} Z`}
@@ -363,17 +431,42 @@ export const WorldMapModal: React.FC<WorldMapModalProps> = ({
               />
 
               {/* Stations */}
-              {STATIONS.map((st) => (
-                <circle
-                  key={st.id}
-                  cx={toMapX(st.worldX)}
-                  cy={toMapY(st.worldZ)}
-                  r="3.8"
-                  fill={st.isDinosaurIsland ? '#FEF08A' : st.connectsToIceland ? '#C5F3FF' : '#FAF5EF'}
-                  stroke={st.isDinosaurIsland ? '#D97706' : st.connectsToIceland ? '#2D9BD6' : '#C85D51'}
-                  strokeWidth="1.6"
-                />
-              ))}
+              {STATIONS.map((st) => {
+                const isDesert = st.id === 'thar_desert_station';
+                const isSnowSummit = st.id === 'panimalai_snow_station';
+                return (
+                  <g key={st.id} transform={`translate(${toMapX(st.worldX)}, ${toMapY(st.worldZ)})`}>
+                    <circle
+                      r={isDesert || isSnowSummit ? '4.2' : '3.8'}
+                      fill={
+                        st.isDinosaurIsland || isDesert
+                          ? '#FEF08A'
+                          : st.connectsToIceland
+                          ? '#C5F3FF'
+                          : '#FAF5EF'
+                      }
+                      stroke={
+                        st.isDinosaurIsland || isDesert
+                          ? '#D97706'
+                          : st.connectsToIceland
+                          ? '#2D9BD6'
+                          : '#C85D51'
+                      }
+                      strokeWidth="1.6"
+                    />
+                    {isSnowSummit && (
+                      <text x="6" y="-6" textAnchor="start" fill="#D4F4FF" fontSize="6.8" fontWeight="700">
+                        Snow Stn
+                      </text>
+                    )}
+                    {isDesert && (
+                      <text x="-6" y="4" textAnchor="end" fill="#FDE68A" fontSize="6.8" fontWeight="700">
+                        Desert Stn
+                      </text>
+                    )}
+                  </g>
+                );
+              })}
 
               {/* En Illam Home */}
               <g transform={`translate(${toMapX(HOME_CENTER.x)}, ${toMapY(HOME_CENTER.z)})`}>
@@ -428,19 +521,66 @@ export const WorldMapModal: React.FC<WorldMapModalProps> = ({
                 </text>
               </g>
 
-              {/* Night-Only Midnight Frontier Valley Marker (In-World at Night Only!) */}
-              {hud.midnightFrontierOpen && (
-                <g
-                  data-testid="map-midnight-frontier-marker"
-                  transform={`translate(${toMapX(MIDNIGHT_FRONTIER_PORTAL_POS.x)}, ${toMapY(MIDNIGHT_FRONTIER_PORTAL_POS.z)})`}
-                >
-                  <circle r="10" fill="#818CF8" fillOpacity="0.28" />
-                  <circle r="4.8" fill="#FDE68A" stroke="#4F46E5" strokeWidth="1.8" />
-                  <text x="0" y="16" textAnchor="middle" fill="#FDE68A" fontSize="8" fontWeight="700">
-                    Midnight Frontier
+              {/* Dreamline International Airport (NE Plateau) */}
+              <g
+                data-testid="map-airport-marker"
+                transform={`translate(${toMapX(AIRPORT_CENTER.x)}, ${toMapY(AIRPORT_CENTER.z)})`}
+              >
+                <rect
+                  x="-32"
+                  y="-16"
+                  width="64"
+                  height="32"
+                  rx="4"
+                  fill="#1E293B"
+                  stroke="#38BDF8"
+                  strokeWidth="1.5"
+                />
+                <line x1="-26" y1="7" x2="26" y2="7" stroke="#F8FAFC" strokeWidth="2.2" strokeDasharray="4 3" />
+                <rect x="-18" y="-12" width="22" height="10" rx="1.5" fill="#38BDF8" fillOpacity="0.8" />
+                <text x="0" y="-20" textAnchor="middle" fill="#7DD3FC" fontSize="8" fontWeight="700">
+                  International Airport
+                </text>
+              </g>
+
+              {/* Underground Metro Line M1 (Central <-> Airport) */}
+              {METRO_SURFACE_ENTRANCES.length >= 2 && (
+                <path
+                  d={METRO_SURFACE_ENTRANCES.map(
+                    (m, idx) =>
+                      `${idx === 0 ? 'M' : 'L'} ${toMapX(m.surfaceX).toFixed(1)} ${toMapY(m.surfaceZ).toFixed(1)}`
+                  ).join(' ')}
+                  fill="none"
+                  stroke="#22D3EE"
+                  strokeWidth="2.2"
+                  strokeDasharray="4 3"
+                  strokeOpacity="0.88"
+                />
+              )}
+              {METRO_SURFACE_ENTRANCES.map((m) => (
+                <g key={m.id} transform={`translate(${toMapX(m.surfaceX)}, ${toMapY(m.surfaceZ)})`}>
+                  <circle r="4.5" fill="#0891B2" stroke="#E0F2FE" strokeWidth="1.2" />
+                  <text x="0" y="2.4" textAnchor="middle" fill="#FFFFFF" fontSize="5.4" fontWeight="800">
+                    M
                   </text>
                 </g>
-              )}
+              ))}
+
+              {/* Nighttime Midnight Frontier Portal Marker (Always clickable to teleport at Night) */}
+              <g
+                data-testid="map-midnight-frontier-marker"
+                transform={`translate(${toMapX(MIDNIGHT_FRONTIER_PORTAL_POS.x)}, ${toMapY(MIDNIGHT_FRONTIER_PORTAL_POS.z)})`}
+              >
+                <circle
+                  r={hud.midnightFrontierOpen ? '12' : '8'}
+                  fill="#818CF8"
+                  fillOpacity={hud.midnightFrontierOpen ? '0.35' : '0.16'}
+                />
+                <circle r="4.8" fill="#FDE68A" stroke="#4F46E5" strokeWidth="1.8" />
+                <text x="0" y="16" textAnchor="middle" fill="#FDE68A" fontSize="8" fontWeight="700">
+                  Midnight Portal
+                </text>
+              </g>
 
               {/* Live Animated GPS Navigation Line & Destination Beacon */}
               {hud.navigation && navPathD && (
@@ -536,59 +676,99 @@ export const WorldMapModal: React.FC<WorldMapModalProps> = ({
                   {hud.midnightFrontierOpen ? 'OPEN (Night)' : 'Night Only'}
                 </span>
               </div>
-              {hud.midnightFrontierOpen ? (
+              <div className="space-y-1.5">
+                <p className="text-[11px] text-slate-300">
+                  At night, its golden-violet Sky Beacon glows brightly from any distance. Walk inside the portal to enter the game-inside-a-game!
+                </p>
                 <div className="flex gap-1.5">
                   <button
                     type="button"
                     onClick={() => {
-                      onTeleport(
-                        MIDNIGHT_FRONTIER_PORTAL_POS.x + 2,
-                        MIDNIGHT_FRONTIER_PORTAL_POS.z + 24,
-                        'The Midnight Frontier'
-                      );
+                      onTeleportMidnightFrontier();
                       onClose();
                     }}
                     data-testid="map-visit-midnight-frontier-btn"
                     className="flex-1 flex items-center justify-center gap-1.5 py-1.5 px-2.5 rounded bg-amber-400 hover:bg-amber-300 text-slate-950 font-semibold text-xs cursor-pointer"
                   >
                     <Sparkles className="w-3.5 h-3.5" />
-                    Visit Glowing Valley
+                    Teleport to Night Portal
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      onSetNavigation({
-                        id: 'midnight_frontier',
-                        label: 'The Midnight Frontier Valley',
-                        x: MIDNIGHT_FRONTIER_PORTAL_POS.x,
-                        z: MIDNIGHT_FRONTIER_PORTAL_POS.z,
-                      });
-                      onClose();
-                    }}
-                    className="px-2.5 py-1.5 rounded bg-cyan-500/20 hover:bg-cyan-500/30 border border-cyan-300/40 text-cyan-100 text-xs font-medium cursor-pointer"
-                  >
-                    Navigate
-                  </button>
+                  {!hud.midnightFrontierOpen ? (
+                    <button
+                      type="button"
+                      onClick={onToggleNightMode}
+                      data-testid="map-switch-night-btn"
+                      className="px-2.5 py-1.5 rounded bg-indigo-500/30 hover:bg-indigo-500/45 border border-indigo-300/45 text-[11px] font-medium text-indigo-100 cursor-pointer shrink-0"
+                    >
+                      Night [N]
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onSetNavigation({
+                          id: 'midnight_frontier',
+                          label: 'Midnight Frontier Portal',
+                          x: MIDNIGHT_FRONTIER_PORTAL_POS.x,
+                          z: MIDNIGHT_FRONTIER_PORTAL_POS.z,
+                        });
+                        onClose();
+                      }}
+                      className="px-2.5 py-1.5 rounded bg-cyan-500/20 hover:bg-cyan-500/30 border border-cyan-300/40 text-cyan-100 text-xs font-medium cursor-pointer"
+                    >
+                      Nav
+                    </button>
+                  )}
                 </div>
-              ) : (
-                <div className="flex items-center justify-between gap-2">
-                  <p className="text-[11px] text-slate-300">
-                    Glows in-world at Night · Disappears at Morning.
-                  </p>
-                  <button
-                    type="button"
-                    onClick={onToggleNightMode}
-                    data-testid="map-switch-night-btn"
-                    className="px-2.5 py-1 rounded bg-indigo-500/30 hover:bg-indigo-500/45 border border-indigo-300/45 text-[11px] font-medium text-indigo-100 cursor-pointer shrink-0"
-                  >
-                    Switch to Night [N]
-                  </button>
-                </div>
-              )}
+              </div>
             </div>
 
-            {/* Ocean Exhibition Complex Quick Visit + Caves + Vehicles */}
+            {/* Underground Metro & International Airport Quick Access */}
+            <div className="grid grid-cols-2 gap-1.5">
+              <button
+                type="button"
+                data-testid="map-enter-metro-btn"
+                onClick={() => {
+                  onEnterUndergroundMetro();
+                  onClose();
+                }}
+                className="flex items-center justify-center gap-1.5 py-2 px-2.5 rounded-md bg-cyan-500/20 hover:bg-cyan-500/35 border border-cyan-300/45 text-cyan-100 text-xs font-semibold cursor-pointer"
+              >
+                <TrainFront className="w-3.5 h-3.5 text-cyan-300 shrink-0" />
+                <span>Underground Metro</span>
+              </button>
+              <button
+                type="button"
+                data-testid="map-fly-airliner-btn"
+                onClick={() => {
+                  onBoardAirliner();
+                  onClose();
+                }}
+                className="flex items-center justify-center gap-1.5 py-2 px-2.5 rounded-md bg-sky-500/20 hover:bg-sky-500/35 border border-sky-300/45 text-sky-100 text-xs font-semibold cursor-pointer"
+              >
+                <Plane className="w-3.5 h-3.5 text-sky-300 shrink-0" />
+                <span>Fly DL-787 Jet</span>
+              </button>
+            </div>
+
+            {/* Thar Golden Desert Oasis + Ocean Exhibition Complex + Caves + Vehicles */}
             <div className="space-y-1.5 pb-2.5 border-b border-[#F5D6C0]/14">
+              <button
+                type="button"
+                data-testid="map-visit-thar-desert-btn"
+                onClick={() => {
+                  onTeleport(
+                    DESERT_OASIS_SPAWN.x,
+                    DESERT_OASIS_SPAWN.z,
+                    'Thar Golden Desert Oasis'
+                  );
+                  onClose();
+                }}
+                className="w-full flex items-center justify-center gap-1.5 py-2 px-3 rounded-md bg-amber-500/25 hover:bg-amber-500/38 border border-amber-300/45 text-amber-100 text-xs font-semibold cursor-pointer"
+              >
+                <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                Visit Thar Golden Desert Oasis &amp; Pyramid Ruins
+              </button>
               <button
                 type="button"
                 onClick={() => {

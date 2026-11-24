@@ -24,6 +24,7 @@ export interface PlayerRig {
     scale?: number;
     visible: boolean;
     lanternStrength: number;
+    holdingLantern?: boolean;
     elapsed: number;
     dt: number;
   }) => { footstepTriggered: boolean; skatePushTriggered: boolean };
@@ -541,6 +542,7 @@ export function createPlayerCharacter(
     scale?: number;
     visible: boolean;
     lanternStrength: number;
+    holdingLantern?: boolean;
     elapsed: number;
     dt: number;
   }) => {
@@ -595,12 +597,14 @@ export function createPlayerCharacter(
     bikeTailMat.emissiveIntensity = 0.3 + lampGlow * 1.8;
     bikeHeadlight.intensity = onBike && params.lanternStrength > 0.35 ? params.lanternStrength * 5.2 : 0;
 
-    // Subtle banking lean into corners while riding bicycle or skateboard
+    // Subtle banking lean into corners while riding bicycle, skateboard, or sprinting on foot
     const targetLean =
       onBike || onSkate
         ? THREE.MathUtils.clamp(-params.turnRate * Math.min(1, params.speed / 6) * 0.18, -0.26, 0.26)
-        : 0;
-    smoothLean += (targetLean - smoothLean) * Math.min(1, params.dt * 8);
+        : !params.isSitting && !isSwimming && !inCamper && !inBoat
+          ? THREE.MathUtils.clamp(-params.turnRate * Math.min(1, params.speed / 8) * 0.085, -0.14, 0.14)
+          : 0;
+    smoothLean += (targetLean - smoothLean) * (1 - Math.exp(-11 * params.dt));
     leanRoot.rotation.z = smoothLean;
 
     let footstepTriggered = false;
@@ -770,46 +774,55 @@ export function createPlayerCharacter(
       }
     }
 
-    // 5. Walking / Running / Idle on Foot (scale-aware giant stride cadence)
+    // 5. Walking / Running / Idle on Foot (scale-aware giant stride cadence with silky start/stop blend)
     bodyRoot.rotation.set(0, 0, 0);
     const strideDiv = Math.sqrt(Math.max(1, scale));
     const speedFactor = Math.min(1, params.speed / (6.5 * strideDiv));
-    if (params.speed > 0.15) {
+    const moveBlend = Math.min(1, params.speed / (1.35 * strideDiv));
+    const poseLerp = 1 - Math.exp(-14 * params.dt);
+    if (params.speed > 0.12) {
       walkPhase += (params.speed / strideDiv) * params.dt * 2.15;
       const stepHalf = Math.floor(walkPhase / Math.PI);
       if (stepHalf !== lastStepHalf) {
         lastStepHalf = stepHalf;
         footstepTriggered = true;
       }
-      const swing = Math.sin(walkPhase) * (0.44 + speedFactor * 0.36);
-      const bob = Math.abs(Math.cos(walkPhase)) * (0.04 + speedFactor * 0.045);
+      const swing = Math.sin(walkPhase) * (0.44 + speedFactor * 0.36) * moveBlend;
+      const bob = Math.abs(Math.cos(walkPhase)) * (0.04 + speedFactor * 0.045) * moveBlend;
 
-      bodyRoot.position.set(0, bob, 0);
-      torsoPivot.rotation.set(0.05 + speedFactor * 0.09, 0, 0);
+      bodyRoot.position.y += (bob - bodyRoot.position.y) * poseLerp;
+      torsoPivot.rotation.x += ((0.05 + speedFactor * 0.09) * moveBlend - torsoPivot.rotation.x) * poseLerp;
       leftLegPivot.rotation.set(swing, 0, 0);
       rightLegPivot.rotation.set(-swing, 0, 0);
       leftArmPivot.rotation.set(-swing * 0.82, 0, 0.05);
       if (currentOutfit === 'alan_grant') {
         // Hold glowing red road flare heroically forward-outward while striding
         rightArmPivot.rotation.set(-0.56 + swing * 0.22, 0, -0.14);
+      } else if (params.holdingLantern) {
+        // Hold brass handheld lantern steadily forward to light the path ahead
+        rightArmPivot.rotation.set(-0.62 + swing * 0.14, 0, -0.1);
       } else {
         rightArmPivot.rotation.set(swing * 0.82, 0, -0.05);
       }
-      headPivot.rotation.set(0, 0, 0);
+      headPivot.rotation.x += (0 - headPivot.rotation.x) * poseLerp;
+      headPivot.rotation.y += (THREE.MathUtils.clamp(params.turnRate * 0.08, -0.22, 0.22) - headPivot.rotation.y) * poseLerp;
     } else {
       const breathe = Math.sin(params.elapsed * 1.9);
-      bodyRoot.position.set(0, breathe * 0.014, 0);
-      torsoPivot.rotation.set(0, 0, 0);
-      const decay = Math.max(0, 1 - params.dt * 10);
+      bodyRoot.position.y += (breathe * 0.014 - bodyRoot.position.y) * poseLerp;
+      torsoPivot.rotation.x += (0 - torsoPivot.rotation.x) * poseLerp;
+      const decay = Math.exp(-11 * params.dt);
       leftLegPivot.rotation.set(leftLegPivot.rotation.x * decay, 0, 0);
       rightLegPivot.rotation.set(rightLegPivot.rotation.x * decay, 0, 0);
       leftArmPivot.rotation.set(leftArmPivot.rotation.x * decay, 0, 0.04);
       if (currentOutfit === 'alan_grant') {
         rightArmPivot.rotation.set(-0.52 + breathe * 0.03, 0, -0.14);
+      } else if (params.holdingLantern) {
+        rightArmPivot.rotation.set(-0.58 + breathe * 0.025, 0, -0.1);
       } else {
         rightArmPivot.rotation.set(rightArmPivot.rotation.x * decay, 0, -0.04);
       }
-      headPivot.rotation.set(0, Math.sin(params.elapsed * 0.55) * 0.09, 0);
+      headPivot.rotation.x += (0 - headPivot.rotation.x) * poseLerp;
+      headPivot.rotation.y += (Math.sin(params.elapsed * 0.55) * 0.09 - headPivot.rotation.y) * poseLerp;
     }
 
     return { footstepTriggered, skatePushTriggered };

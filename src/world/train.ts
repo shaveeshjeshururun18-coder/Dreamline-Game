@@ -34,7 +34,8 @@ export interface PassengerTrainRig {
     temperatureC?: number,
     skyTintHex?: number,
     pixelRatio?: number,
-    isSteamVisible?: boolean
+    isSteamVisible?: boolean,
+    nightDarkness?: number
   ) => void;
   dispose: () => void;
 }
@@ -545,10 +546,186 @@ export function createPassengerTrain(
   coupler.position.set(0, 2.1, -carLength * 0.5 - 0.45);
   leadCar.add(coupler);
 
-  // One warm dynamic PointLight inside the lead carriage illuminating nearby platforms at dusk/night!
-  const trainGlowLight = new THREE.PointLight(0xffb55c, 5.5, 22, 1.45);
-  trainGlowLight.position.set(0, 2.5, 0);
+  // =========================================================================
+  // CINEMATIC LOCOMOTIVE NIGHT LIGHTING SUITE (4 Prioritized Real Lights + Volumetric Headlight Beams)
+  // =========================================================================
+  // 1. Warm dynamic PointLight inside the lead carriage spilling golden light onto tracks & platforms
+  const trainGlowLight = new THREE.PointLight(0xffbe68, 5.5, 36, 1.15);
+  trainGlowLight.position.set(0, 2.55, 0.4);
+  trainGlowLight.userData.isTrainLight = true;
   leadCar.add(trainGlowLight);
+
+  // 2. Warm dynamic PointLight inside the rear carriage so both cars illuminate the pitch-dark night
+  const rearGlowLight = new THREE.PointLight(0xffb85e, 0, 30, 1.2);
+  rearGlowLight.position.set(0, 2.55, 0);
+  rearGlowLight.userData.isTrainLight = true;
+  rearCar.add(rearGlowLight);
+
+  // 3. Long-throw Locomotive Headlight SpotLight cutting far ahead down the pitch-black railway tracks
+  const trainHeadlightSpot = new THREE.SpotLight(0xfff1cc, 0, 125, Math.PI / 3.6, 0.46, 0.92);
+  trainHeadlightSpot.position.set(0, 1.72, carLength * 0.5 + 0.18);
+  trainHeadlightSpot.target.position.set(0, 0.15, carLength * 0.5 + 34.0);
+  trainHeadlightSpot.userData.isTrainLight = true;
+  leadCar.add(trainHeadlightSpot);
+  leadCar.add(trainHeadlightSpot.target);
+
+  // 4. Forward Headlight Spill PointLight lighting the immediate nose, platform, rails & characters ahead
+  const trainHeadlightFill = new THREE.PointLight(0xffe8b8, 0, 44, 1.15);
+  trainHeadlightFill.position.set(0, 2.05, carLength * 0.5 + 5.8);
+  trainHeadlightFill.userData.isTrainLight = true;
+  leadCar.add(trainHeadlightFill);
+
+  // Volumetric Additive Headlight Light-Beam Cones (feathered Fresnel + distance decay shader)
+  const beamLength = 30.0;
+  const headlightBeamGeo = new THREE.CylinderGeometry(0.18, 4.5, beamLength, 24, 1, true);
+  // Shift apex to origin (z=0) and orient beam forward along +Z
+  headlightBeamGeo.translate(0, -beamLength * 0.5, 0);
+  headlightBeamGeo.rotateX(-Math.PI * 0.5);
+
+  const headlightBeamUniforms = {
+    uColor: { value: new THREE.Color(0xfff0c2) },
+    uOpacity: { value: 0.0 },
+  };
+  const headlightBeamMat = new THREE.ShaderMaterial({
+    transparent: true,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+    side: THREE.DoubleSide,
+    uniforms: headlightBeamUniforms,
+    vertexShader: /* glsl */ `
+      varying vec2 vUv;
+      varying vec3 vNormalV;
+      varying vec3 vViewDir;
+      void main() {
+        vUv = uv;
+        vec4 mvPos = modelViewMatrix * vec4(position, 1.0);
+        vNormalV = normalize(normalMatrix * normal);
+        vViewDir = normalize(-mvPos.xyz);
+        gl_Position = projectionMatrix * mvPos;
+      }
+    `,
+    fragmentShader: /* glsl */ `
+      uniform vec3 uColor;
+      uniform float uOpacity;
+      varying vec2 vUv;
+      varying vec3 vNormalV;
+      varying vec3 vViewDir;
+      void main() {
+        if (uOpacity <= 0.004) discard;
+        // vUv.y = 1.0 at headlamp apex, 0.0 at far end of beam
+        float along = clamp(vUv.y, 0.0, 1.0);
+        float distFade = pow(along, 1.55) * smoothstep(0.0, 0.14, along);
+        float edgeSoft = pow(abs(dot(normalize(vNormalV), normalize(vViewDir))), 1.45);
+        float alpha = distFade * edgeSoft * uOpacity;
+        if (alpha <= 0.004) discard;
+        gl_FragColor = vec4(uColor, alpha);
+      }
+    `,
+  });
+
+  const headlightBeams: THREE.Mesh[] = [];
+  [-0.78, 0.78].forEach((hx) => {
+    const beam = new THREE.Mesh(headlightBeamGeo, headlightBeamMat);
+    beam.position.set(hx, 1.48, carLength * 0.5 + 0.08);
+    beam.rotation.x = 0.055; // Slight downward aim onto rails
+    beam.renderOrder = 15;
+    beam.visible = false;
+    leadCar.add(beam);
+    headlightBeams.push(beam);
+  });
+
+  // Bright Additive Headlamp Lens Glow Halos
+  const lensHaloGeo = new THREE.PlaneGeometry(1.15, 1.15);
+  const lensHaloUniforms = {
+    uColor: { value: new THREE.Color(0xfff4cf) },
+    uOpacity: { value: 0.0 },
+  };
+  const lensHaloMat = new THREE.ShaderMaterial({
+    transparent: true,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+    side: THREE.DoubleSide,
+    uniforms: lensHaloUniforms,
+    vertexShader: /* glsl */ `
+      varying vec2 vUv;
+      void main() {
+        vUv = uv;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `,
+    fragmentShader: /* glsl */ `
+      uniform vec3 uColor;
+      uniform float uOpacity;
+      varying vec2 vUv;
+      void main() {
+        if (uOpacity <= 0.004) discard;
+        float d = length(vUv - 0.5) * 2.0;
+        float glow = exp(-d * d * 4.2) * smoothstep(1.0, 0.25, d);
+        gl_FragColor = vec4(uColor, glow * uOpacity);
+      }
+    `,
+  });
+  const lensHalos: THREE.Mesh[] = [];
+  [-0.78, 0.78].forEach((hx) => {
+    const halo = new THREE.Mesh(lensHaloGeo, lensHaloMat);
+    halo.position.set(hx, 1.48, carLength * 0.5 + 0.14);
+    halo.renderOrder = 16;
+    halo.visible = false;
+    leadCar.add(halo);
+    lensHalos.push(halo);
+  });
+
+  // Warm Golden Window-Light Spill Pools along both sides of both carriages at Night
+  const windowSpillGeo = new THREE.PlaneGeometry(5.8, carLength * 0.92);
+  windowSpillGeo.rotateX(-Math.PI * 0.5);
+  const windowSpillUniforms = {
+    uColor: { value: new THREE.Color(0xffbd62) },
+    uOpacity: { value: 0.0 },
+  };
+  const windowSpillMat = new THREE.ShaderMaterial({
+    transparent: true,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+    uniforms: windowSpillUniforms,
+    vertexShader: /* glsl */ `
+      varying vec2 vUv;
+      void main() {
+        vUv = uv;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `,
+    fragmentShader: /* glsl */ `
+      uniform vec3 uColor;
+      uniform float uOpacity;
+      varying vec2 vUv;
+      void main() {
+        if (uOpacity <= 0.004) discard;
+        vec2 p = (vUv - 0.5) * 2.0;
+        float falloff = smoothstep(1.0, 0.0, abs(p.x)) * smoothstep(1.0, 0.12, abs(p.y));
+        gl_FragColor = vec4(uColor, falloff * falloff * uOpacity);
+      }
+    `,
+  });
+  const windowSpills: THREE.Mesh[] = [];
+  [leadCar, rearCar].forEach((car) => {
+    [-1, 1].forEach((side) => {
+      const spill = new THREE.Mesh(windowSpillGeo, windowSpillMat);
+      spill.position.set(side * (carWidth * 0.5 + 2.35), 0.18, 0);
+      spill.renderOrder = 12;
+      spill.visible = false;
+      car.add(spill);
+      windowSpills.push(spill);
+    });
+  });
+
+  disposables.push(
+    headlightBeamGeo,
+    headlightBeamMat,
+    lensHaloGeo,
+    lensHaloMat,
+    windowSpillGeo,
+    windowSpillMat
+  );
 
   group.add(leadCar, rearCar);
 
@@ -712,7 +889,8 @@ export function createPassengerTrain(
     temperatureC = 18,
     skyTintHex = 0xffd9c0,
     pixelRatio = 1,
-    isSteamVisible = true
+    isSteamVisible = true,
+    nightDarkness = 0
   ) => {
     const sLead = sampleRailway(state.t);
     leadCar.position.set(sLead.x, sLead.y + 0.08, sLead.z);
@@ -915,10 +1093,38 @@ export function createPassengerTrain(
     }
 
     const glow = 0.35 + lanternStrength * 0.95;
-    interiorWallMat.emissiveIntensity = 0.25 + glow * 0.85;
-    ceilingGlowMat.emissiveIntensity = 1.0 + glow * 2.0;
-    glassMat.emissiveIntensity = 0.1 + lanternStrength * 0.45;
-    trainGlowLight.intensity = 2.0 + lanternStrength * 6.5;
+    const nightBoost = Math.max(0, Math.min(1, nightDarkness));
+    interiorWallMat.emissiveIntensity = 0.25 + glow * 0.85 + nightBoost * 0.95;
+    ceilingGlowMat.emissiveIntensity = 1.0 + glow * 2.0 + nightBoost * 2.2;
+    glassMat.emissiveIntensity = 0.1 + lanternStrength * 0.45 + nightBoost * 0.55;
+    headlightMat.emissiveIntensity = 2.6 + lanternStrength * 2.2 + nightBoost * 4.5;
+    taillightMat.emissiveIntensity = 1.8 + lanternStrength * 1.6 + nightBoost * 2.4;
+
+    // Real 3D train lights shine crisply alongside night streetlamps & player lantern without blowing out highlights
+    trainGlowLight.intensity = 2.0 + lanternStrength * 5.2 + nightBoost * 5.5;
+    rearGlowLight.intensity = lanternStrength * 3.0 + nightBoost * 4.5;
+    trainHeadlightSpot.intensity = lanternStrength * 11.0 + nightBoost * 22.0;
+    trainHeadlightFill.intensity = lanternStrength * 3.2 + nightBoost * 5.8;
+
+    // Volumetric headlight beams, lens halos & trackside warm window light pools emerge at twilight/night
+    const beamOpacity = Math.max(0, (lanternStrength - 0.35) * 0.15 + nightBoost * 0.22);
+    headlightBeamUniforms.uOpacity.value = beamOpacity;
+    const showBeams = beamOpacity > 0.01;
+    for (let i = 0; i < headlightBeams.length; i++) {
+      headlightBeams[i].visible = showBeams;
+    }
+
+    const haloOpacity = Math.max(0, (lanternStrength - 0.3) * 0.35 + nightBoost * 0.62);
+    lensHaloUniforms.uOpacity.value = haloOpacity;
+    for (let i = 0; i < lensHalos.length; i++) {
+      lensHalos[i].visible = haloOpacity > 0.01;
+    }
+
+    const spillOpacity = nightBoost * 0.28;
+    windowSpillUniforms.uOpacity.value = spillOpacity;
+    for (let i = 0; i < windowSpills.length; i++) {
+      windowSpills[i].visible = spillOpacity > 0.01;
+    }
   };
 
   return {

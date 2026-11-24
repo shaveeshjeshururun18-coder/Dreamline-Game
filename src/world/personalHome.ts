@@ -4,13 +4,19 @@ import { HOME_CENTER, type AabbCollider } from '../game/terrain';
 import type { HomeDecorStyle, HomeState, InteractableItem } from '../game/types';
 import { buildAvatarDisplayMannequin, type AvatarDisplayStand } from './avatarMannequin';
 import type { ProceduralTextureSet } from './textures';
+import { VAULT_HATCH_LOCAL, VAULT_SWITCH_LOCAL } from '../game/homeUndergroundVault';
 
 export interface PersonalHomeSystem {
   group: THREE.Group;
   colliders: AabbCollider[];
   interactables: InteractableItem[];
   frostyIglooSeat: { x: number; y: number; z: number; heading: number };
-  applyHomeState: (home: HomeState, lanternStrength: number, time: number) => void;
+  applyHomeState: (
+    home: HomeState,
+    lanternStrength: number,
+    time: number,
+    vaultHatchOpenProgress?: number
+  ) => void;
   updatePostcardDisplay: (dataUrl?: string) => void;
   dispose: () => void;
 }
@@ -330,6 +336,81 @@ export function buildPersonalHome(
       group.add(book);
     }
   }
+
+  // =========================================================================
+  // 3A. HIDDEN SECRET UNDERGROUND VAULT BUTTON & SLIDING FLOOR HATCH
+  // =========================================================================
+  const secretPanelMat = new THREE.MeshStandardMaterial({
+    color: 0x1e293b,
+    roughness: 0.35,
+    metalness: 0.75,
+  });
+  const secretBtnMat = new THREE.MeshStandardMaterial({
+    color: 0x38bdf8,
+    emissive: 0x38bdf8,
+    emissiveIntensity: 1.5,
+    roughness: 0.2,
+  });
+  const secretShaftGlowMat = new THREE.MeshStandardMaterial({
+    color: 0x7dd3fc,
+    emissive: 0x38bdf8,
+    emissiveIntensity: 1.6,
+    roughness: 0.25,
+  });
+
+  // Hidden Secret Wall Switch Pedestal tucked beside living room bookshelf / foyer
+  const switchPedestal = new THREE.Group();
+  switchPedestal.position.set(VAULT_SWITCH_LOCAL.x, 0.49, VAULT_SWITCH_LOCAL.z);
+  const switchBase = new THREE.Mesh(new THREE.BoxGeometry(0.42, 1.08, 0.32), darkTimberMat);
+  switchBase.position.y = 0.54;
+  const switchPlate = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.36, 0.06), secretPanelMat);
+  switchPlate.position.set(0, 0.96, 0.16);
+  const secretBtnKnob = new THREE.Mesh(new THREE.CylinderGeometry(0.065, 0.065, 0.06, 14), secretBtnMat);
+  secretBtnKnob.rotation.x = Math.PI / 2;
+  secretBtnKnob.position.set(0, 0.96, 0.2);
+  const secretRingTrim = new THREE.Mesh(new THREE.TorusGeometry(0.085, 0.014, 8, 18), secretBtnMat);
+  secretRingTrim.position.set(0, 0.96, 0.195);
+  switchPedestal.add(switchBase, switchPlate, secretBtnKnob, secretRingTrim);
+  group.add(switchPedestal);
+
+  // Floor-Flush Hidden Sliding Secret Hatch (disguised as oak planks until opened!)
+  const hatchGroup = new THREE.Group();
+  hatchGroup.position.set(VAULT_HATCH_LOCAL.x, 0.495, VAULT_HATCH_LOCAL.z);
+  const hatchRim = new THREE.Mesh(new THREE.BoxGeometry(2.55, 0.04, 2.55), darkTimberMat);
+  hatchRim.position.y = -0.01;
+  // Dark recessed shaft interior + glowing hydraulic steps revealed when doors slide open
+  const hatchPit = new THREE.Mesh(
+    new THREE.BoxGeometry(2.26, 0.05, 2.26),
+    new THREE.MeshBasicMaterial({ color: 0x050b16 })
+  );
+  hatchPit.position.y = 0.005;
+  const hatchGlowBorder = new THREE.Mesh(new THREE.BoxGeometry(2.36, 0.045, 2.36), secretShaftGlowMat);
+  hatchGlowBorder.position.y = 0.0;
+  hatchGlowBorder.visible = false;
+
+  const hatchStepsGroup = new THREE.Group();
+  hatchStepsGroup.visible = false;
+  for (let st = 0; st < 4; st++) {
+    const stepBar = new THREE.Mesh(new THREE.BoxGeometry(1.85, 0.05, 0.24), secretShaftGlowMat);
+    stepBar.position.set(0, 0.02 - st * 0.01, -0.7 + st * 0.46);
+    hatchStepsGroup.add(stepBar);
+  }
+
+  // Twin oak floor door leaves that slide open left & right when triggered
+  const hatchLeafLeft = new THREE.Mesh(new THREE.BoxGeometry(1.18, 0.06, 2.32), floorWoodMat);
+  hatchLeafLeft.position.set(-0.59, 0.025, 0);
+  const hatchLeafRight = new THREE.Mesh(new THREE.BoxGeometry(1.18, 0.06, 2.32), floorWoodMat);
+  hatchLeafRight.position.set(0.59, 0.025, 0);
+
+  hatchGroup.add(
+    hatchRim,
+    hatchGlowBorder,
+    hatchPit,
+    hatchStepsGroup,
+    hatchLeafLeft,
+    hatchLeafRight
+  );
+  group.add(hatchGroup);
 
   // Floor Lamp in Living Room corner
   const lampStand = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.06, 1.7, 8), darkTimberMat);
@@ -770,91 +851,6 @@ export function buildPersonalHome(
   //     Connects 2nd-floor east balcony (lx: 6.0..8.0, lz: 6.2, y = 3.65m)
   //     smoothly up to the Rooftop Helipad Deck (y = 10.4m)!
   // =========================================================================
-  const heliEntryDeck = new THREE.Mesh(new THREE.BoxGeometry(2.1, 0.24, 2.1), extWoodMat);
-  heliEntryDeck.position.set(7.0, 3.55, 6.5);
-  heliEntryDeck.castShadow = true;
-  heliEntryDeck.receiveShadow = true;
-  group.add(heliEntryDeck);
-  const heliEntryFrontRail = new THREE.Mesh(new THREE.BoxGeometry(2.1, 0.12, 0.14), heliSteelMat);
-  heliEntryFrontRail.position.set(7.0, 4.65, 7.48);
-  const heliEntryOuterRail = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.12, 2.0), heliSteelMat);
-  heliEntryOuterRail.position.set(7.98, 4.65, 6.55);
-  group.add(heliEntryFrontRail, heliEntryOuterRail);
-
-  const stairSupports: Array<[number, number, number]> = [
-    [7.85, 3.55, 7.35],
-    [7.85, 5.2, 3.8],
-    [7.85, 7.1, 0.8],
-    [7.85, 9.0, -2.0],
-    [7.85, 10.35, -4.15],
-    [6.35, 10.35, -4.15],
-  ];
-  for (const [sx, sh, sz] of stairSupports) {
-    const col = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.13, sh, 8), heliSteelMat);
-    col.position.set(sx, sh * 0.5, sz);
-    group.add(col);
-  }
-
-  const heliStepCount = 22;
-  const heliStartZ = 6.2;
-  const heliRun = 10.0;
-  const heliRise = heliY - 3.65;
-  for (let s = 0; s < heliStepCount; s++) {
-    const frac = (s + 0.5) / heliStepCount;
-    const treadY = 3.65 + frac * heliRise;
-    const treadZ = heliStartZ - frac * heliRun;
-    const tread = new THREE.Mesh(new THREE.BoxGeometry(1.68, 0.12, 0.52), extWoodMat);
-    tread.position.set(7.1, treadY - 0.06, treadZ);
-    tread.castShadow = true;
-    tread.receiveShadow = true;
-    group.add(tread);
-    if (s % 4 === 0) {
-      const strip = new THREE.Mesh(new THREE.BoxGeometry(1.62, 0.03, 0.06), heliYellowMat);
-      strip.position.set(7.1, treadY + 0.01, treadZ + 0.22);
-      group.add(strip);
-    }
-  }
-
-  const heliSlopeLen = Math.hypot(heliRun, heliRise);
-  const heliSlopePitch = Math.atan2(heliRise, heliRun);
-  for (const railX of [6.28, 7.92]) {
-    const stringer = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.24, heliSlopeLen + 0.4), heliSteelMat);
-    stringer.position.set(railX, 3.65 + heliRise * 0.5 - 0.18, heliStartZ - heliRun * 0.5);
-    stringer.rotation.x = heliSlopePitch;
-    group.add(stringer);
-
-    const handrail = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, heliSlopeLen + 0.4), heliSteelMat);
-    handrail.position.set(railX, 3.65 + heliRise * 0.5 + 0.92, heliStartZ - heliRun * 0.5);
-    handrail.rotation.x = heliSlopePitch;
-    group.add(handrail);
-
-    for (let p = 0; p <= 5; p++) {
-      const pf = p / 5;
-      const post = new THREE.Mesh(new THREE.BoxGeometry(0.06, 1.05, 0.06), heliSteelMat);
-      post.position.set(railX, 3.65 + pf * heliRise + 0.45, heliStartZ - pf * heliRun);
-      group.add(post);
-    }
-  }
-
-  const skywalkDeck = new THREE.Mesh(new THREE.BoxGeometry(3.8, 0.24, 2.4), heliDeckMat);
-  skywalkDeck.position.set(6.1, heliY - 0.12, -3.2);
-  skywalkDeck.receiveShadow = true;
-  group.add(skywalkDeck);
-  const skywalkEdgeStripe = new THREE.Mesh(new THREE.BoxGeometry(3.6, 0.035, 0.12), heliYellowMat);
-  skywalkEdgeStripe.position.set(6.1, heliY + 0.02, -4.25);
-  const skywalkBackRail = new THREE.Mesh(new THREE.BoxGeometry(3.8, 0.1, 0.1), heliSteelMat);
-  skywalkBackRail.position.set(6.1, heliY + 1.0, -4.32);
-  const skywalkEastRail = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 2.3), heliSteelMat);
-  skywalkEastRail.position.set(7.92, heliY + 1.0, -3.2);
-  const skywalkGuideBeacon = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.14, 0.3, 8), heliBeaconMat);
-  skywalkGuideBeacon.position.set(7.8, heliY + 1.18, -4.25);
-  group.add(skywalkEdgeStripe, skywalkBackRail, skywalkEastRail, skywalkGuideBeacon);
-
-  // =========================================================================
-  // 5C. WALKABLE EXTERIOR EAST HELIPAD STAIRCASE & TOP SKYWALK BRIDGE
-  //     Connects 2nd-floor east balcony (lx: 6.0..8.0, lz: 6.2, y = 3.65m)
-  //     smoothly up to the Rooftop Helipad Deck (y = 10.4m)!
-  // =========================================================================
   // Entry landing deck extending off the east edge of the 2nd-floor balcony (lx: 6.0..8.0, lz: 5.5..7.55)
   const heliEntryDeck = new THREE.Mesh(new THREE.BoxGeometry(2.1, 0.24, 2.1), extWoodMat);
   heliEntryDeck.position.set(7.0, 3.55, 6.5);
@@ -940,6 +936,85 @@ export function buildPersonalHome(
   const skywalkGuideBeacon = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.14, 0.3, 8), heliBeaconMat);
   skywalkGuideBeacon.position.set(7.8, heliY + 1.18, -4.25);
   group.add(skywalkEdgeStripe, skywalkBackRail, skywalkEastRail, skywalkGuideBeacon);
+
+  // =========================================================================
+  // 5B. NEW 3RD FLOOR: HERO CHARACTER-SWITCHING HALL (y = 7.0m, off East Staircase mid-landing!)
+  // =========================================================================
+  const heroFloorY = 7.0;
+  const heroFloorMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.42, metalness: 0.35 });
+  const heroNeonMat = new THREE.MeshStandardMaterial({
+    color: 0x38bdf8,
+    emissive: 0x38bdf8,
+    emissiveIntensity: 1.4,
+    roughness: 0.2,
+  });
+  const heroGlassMat = new THREE.MeshStandardMaterial({
+    color: 0x93c5fd,
+    roughness: 0.12,
+    metalness: 0.25,
+    transparent: true,
+    opacity: 0.32,
+  });
+
+  // 3rd Floor Slab & Mid-Landing Bridge connecting East Staircase (lz: 0.2..2.2) into the Hero Hall
+  const heroSlab = new THREE.Mesh(new THREE.BoxGeometry(12.2, 0.24, 9.8), heroFloorMat);
+  heroSlab.position.set(0, heroFloorY - 0.12, 0);
+  heroSlab.receiveShadow = true;
+  const heroLandingBridge = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.2, 2.2), heroFloorMat);
+  heroLandingBridge.position.set(6.1, heroFloorY - 0.1, 1.2);
+  group.add(heroSlab, heroLandingBridge);
+
+  // Panoramic Glass Walls framing the 3rd Floor Hero Gallery (open doorway on East wall at lz: 0.0..2.4)
+  const hWallN = new THREE.Mesh(new THREE.BoxGeometry(12.2, 2.9, 0.18), heroGlassMat);
+  hWallN.position.set(0, heroFloorY + 1.45, -4.85);
+  const hWallS = new THREE.Mesh(new THREE.BoxGeometry(12.2, 2.9, 0.18), heroGlassMat);
+  hWallS.position.set(0, heroFloorY + 1.45, 4.85);
+  const hWallW = new THREE.Mesh(new THREE.BoxGeometry(0.18, 2.9, 9.8), heroGlassMat);
+  hWallW.position.set(-6.05, heroFloorY + 1.45, 0);
+  const hWallEN = new THREE.Mesh(new THREE.BoxGeometry(0.18, 2.9, 4.8), heroGlassMat);
+  hWallEN.position.set(6.05, heroFloorY + 1.45, -2.45);
+  const hWallES = new THREE.Mesh(new THREE.BoxGeometry(0.18, 2.9, 2.4), heroGlassMat);
+  hWallES.position.set(6.05, heroFloorY + 1.45, 3.65);
+  group.add(hWallN, hWallS, hWallW, hWallEN, hWallES);
+
+  // Glowing Central Hero Switching Pedestal + 5 Illuminated Suit Alcove Bays along North Gallery Wall
+  const heroConsoleBase = new THREE.Mesh(new THREE.CylinderGeometry(1.35, 1.55, 0.24, 18), heroFloorMat);
+  heroConsoleBase.position.set(0, heroFloorY + 0.12, 0);
+  const heroConsoleRing = new THREE.Mesh(new THREE.TorusGeometry(1.42, 0.07, 10, 28), heroNeonMat);
+  heroConsoleRing.rotation.x = Math.PI * 0.5;
+  heroConsoleRing.position.set(0, heroFloorY + 0.26, 0);
+  const heroHoloPillar = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.45, 0.55, 1.1, 12),
+    new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.35, metalness: 0.7 })
+  );
+  heroHoloPillar.position.set(0, heroFloorY + 0.55, -2.35);
+  const heroHoloScreen = new THREE.Mesh(new THREE.BoxGeometry(1.45, 0.72, 0.08), heroNeonMat);
+  heroHoloScreen.position.set(0, heroFloorY + 1.45, -2.35);
+  group.add(heroConsoleBase, heroConsoleRing, heroHoloPillar, heroHoloScreen);
+
+  const alcoveColors = [0xdc2626, 0xf59e0b, 0x38bdf8, 0x1e293b, 0x2563eb];
+  for (let i = 0; i < alcoveColors.length; i++) {
+    const ax = -4.2 + i * 2.1;
+    const bayBack = new THREE.Mesh(new THREE.BoxGeometry(1.45, 2.35, 0.28), heroFloorMat);
+    bayBack.position.set(ax, heroFloorY + 1.18, -4.35);
+    const bayPad = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.62, 0.18, 12), heroFloorMat);
+    bayPad.position.set(ax, heroFloorY + 0.09, -3.75);
+    const suitSilhouette = new THREE.Mesh(
+      new THREE.CapsuleGeometry(0.28, 0.95, 6, 10),
+      new THREE.MeshStandardMaterial({
+        color: alcoveColors[i],
+        emissive: alcoveColors[i],
+        emissiveIntensity: 0.35,
+        roughness: 0.3,
+        metalness: 0.65,
+      })
+    );
+    suitSilhouette.position.set(ax, heroFloorY + 1.05, -3.75);
+    const bayRing = new THREE.Mesh(new THREE.TorusGeometry(0.56, 0.035, 8, 18), heroNeonMat);
+    bayRing.rotation.x = Math.PI * 0.5;
+    bayRing.position.set(ax, heroFloorY + 0.2, -3.75);
+    group.add(bayBack, bayPad, suitSilhouette, bayRing);
+  }
 
   // Fairy lights strung along the balcony eaves!
   const fairyLightsGroup = new THREE.Group();
@@ -1122,12 +1197,61 @@ export function buildPersonalHome(
       radius: 5.5,
       locationId: 'my_home',
       metaId: 'home',
+    },
+    {
+      id: 'home_hero_hall_switch',
+      kind: 'home_hero_hall',
+      label: 'Switch Hero Character & Suit Variations (3rd Floor Hall)',
+      sublabel: 'என் இல்லம் ஹீரோ தளம் · Open Hero & Suit Switcher Console',
+      x: hx,
+      y: 7.0,
+      z: hz - 1.2,
+      radius: 4.5,
+      locationId: 'my_home',
+    },
+    {
+      id: 'home_hero_hall_ground_shortcut',
+      kind: 'home_hero_hall',
+      label: 'Open Hero Character & Suit Switcher',
+      sublabel: '3rd Floor Hero Hall upstairs · Quick Switch Console',
+      x: hx + 2.8,
+      y: 0.45,
+      z: hz - 3.6,
+      radius: 2.4,
+      locationId: 'my_home',
+    },
+    {
+      id: 'home_secret_vault_switch',
+      kind: 'home_vault_toggle',
+      label: 'Press Hidden Underground Floor Button',
+      sublabel: 'Secret Switch · Opens Hidden Superhero Vault & Car Garage Below',
+      x: hx + VAULT_SWITCH_LOCAL.x,
+      y: 0.45,
+      z: hz + VAULT_SWITCH_LOCAL.z,
+      radius: 2.35,
+      locationId: 'my_home',
+    },
+    {
+      id: 'home_secret_vault_hatch_enter',
+      kind: 'home_vault_enter',
+      label: 'Go Down into Secret Underground Superhero Vault & Garage',
+      sublabel: 'All 7 Superhero Costumes Ready to Wear + Rideable Cars Below',
+      x: hx + VAULT_HATCH_LOCAL.x,
+      y: 0.45,
+      z: hz + VAULT_HATCH_LOCAL.z,
+      radius: 2.2,
+      locationId: 'my_home',
     }
   );
 
   let appliedStyle: HomeDecorStyle = 'warm_wood';
 
-  const applyHomeState = (home: HomeState, lanternStrength: number, time: number) => {
+  const applyHomeState = (
+    home: HomeState,
+    lanternStrength: number,
+    time: number,
+    vaultHatchOpenProgress = 0
+  ) => {
     if (home.decorStyle !== appliedStyle) {
       appliedStyle = home.decorStyle;
       const p = DECOR_PALETTES[appliedStyle];
@@ -1146,6 +1270,18 @@ export function buildPersonalHome(
     snowflakeHead.rotation.y = time * 0.45;
     fairyBulbMat.emissiveIntensity = home.fairyLightsOn ? (0.8 + glow * 1.35) * pulse : 0;
     homeWarmLight.intensity = (1.35 + glow * 1.65) * (home.fairyLightsOn ? 1.15 : 0.9);
+
+    // Animate hidden floor hatch sliding apart smoothly when triggered by the secret button
+    const openT = Math.max(0, Math.min(1, vaultHatchOpenProgress));
+    const slideOffset = openT * 1.05;
+    hatchLeafLeft.position.x = -0.59 - slideOffset;
+    hatchLeafRight.position.x = 0.59 + slideOffset;
+    hatchGlowBorder.visible = openT > 0.04;
+    hatchStepsGroup.visible = openT > 0.12;
+    secretBtnMat.color.setHex(openT > 0.1 ? 0x10b981 : 0x38bdf8);
+    secretBtnMat.emissive.setHex(openT > 0.1 ? 0x10b981 : 0x38bdf8);
+    secretBtnMat.emissiveIntensity = (1.2 + Math.sin(time * 3.8) * 0.45) * (openT > 0.1 ? 1.3 : 1.0);
+    secretShaftGlowMat.emissiveIntensity = (1.3 + Math.sin(time * 3.0) * 0.35) * openT;
 
     for (let i = 0; i < avatarStands.length; i++) {
       const stand = avatarStands[i];

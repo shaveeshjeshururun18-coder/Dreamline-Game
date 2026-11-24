@@ -29,6 +29,7 @@ export function createSkyAndWater(scene: THREE.Scene): SkyWaterRig {
     uCloudShadow: { value: new THREE.Color(0x6c5994) },
     uSunDir: { value: new THREE.Vector3(-0.6, 0.14, -0.78).normalize() },
     uStarOpacity: { value: 0.25 },
+    uNightDarkness: { value: 0.0 },
     uTime: { value: 0 },
   };
 
@@ -55,6 +56,7 @@ export function createSkyAndWater(scene: THREE.Scene): SkyWaterRig {
       uniform vec3 uCloudShadow;
       uniform vec3 uSunDir;
       uniform float uStarOpacity;
+      uniform float uNightDarkness;
       uniform float uTime;
 
       varying vec3 vWorldDir;
@@ -95,15 +97,16 @@ export function createSkyAndWater(scene: THREE.Scene): SkyWaterRig {
         vec3 lower = mix(uHorizon, uMidSky, smoothstep(0.0, 0.24, h));
         vec3 col = mix(lower, uZenith, smoothstep(0.18, 0.78, h));
 
-        // Golden-peach horizon bloom toward sun direction
+        // Golden-peach horizon bloom toward sun direction (suppressed at full-dark night)
+        float daySunVis = 1.0 - uNightDarkness * 0.96;
         float sunDot = max(dot(dir, normalize(uSunDir)), 0.0);
         float horizonGlow = pow(1.0 - h, 3.6) * (0.38 + 0.62 * pow(sunDot, 1.8));
-        col += uSunColor * horizonGlow * 0.48;
+        col += uSunColor * horizonGlow * 0.48 * daySunVis;
 
         // Crisp sun/moon disc + soft atmospheric halo
         float sunDisc = smoothstep(0.9986, 0.9994, sunDot);
         float sunHalo = pow(sunDot, 14.0) * 0.42 + pow(sunDot, 84.0) * 0.52;
-        col += uSunColor * (sunHalo * 0.68 + sunDisc * 1.6);
+        col += uSunColor * (sunHalo * 0.68 + sunDisc * 1.6) * daySunVis;
 
         // Layered painted anime cloud streaks across upper & mid sky
         if (dir.y > 0.015) {
@@ -114,7 +117,7 @@ export function createSkyAndWater(scene: THREE.Scene): SkyWaterRig {
           float cloudMask = smoothstep(0.45, 0.75, cBase * 0.68 + cDetail * 0.32) * bandFade;
           float litMix = smoothstep(0.32, 0.85, cDetail * 0.75 + sunDot * 0.5 + (1.0 - h) * 0.25);
           vec3 cloudCol = mix(uCloudShadow, uCloudLit, litMix);
-          col = mix(col, cloudCol, cloudMask * 0.78);
+          col = mix(col, cloudCol, cloudMask * 0.78 * (1.0 - uNightDarkness * 0.78));
         }
 
         // Delicate twinkling stars at twilight / night
@@ -416,12 +419,16 @@ export function createSkyAndWater(scene: THREE.Scene): SkyWaterRig {
     skyUniforms.uCloudShadow.value.setRGB(palette.cloudShadow.r, palette.cloudShadow.g, palette.cloudShadow.b);
     skyUniforms.uSunDir.value.copy(sunDir);
     skyUniforms.uStarOpacity.value = palette.starOpacity;
+    skyUniforms.uNightDarkness.value = palette.nightDarkness;
     skyUniforms.uTime.value = elapsed;
 
     cloudUniforms.uCloudLit.value.setRGB(palette.cloudLit.r, palette.cloudLit.g, palette.cloudLit.b);
     cloudUniforms.uCloudShadow.value.setRGB(palette.cloudShadow.r, palette.cloudShadow.g, palette.cloudShadow.b);
     cloudUniforms.uHorizon.value.setRGB(palette.horizon.r, palette.horizon.g, palette.horizon.b);
     cloudUniforms.uSunDir.value.copy(sunDir);
+    for (let i = 0; i < cloudClusters.length; i++) {
+      cloudClusters[i].group.visible = palette.nightDarkness < 0.85;
+    }
 
     for (let i = 0; i < cloudClusters.length; i++) {
       const c = cloudClusters[i];

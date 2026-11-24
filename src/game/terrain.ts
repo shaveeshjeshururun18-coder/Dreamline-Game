@@ -31,6 +31,26 @@ import {
   isOnExhibitionMarinaPier,
   isOnOceanBusCauseway,
 } from './exhibitionComplex';
+import {
+  DESERT_OASIS_CENTER,
+  DESERT_OASIS_JETTY_BOUNDS,
+  DESERT_OASIS_SPAWN,
+  DESERT_PYRAMID_CENTER,
+  DESERT_PYRAMID_SOUTH_PORTAL,
+  DESERT_TRAIN_STATION_APPROX,
+  applyDesertTerrainHeight,
+  getDesertStructureFloorHeight,
+  isInsideDesertBiome,
+  isOnDesertOasisJetty,
+} from './desertOasis';
+import {
+  AIRPORT_CENTER,
+  AIRPORT_SPAWN,
+  METRO_SURFACE_ENTRANCES,
+  applyAirportTerrainHeight,
+  getAirportFloorHeight,
+  isInsideAirport,
+} from './airportMetro';
 
 export interface Vec2 {
   x: number;
@@ -79,6 +99,8 @@ export const REGION_LABELS: Record<RegionId, { name: string; tamil: string }> = 
   sakura: { name: 'Poongavanam Blossom Valley', tamil: 'பூங்காவனம் பள்ளத்தாக்கு' },
   countryside: { name: 'Pachai Vayal Countryside', tamil: 'பச்சை வயல்' },
   lake_camp: { name: 'Neelam Lake & Camp', tamil: 'நீலம் ஏரி முகாம்' },
+  desert: { name: 'Thar Golden Desert', tamil: 'தார் பாலைவன சோலை' },
+  airport: { name: 'Dreamline International Airport', tamil: 'சர்வதேச விமான நிலையம்' },
 };
 
 export const LOCATIONS: LocationInfo[] = [
@@ -247,6 +269,50 @@ export const LOCATIONS: LocationInfo[] = [
     teleportX: -52.0,
     teleportZ: -48.0,
   },
+  {
+    id: 'thar_desert_oasis',
+    regionId: 'desert',
+    name: 'Thar Golden Desert Oasis',
+    jpName: 'பாலைவன சோலை',
+    subtitle: 'Sunlit golden sand dunes, palm-ringed emerald swimming lagoon, Bedouin campfire & desert sky pad',
+    x: DESERT_OASIS_CENTER.x,
+    z: DESERT_OASIS_CENTER.z,
+    teleportX: DESERT_OASIS_SPAWN.x,
+    teleportZ: DESERT_OASIS_SPAWN.z,
+  },
+  {
+    id: 'thar_pyramid_ruins',
+    regionId: 'desert',
+    name: 'Thar Grand Pyramid Ruins',
+    jpName: 'பழமையான பிரமிட் கோவில்',
+    subtitle: 'Walkable 6-tier sandstone pyramid with golden sun summit & torch-lit secret solar relic chamber',
+    x: DESERT_PYRAMID_CENTER.x,
+    z: DESERT_PYRAMID_CENTER.z,
+    teleportX: DESERT_PYRAMID_SOUTH_PORTAL.x,
+    teleportZ: DESERT_PYRAMID_SOUTH_PORTAL.z + 5.5,
+  },
+  {
+    id: 'dreamline_airport',
+    regionId: 'airport',
+    name: 'Dreamline International Airport',
+    jpName: 'சர்வதேச விமான நிலையம்',
+    subtitle: 'Terminal 1 departure hall, 26m ATC radar tower, Runway 09/27, underground Metro link & flyable DL-787 Jetliner',
+    x: AIRPORT_CENTER.x,
+    z: AIRPORT_CENTER.z,
+    teleportX: AIRPORT_SPAWN.x,
+    teleportZ: AIRPORT_SPAWN.z,
+  },
+  {
+    id: 'underground_metro',
+    regionId: 'sakura',
+    name: 'Central Underground Metro',
+    jpName: 'சுரங்க மெட்ரோ நிலையம்',
+    subtitle: 'Illuminated subway pavilion descending underground — ride express M1 Metro to Midtown NYC & International Airport',
+    x: METRO_SURFACE_ENTRANCES[0].surfaceX,
+    z: METRO_SURFACE_ENTRANCES[0].surfaceZ,
+    teleportX: METRO_SURFACE_ENTRANCES[0].surfaceX,
+    teleportZ: METRO_SURFACE_ENTRANCES[0].surfaceZ + 4.5,
+  },
 ];
 
 export const SCENIC_SPOTS: ScenicSpot[] = [
@@ -380,6 +446,36 @@ export const SCENIC_SPOTS: ScenicSpot[] = [
     z: -48,
     radius: 13,
   },
+  {
+    id: 'spot_thar_oasis',
+    regionId: 'desert',
+    name: 'Thar Emerald Oasis Lagoon',
+    jpName: 'தார் மரகத சோலை',
+    description: 'Date palms, cool turquoise desert waters, and a starlit Bedouin campfire beneath golden dunes.',
+    x: DESERT_OASIS_CENTER.x,
+    z: DESERT_OASIS_CENTER.z,
+    radius: 26,
+  },
+  {
+    id: 'spot_thar_pyramid',
+    regionId: 'desert',
+    name: 'Grand Sandstone Pyramid & Secret Chamber',
+    jpName: 'தங்க சூரிய பிரமிட்',
+    description: 'Climb the east processional staircase to the golden summit or step inside the torch-lit solar relic chamber.',
+    x: DESERT_PYRAMID_CENTER.x,
+    z: DESERT_PYRAMID_CENTER.z,
+    radius: 24,
+  },
+  {
+    id: 'spot_international_airport',
+    regionId: 'airport',
+    name: 'Dreamline International Airport & Runway 09',
+    jpName: 'சர்வதேச விமான நிலையம்',
+    description: 'Watch jetliners depart Runway 09, step inside Terminal 1, take the Underground Metro, or pilot the DL-787 Dreamliner.',
+    x: AIRPORT_CENTER.x,
+    z: AIRPORT_CENTER.z,
+    radius: 42,
+  },
 ];
 
 function smoothstep(edge0: number, edge1: number, x: number): number {
@@ -417,6 +513,8 @@ export function isOceanAt(x: number, z: number): boolean {
 }
 
 export function getRegionAt(x: number, z: number): RegionId {
+  if (isInsideAirport(x, z, 14)) return 'airport';
+  if (isInsideDesertBiome(x, z)) return 'desert';
   if (x > 64 && z > 18) return 'coastal';
   if (x < -56 && z < -36) return 'snow';
   if (x > 16 && z < 16) return 'lake_camp';
@@ -618,6 +716,13 @@ export function groundHeightAt(x: number, z: number): number {
     h = h * (1 - islandFlat) + EXHIBITION_DECK_Y * islandFlat;
   }
 
+  // Thar Golden Desert Oasis & Pyramid Ruins rolling dunes & oasis basin (western expanse x < -132, z > 10)
+  // Applied BEFORE railway grading so the desert railway track cuts a smooth, level corridor through the dunes!
+  h = applyDesertTerrainHeight(x, z, h);
+
+  // Dreamline International Airport flat tarmac & runway plateau at northeastern expanse (215, -135)
+  h = applyAirportTerrainHeight(x, z, h);
+
   // Grade railway corridor cleanly near y = 0.02 (without filling in Neelam Lake or the Ocean beneath the Sea Railway Bridge)
   const railD = minDistToRail(x, z);
   const lakeDistNow = lakeNormDist(x, z);
@@ -625,6 +730,18 @@ export function groundHeightAt(x: number, z: number): number {
   if (railD < 11 && lakeDistNow > 0.65 && !overOpenSea) {
     const railFlat = (1 - smoothstep(3.6, 11.0, railD)) * smoothstep(0.65, 0.92, lakeDistNow);
     h = h * (1 - railFlat) + 0.02 * railFlat;
+  }
+
+  // Flatten Panimalai Snow Summit Station (-100, -128) & Thar Desert Oasis Station (-168, 112) plazas cleanly to y = 0.02
+  const dSnowStation = Math.hypot(x + 100, z + 128);
+  if (dSnowStation < 30) {
+    const snowStFlat = 1 - smoothstep(14.5, 30.0, dSnowStation);
+    h = h * (1 - snowStFlat) + 0.02 * snowStFlat;
+  }
+  const dDesertStation = Math.hypot(x + 168, z - 112);
+  if (dDesertStation < 26) {
+    const desertStFlat = 1 - smoothstep(12.5, 26.0, dDesertStation);
+    h = h * (1 - desertStFlat) + 0.02 * desertStFlat;
   }
 
   // Keep coastal beach bus loop flat
@@ -667,9 +784,24 @@ export function walkableHeightAt(x: number, z: number): number {
     return Math.max(base, 0.72);
   }
 
-  // Iceland Express Halt platform (near -50.5, -24.0)
-  if (Math.hypot(x - -50.5, z - -24.0) < 8.2) {
+  // Iceland Express Halt platform (near -50.5, -18.0)
+  if (Math.hypot(x - -50.5, z - -19.0) < 9.5) {
     return Math.max(base, 0.74);
+  }
+
+  // Panimalai Snow Summit Station platform (Snow Area, near -100, -128)
+  if (Math.hypot(x - -101.5, z - -132.0) < 9.5) {
+    return Math.max(base, 0.78);
+  }
+
+  // Thar Desert Oasis Station platform (New Desert Area, near -172, 112)
+  if (
+    Math.hypot(
+      x - (DESERT_TRAIN_STATION_APPROX.x - 4.2),
+      z - DESERT_TRAIN_STATION_APPROX.z
+    ) < 9.8
+  ) {
+    return Math.max(base, 0.78);
   }
 
   // SSJ Dinosaur Island Station platform (NW headland of Dinosaur Island)
@@ -715,6 +847,11 @@ export function walkableHeightAt(x: number, z: number): number {
   // Sovereign of the Tides Timber Boarding Pier extending right from Kadalkarai Shore (x: 103.5..123.0, z: 46.2..51.0)
   if (x >= 103.5 && x <= 123.0 && z >= 46.2 && z <= 51.0) {
     return Math.max(base, 0.36);
+  }
+
+  // Thar Desert Emerald Oasis Wooden Jetty
+  if (isOnDesertOasisJetty(x, z)) {
+    return Math.max(base, DESERT_OASIS_JETTY_BOUNDS.deckY);
   }
 
   // En Illam (My Home) — Two-Storey Accessible House centered at (-22, -16)
@@ -771,6 +908,11 @@ export function walkableHeightWithFloor(x: number, z: number, currentY: number):
       return 3.65 + tHeli * (10.4 - 3.65);
     }
 
+    // 2B. 3rd Floor Hero Character-Switching Hall (y = 7.0m, accessed off East Staircase mid-landing at lz: 0.0..2.4!)
+    if (currentY >= 5.6 && currentY <= 8.6 && lx >= -6.2 && lx <= 6.2 && lz >= -5.0 && lz <= 5.2) {
+      return 7.0;
+    }
+
     // 3. Interior staircase descent zone (Ground <-> 2nd Floor)
     if (currentY < 5.6 && lx >= 3.4 && lx <= 5.7 && lz >= -3.6 && lz <= 2.4) {
       const tStair = Math.max(0, Math.min(1, (2.2 - lz) / 5.4));
@@ -793,14 +935,25 @@ export function walkableHeightWithFloor(x: number, z: number, currentY: number):
     return Math.max(walkableHeightAt(x, z), exhibitionY);
   }
 
+  const desertY = getDesertStructureFloorHeight(x, z, currentY);
+  if (desertY !== null) {
+    return desertY;
+  }
+
+  const airportY = getAirportFloorHeight(x, z);
+  if (airportY !== null) {
+    return airportY;
+  }
+
   return walkableHeightAt(x, z);
 }
 
 export function isWaterAt(x: number, z: number): boolean {
-  // Wooden piers, Sovereign Boarding Pier, Ocean Bus Causeway, Marina Pier, and the Sea Railway Bridge deck are walkable over water!
+  // Wooden piers, Sovereign Boarding Pier, Desert Oasis Jetty, Ocean Bus Causeway, Marina Pier, and the Sea Railway Bridge deck are walkable over water!
   if (x >= 26.5 && x <= 35.5 && z >= -14.0 && z <= -9.5) return false;
   if (x >= 105.5 && x <= 120.5 && z >= 58.5 && z <= 65.5) return false;
   if (x >= 103.5 && x <= 123.0 && z >= 46.2 && z <= 51.0) return false;
+  if (isOnDesertOasisJetty(x, z)) return false;
   if (isOceanAt(x, z) && minDistToRail(x, z) < 2.65) return false;
   if (isOnOceanBusCauseway(x, z)) return false;
   if (isOnExhibitionMarinaPier(x, z)) return false;
@@ -872,11 +1025,22 @@ export function resolvePlayerCollision(
         z = prevZ;
         collided = true;
       }
+    } else if (currentY >= 5.6 && prevLx < 5.95) {
+      // On 3rd Floor Hero Character-Switching Hall (y = 7.0m) — open east doorway out to East Staircase at lz: 0.0..2.5!
+      const maxAllowedLx = lz >= 0.0 && lz <= 2.5 ? 7.85 : 5.6;
+      const clampedLx = Math.max(-5.6, Math.min(maxAllowedLx, lx));
+      const clampedLz = Math.max(-4.5, Math.min(4.6, lz));
+      if (clampedLx !== lx || clampedLz !== lz) {
+        x = HOME_CENTER.x + clampedLx;
+        z = HOME_CENTER.z + clampedLz;
+        collided = true;
+      }
     } else if (prevLx >= 5.7 || (lx >= 5.6 && lz >= 5.4 && lz <= 7.3)) {
-      // On the Exterior East Helipad Staircase / East Balcony Entry Landing
+      // On the Exterior East Helipad Staircase / East Balcony Entry Landing / 3rd Floor Mid-Landing Doorway
       const inBalconyDoor = lx >= -5.6 && lx <= 7.85 && lz >= 5.45 && lz <= 7.25 && currentY < 4.5;
+      const inThirdFloorDoor = lx >= -5.6 && lx <= 7.85 && lz >= 0.0 && lz <= 2.5 && currentY >= 5.8 && currentY <= 8.4;
       const onHeliStair = lx >= 6.15 && lx <= 7.85 && lz >= -4.35 && lz <= 7.25;
-      if (!inBalconyDoor && !onHeliStair) {
+      if (!inBalconyDoor && !inThirdFloorDoor && !onHeliStair) {
         x = prevX;
         z = prevZ;
         collided = true;

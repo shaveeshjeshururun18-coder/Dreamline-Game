@@ -1,7 +1,10 @@
 import * as THREE from 'three';
 import {
+  AVS_SNOW_HOUSE_BASE_Y,
+  AVS_SNOW_HOUSE_CENTER,
   AVS_SNOW_HOUSE_FRONT_PLAZA,
   AVS_SNOW_HOUSE_ROT_Y,
+  AVS_SNOW_HOUSE_SCALE,
   CAVE_CHAMBERS,
   CAVE_ENTRANCES,
   CAVE_FLOOR_Y,
@@ -18,7 +21,7 @@ import {
   WINTER_SUMMIT_STATION_POS,
   isNearFrozenKingdomClearing,
 } from '../game/frozenKingdom';
-import { groundHeightAt } from '../game/terrain';
+import { distanceToRail, groundHeightAt } from '../game/terrain';
 import type { InteractableItem } from '../game/types';
 
 export interface FrozenKingdomWorldSystem {
@@ -107,6 +110,8 @@ export function buildFrozenKingdomWorld(isSoftwareGl: boolean): FrozenKingdomWor
     const px = -88 - rand() * 192;
     const pz = -88 - rand() * 182;
     if (isNearFrozenKingdomClearing(px, pz)) continue;
+    if (distanceToRail(px, pz) < 9.5) continue;
+    if (Math.hypot(px + 100, pz + 128) < 15.5) continue;
     const py = groundHeightAt(px, pz);
     pinePositions.push({ x: px, y: py, z: pz, s: 0.85 + rand() * 0.75 });
   }
@@ -235,18 +240,37 @@ export function buildFrozenKingdomWorld(isSoftwareGl: boolean): FrozenKingdomWor
   });
 
   // Launch SSJ Tropical Sky Explorer directly from AVS Snow Residence Rooftop Helipad!
-  surfaceInteractables.push({
-    id: 'avs_helipad_launch',
-    kind: 'sky_explorer_fly',
-    label: 'Launch SSJ Sky Explorer (AVS Helipad)',
-    sublabel: 'பனிமலை இல்லம் ஹெலிபேட் · Fly from AVS Rooftop Helipad',
-    x: AVS_SNOW_HOUSE_FRONT_PLAZA.x,
-    y: plazaY + 0.4,
-    z: AVS_SNOW_HOUSE_FRONT_PLAZA.z,
-    radius: 5.5,
-    locationId: 'avs_snow_house',
-    metaId: 'avs',
-  });
+  const avsPadLocalZ = -5.8 * AVS_SNOW_HOUSE_SCALE;
+  const avsPadWorldX = AVS_SNOW_HOUSE_CENTER.x + Math.sin(AVS_SNOW_HOUSE_ROT_Y) * avsPadLocalZ;
+  const avsPadWorldZ = AVS_SNOW_HOUSE_CENTER.z + Math.cos(AVS_SNOW_HOUSE_ROT_Y) * avsPadLocalZ;
+  const avsPadWorldY = AVS_SNOW_HOUSE_BASE_Y + 7.59 * AVS_SNOW_HOUSE_SCALE;
+
+  surfaceInteractables.push(
+    {
+      id: 'avs_helipad_launch',
+      kind: 'sky_explorer_fly',
+      label: 'Launch SSJ Sky Explorer (AVS Helipad)',
+      sublabel: 'பனிமலை இல்லம் ஹெலிபேட் · Fly from AVS Rooftop Helipad',
+      x: AVS_SNOW_HOUSE_FRONT_PLAZA.x,
+      y: plazaY + 0.4,
+      z: AVS_SNOW_HOUSE_FRONT_PLAZA.z,
+      radius: 5.5,
+      locationId: 'avs_snow_house',
+      metaId: 'avs',
+    },
+    {
+      id: 'avs_rooftop_helipad_launch',
+      kind: 'sky_explorer_fly',
+      label: 'Fly SSJ Sky Explorer from AVS Rooftop Helipad',
+      sublabel: 'பனிமலை இல்லம் கூரை ஹெலிபேட் · Take off directly from the rooftop pad',
+      x: avsPadWorldX,
+      y: avsPadWorldY,
+      z: avsPadWorldZ,
+      radius: 5.6,
+      locationId: 'avs_snow_house',
+      metaId: 'avs',
+    }
+  );
 
   // 1C. Towering Frozen Waterfall Cliff at (-226, -124)
   const wfBaseY = groundHeightAt(FROZEN_WATERFALL_POS.x, FROZEN_WATERFALL_POS.z);
