@@ -119,6 +119,199 @@ export function combineMovementInput(
   };
 }
 
+export interface TouchMovePadVisual {
+  active: boolean;
+  originX: number;
+  originY: number;
+  knobX: number;
+  knobY: number;
+}
+
+export interface ScreenTouchState {
+  movePointerId: number | null;
+  cameraPointerId: number | null;
+  originX: number;
+  originY: number;
+  knobX: number;
+  knobY: number;
+  right: number;
+  forward: number;
+  active: boolean;
+  lastCamX: number;
+  lastCamY: number;
+}
+
+export function createInitialScreenTouchState(): ScreenTouchState {
+  return {
+    movePointerId: null,
+    cameraPointerId: null,
+    originX: 0,
+    originY: 0,
+    knobX: 0,
+    knobY: 0,
+    right: 0,
+    forward: 0,
+    active: false,
+    lastCamX: 0,
+    lastCamY: 0,
+  };
+}
+
+/**
+ * Routes pointer-down anywhere on the 3D canvas:
+ * - On mobile touch/pen during gameplay (when the corner joystick is not held),
+ *   touching ANYWHERE on the screen spawns a floating movement thumbpad immediately.
+ * - A simultaneous 2nd finger (or a touch while holding the corner joystick, or desktop mouse)
+ *   smoothly orbits the 360° camera without interrupting movement.
+ */
+export function beginScreenPointer(
+  state: ScreenTouchState,
+  input: {
+    pointerId: number;
+    pointerType: string;
+    clientX: number;
+    clientY: number;
+    allowTouchMove: boolean;
+    fixedJoystickActive: boolean;
+  }
+): { state: ScreenTouchState; role: 'move' | 'camera' | 'ignored' } {
+  const isTouchLike = input.pointerType !== 'mouse';
+  if (
+    input.allowTouchMove &&
+    isTouchLike &&
+    !input.fixedJoystickActive &&
+    state.movePointerId === null
+  ) {
+    return {
+      role: 'move',
+      state: {
+        ...state,
+        movePointerId: input.pointerId,
+        originX: input.clientX,
+        originY: input.clientY,
+        knobX: 0,
+        knobY: 0,
+        right: 0,
+        forward: 0,
+        active: true,
+      },
+    };
+  }
+
+  if (state.cameraPointerId === null) {
+    return {
+      role: 'camera',
+      state: {
+        ...state,
+        cameraPointerId: input.pointerId,
+        lastCamX: input.clientX,
+        lastCamY: input.clientY,
+      },
+    };
+  }
+
+  return { state, role: 'ignored' };
+}
+
+/**
+ * Updates either full-screen floating touch movement (with soft dynamic origin follow
+ * so reversing direction after a long slide responds instantly) or camera orbit deltas.
+ */
+export function moveScreenPointer(
+  state: ScreenTouchState,
+  input: {
+    pointerId: number;
+    clientX: number;
+    clientY: number;
+    maxRadius?: number;
+    deadzone?: number;
+  }
+): { state: ScreenTouchState; role: 'move' | 'camera' | 'ignored'; camDx: number; camDy: number } {
+  if (input.pointerId === state.movePointerId) {
+    const maxRadius = Math.max(20, input.maxRadius ?? 46);
+    const deadzone = input.deadzone ?? 0.08;
+    let originX = state.originX;
+    let originY = state.originY;
+    let dx = input.clientX - originX;
+    let dy = input.clientY - originY;
+    const dist = Math.hypot(dx, dy);
+    const followLimit = maxRadius * 1.15;
+    if (dist > followLimit) {
+      originX = input.clientX - (dx / dist) * followLimit;
+      originY = input.clientY - (dy / dist) * followLimit;
+      dx = input.clientX - originX;
+      dy = input.clientY - originY;
+    }
+    const sample = normalizeJoystickInput(dx, dy, maxRadius, deadzone);
+    return {
+      role: 'move',
+      camDx: 0,
+      camDy: 0,
+      state: {
+        ...state,
+        originX,
+        originY,
+        knobX: sample.knobX,
+        knobY: sample.knobY,
+        right: sample.right,
+        forward: sample.forward,
+        active: true,
+      },
+    };
+  }
+
+  if (input.pointerId === state.cameraPointerId) {
+    const camDx = input.clientX - state.lastCamX;
+    const camDy = input.clientY - state.lastCamY;
+    return {
+      role: 'camera',
+      camDx,
+      camDy,
+      state: {
+        ...state,
+        lastCamX: input.clientX,
+        lastCamY: input.clientY,
+      },
+    };
+  }
+
+  return { state, role: 'ignored', camDx: 0, camDy: 0 };
+}
+
+export function endScreenPointer(
+  state: ScreenTouchState,
+  pointerId: number
+): ScreenTouchState {
+  if (pointerId === state.movePointerId) {
+    return {
+      ...state,
+      movePointerId: null,
+      knobX: 0,
+      knobY: 0,
+      right: 0,
+      forward: 0,
+      active: false,
+    };
+  }
+  if (pointerId === state.cameraPointerId) {
+    return {
+      ...state,
+      cameraPointerId: null,
+    };
+  }
+  return state;
+}
+
+export function getTouchMovePadVisual(state: ScreenTouchState): TouchMovePadVisual {
+  return {
+    active: state.active,
+    originX: state.originX,
+    originY: state.originY,
+    knobX: state.knobX,
+    knobY: state.knobY,
+  };
+}
+
 /**
  * Quick Night Mode toggle: switches cleanly between starry peaceful night (22:15)
  * and the signature pink-lavender sunset (17:43).

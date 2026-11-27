@@ -1,0 +1,2179 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>OceanLab 3D — Photorealistic Gerstner Wave Physics & Shader Analyzer</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Three.js r128 -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <!-- Google Fonts: Inter & JetBrains Mono -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+    <style>
+        * {
+            box-sizing: border-box;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #030712;
+            font-family: 'Inter', sans-serif;
+            color: #f8fafc;
+        }
+        #webgl-container {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+        }
+        canvas.webgl-canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            cursor: grab;
+        }
+        canvas.webgl-canvas:active {
+            cursor: grabbing;
+        }
+        .font-mono-code {
+            font-family: 'JetBrains Mono', monospace;
+        }
+        /* Glassmorphism UI Panels */
+        .glass-panel {
+            background: rgba(8, 15, 28, 0.78);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(148, 163, 184, 0.16);
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+        }
+        /* Custom Range Sliders */
+        input[type="range"] {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 100%;
+            height: 5px;
+            background: rgba(51, 65, 85, 0.8);
+            border-radius: 999px;
+            outline: none;
+        }
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: #38bdf8;
+            border: 2px solid #e0f2fe;
+            cursor: pointer;
+            box-shadow: 0 0 10px rgba(56, 189, 248, 0.6);
+            transition: transform 0.15s ease, background-color 0.15s ease;
+        }
+        input[type="range"]::-webkit-slider-thumb:hover {
+            transform: scale(1.15);
+            background: #7dd3fc;
+        }
+        /* Custom Scrollbar */
+        .custom-scroll::-webkit-scrollbar {
+            width: 5px;
+            height: 5px;
+        }
+        .custom-scroll::-webkit-scrollbar-track {
+            background: rgba(15, 23, 42, 0.4);
+        }
+        .custom-scroll::-webkit-scrollbar-thumb {
+            background: rgba(100, 116, 139, 0.5);
+            border-radius: 999px;
+        }
+        .mode-btn.active {
+            background: linear-gradient(135deg, rgba(14, 165, 233, 0.35), rgba(3, 105, 161, 0.45));
+            border-color: rgba(56, 189, 248, 0.7);
+            color: #e0f2fe;
+            box-shadow: 0 0 15px rgba(14, 165, 233, 0.25);
+        }
+        .preset-btn.active {
+            background: rgba(56, 189, 248, 0.2);
+            border-color: #38bdf8;
+            color: #38bdf8;
+        }
+    </style>
+</head>
+<body class="relative w-screen h-screen overflow-hidden select-none">
+
+    <!-- 3D WebGL Ocean Viewport -->
+    <div id="webgl-container"></div>
+
+    <!-- Top Navigation & Telemetry Bar -->
+    <header class="fixed top-3 left-3 right-3 z-20 flex flex-wrap items-center justify-between gap-2 pointer-events-none">
+        <!-- Brand & Status -->
+        <div class="glass-panel rounded-2xl px-4 py-2.5 flex items-center gap-3 pointer-events-auto">
+            <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-cyan-400 to-blue-600 flex items-center justify-center shadow-lg shadow-cyan-500/25">
+                <svg class="w-5 h-5 text-slate-950" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M2 12c2.5-3.5 5.5-3.5 8 0s5.5 3.5 8 0 4-2 4-2M2 17c2.5-3.5 5.5-3.5 8 0s5.5 3.5 8 0 4-2 4-2M2 7c2.5-3.5 5.5-3.5 8 0s5.5 3.5 8 0 4-2 4-2"/>
+                </svg>
+            </div>
+            <div>
+                <div class="flex items-center gap-2">
+                    <h1 class="text-sm md:text-base font-bold tracking-tight text-white">OCEANLAB 3D</h1>
+                    <span id="active-ocean-badge" class="text-[10px] font-mono-code uppercase px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-400/30">Bay of Bengal Coast</span>
+                </div>
+                <p class="text-[11px] text-slate-400 hidden sm:block">Coastal Shoaling • Interactive Beach Excavation • Bay of Bengal / Atlantic / Pacific Optics</p>
+            </div>
+        </div>
+
+        <!-- Ocean Basin Theme Switcher Pill -->
+        <div class="glass-panel rounded-2xl p-1.5 flex items-center gap-1 pointer-events-auto text-xs">
+            <button data-ocean="bengal" class="ocean-theme-btn active px-3 py-1.5 rounded-xl font-semibold transition flex items-center gap-1.5 bg-emerald-500/25 text-emerald-200 border border-emerald-400/50">
+                <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+                <span>Bay of Bengal</span>
+            </button>
+            <button data-ocean="atlantic" class="ocean-theme-btn px-3 py-1.5 rounded-xl font-semibold transition flex items-center gap-1.5 text-slate-300 hover:text-white border border-transparent">
+                <span class="w-2 h-2 rounded-full bg-teal-400"></span>
+                <span>Atlantic Ocean</span>
+            </button>
+            <button data-ocean="pacific" class="ocean-theme-btn px-3 py-1.5 rounded-xl font-semibold transition flex items-center gap-1.5 text-slate-300 hover:text-white border border-transparent">
+                <span class="w-2 h-2 rounded-full bg-cyan-400"></span>
+                <span>Pacific Ocean</span>
+            </button>
+        </div>
+
+        <!-- Live Hydrodynamic Telemetry Pills -->
+        <div class="glass-panel rounded-2xl px-3.5 py-2 flex items-center gap-4 pointer-events-auto text-xs">
+            <div class="flex flex-col">
+                <span class="text-[10px] uppercase tracking-wider text-slate-400">Sig. Wave Height (H<sub>s</sub>)</span>
+                <span id="telemetry-hs" class="font-mono-code font-semibold text-cyan-300">2.84 m</span>
+            </div>
+            <div class="h-6 w-px bg-slate-700/70"></div>
+            <div class="flex flex-col">
+                <span class="text-[10px] uppercase tracking-wider text-slate-400">Phase Speed (c = √(g/k))</span>
+                <span id="telemetry-speed" class="font-mono-code font-semibold text-emerald-300">9.98 m/s</span>
+            </div>
+            <div class="h-6 w-px bg-slate-700/70 hidden md:block"></div>
+            <div class="hidden md:flex flex-col">
+                <span class="text-[10px] uppercase tracking-wider text-slate-400">Jacobian Crest Pinch</span>
+                <span id="telemetry-jacobian" class="font-mono-code font-semibold text-amber-300">J_min = 0.24 (Breaking)</span>
+            </div>
+            <div class="h-6 w-px bg-slate-700/70"></div>
+            <div class="flex items-center gap-1.5">
+                <button id="toggle-analyzer-btn" class="px-3 py-1.5 rounded-xl bg-cyan-500/20 hover:bg-cyan-500/30 border border-cyan-400/40 text-cyan-200 font-medium transition flex items-center gap-1.5">
+                    <svg class="w-4 h-4 text-cyan-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
+                    </svg>
+                    <span>Wave Analysis</span>
+                </button>
+                <button id="toggle-controls-btn" class="px-3 py-1.5 rounded-xl bg-slate-800/80 hover:bg-slate-700/80 border border-slate-600/50 text-slate-200 font-medium transition">
+                    Controls
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- LEFT PANEL: How Ocean Waves Work (Interactive Physics & Orbital Mechanics Analyzer) -->
+    <aside id="analyzer-panel" class="fixed top-20 left-3 bottom-16 z-20 w-[92vw] sm:w-[410px] glass-panel rounded-2xl flex flex-col overflow-hidden transition-all duration-300">
+        <!-- Header -->
+        <div class="px-4 py-3 border-b border-slate-700/60 flex items-center justify-between bg-slate-900/40">
+            <div class="flex items-center gap-2">
+                <span class="w-2 h-2 rounded-full bg-cyan-400 animate-pulse"></span>
+                <h2 class="text-xs font-bold uppercase tracking-wider text-cyan-300">How Realistic Ocean Waves Work</h2>
+            </div>
+            <button id="close-analyzer-btn" class="text-slate-400 hover:text-white p-1 rounded-lg">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+            </button>
+        </div>
+
+        <!-- Scrollable Content -->
+        <div class="p-4 overflow-y-auto custom-scroll space-y-4 text-xs leading-relaxed text-slate-300">
+            <!-- Live 2D Orbital Mechanics Visualizer -->
+            <div class="rounded-xl bg-slate-950/90 border border-slate-800 p-3 space-y-2">
+                <div class="flex items-center justify-between">
+                    <span class="text-[11px] font-semibold text-white">1. Gerstner Orbital Particle Motion (Live Cross-Section)</span>
+                    <label class="flex items-center gap-1.5 text-[10px] text-cyan-300 cursor-pointer">
+                        <input type="checkbox" id="compare-sine-toggle" checked class="rounded accent-cyan-400">
+                        <span>Compare Naive Sine</span>
+                    </label>
+                </div>
+                <div class="relative w-full h-40 rounded-lg overflow-hidden bg-slate-900 border border-slate-800/80">
+                    <canvas id="orbital-canvas" class="w-full h-full block"></canvas>
+                </div>
+                <div class="flex flex-wrap items-center justify-between gap-2 text-[10px] text-slate-400 pt-0.5">
+                    <span class="flex items-center gap-1"><span class="w-2.5 h-0.5 bg-cyan-400 inline-block"></span>Gerstner (Sharp Crest, Flat Trough)</span>
+                    <span class="flex items-center gap-1"><span class="w-2.5 h-0.5 bg-rose-400/80 inline-block"></span>Naive Sine (Unrealistic)</span>
+                    <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-amber-400 inline-block"></span>Orbital Particle</span>
+                </div>
+            </div>
+
+            <!-- Diagnostic Shader Render Mode Switcher -->
+            <div class="space-y-1.5">
+                <div class="flex items-center justify-between">
+                    <span class="text-[11px] font-semibold text-white">2. Inspect Shader Layers in 3D</span>
+                    <span class="text-[10px] text-slate-400">Click to isolate physics</span>
+                </div>
+                <div class="grid grid-cols-2 gap-1.5">
+                    <button data-mode="0" class="mode-btn active text-left px-2.5 py-2 rounded-xl border border-slate-700/70 bg-slate-900/50 hover:bg-slate-800/70 transition">
+                        <div class="font-semibold text-[11px]">Photorealistic Full</div>
+                        <div class="text-[10px] text-slate-400">PBR + SSS + Fresnel + Foam</div>
+                    </button>
+                    <button data-mode="1" class="mode-btn text-left px-2.5 py-2 rounded-xl border border-slate-700/70 bg-slate-900/50 hover:bg-slate-800/70 transition">
+                        <div class="font-semibold text-[11px]">Jacobian Stress (J)</div>
+                        <div class="text-[10px] text-slate-400">Crest compression & foam</div>
+                    </button>
+                    <button data-mode="2" class="mode-btn text-left px-2.5 py-2 rounded-xl border border-slate-700/70 bg-slate-900/50 hover:bg-slate-800/70 transition">
+                        <div class="font-semibold text-[11px]">Subsurface & Fresnel</div>
+                        <div class="text-[10px] text-slate-400">Internal crest light glow</div>
+                    </button>
+                    <button data-mode="3" class="mode-btn text-left px-2.5 py-2 rounded-xl border border-slate-700/70 bg-slate-900/50 hover:bg-slate-800/70 transition">
+                        <div class="font-semibold text-[11px]">Analytical Normals</div>
+                        <div class="text-[10px] text-slate-400">Gerstner + 10-octave FBM</div>
+                    </button>
+                </div>
+                <div class="flex items-center gap-2 pt-1">
+                    <button id="toggle-wireframe-btn" class="flex-1 px-2.5 py-1.5 rounded-xl border border-slate-700/70 bg-slate-900/60 hover:bg-slate-800 text-[11px] font-medium text-slate-300 transition flex items-center justify-center gap-1.5">
+                        <span>Toggle Trochoidal Wireframe</span>
+                    </button>
+                    <button id="toggle-buoys-btn" class="flex-1 px-2.5 py-1.5 rounded-xl border border-cyan-500/40 bg-cyan-500/15 hover:bg-cyan-500/25 text-[11px] font-medium text-cyan-200 transition flex items-center justify-center gap-1.5">
+                        <span>Floating Physics Buoys: ON</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Deep Physics Breakdown Cards -->
+            <div class="space-y-2.5">
+                <div class="p-3 rounded-xl bg-slate-900/70 border border-slate-800 space-y-1">
+                    <div class="font-semibold text-cyan-300 text-[11px] flex items-center justify-between">
+                        <span>Why Simple 3D Waves Look Fake</span>
+                        <span class="font-mono-code text-[10px] text-slate-400">x' = x - (Q/k) D·A sin(θ)</span>
+                    </div>
+                    <p class="text-[11px] text-slate-300">
+                        Basic 3D scenes only displace height <code class="text-cyan-300">y = A cos(kx - ωt)</code>. In real oceans, water molecules move in <strong>orbital circles</strong>—moving forward at the crest and backward in the trough. Our vertex shader shifts vertices horizontally toward the crest, creating sharp, pinched peaks and broad, flat troughs (<strong>Trochoidal / Gerstner waves</strong>).
+                    </p>
+                </div>
+
+                <div class="p-3 rounded-xl bg-slate-900/70 border border-slate-800 space-y-1">
+                    <div class="font-semibold text-emerald-300 text-[11px] flex items-center justify-between">
+                        <span>Dispersion Relation & Wave Cascades</span>
+                        <span class="font-mono-code text-[10px] text-slate-400">ω(k) = √(g · k)</span>
+                    </div>
+                    <p class="text-[11px] text-slate-300">
+                        Long swells travel faster than short chop because phase speed depends on wavelength: <code class="text-emerald-300">c = √(gλ / 2π)</code>. We sum 8 directional Gerstner swells in the vertex shader plus 10 octaves of animated capillary wind ripples in the fragment shader so waves never repeat mechanically.
+                    </p>
+                </div>
+
+                <div class="p-3 rounded-xl bg-slate-900/70 border border-slate-800 space-y-1">
+                    <div class="font-semibold text-amber-300 text-[11px] flex items-center justify-between">
+                        <span>Coastal Shoaling, Swash & Excavation Physics</span>
+                        <span class="font-mono-code text-[10px] text-slate-400">c_s = √(g · h)</span>
+                    </div>
+                    <p class="text-[11px] text-slate-300">
+                        As deep-water waves enter shallow coastal bathymetry (<code class="text-amber-300">h &lt; λ/2</code>), bottom friction compresses wavelength and increases steepness until crests pitch forward into turbulent surf foam. Digging trenches or building sandbars on the shore dynamically alters water depth <code class="text-amber-300">h(x,z)</code>, redirecting wave shoaling, caustics, and tidal swash in real time.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </aside>
+
+    <!-- RIGHT PANEL: Sea State, Wave Spectrum & Optical Shader Controls -->
+    <aside id="controls-panel" class="fixed top-20 right-3 bottom-16 z-20 w-[92vw] sm:w-[340px] glass-panel rounded-2xl flex flex-col overflow-hidden transition-all duration-300">
+        <div class="px-4 py-3 border-b border-slate-700/60 flex items-center justify-between bg-slate-900/40">
+            <div class="flex items-center gap-2">
+                <svg class="w-4 h-4 text-cyan-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"/>
+                </svg>
+                <h2 class="text-xs font-bold uppercase tracking-wider text-white">Ocean & Shore Parameters</h2>
+            </div>
+            <button id="close-controls-btn" class="text-slate-400 hover:text-white p-1 rounded-lg">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+            </button>
+        </div>
+
+        <div class="p-4 overflow-y-auto custom-scroll space-y-4 text-xs">
+            <!-- Interactive Shore Excavation Controls -->
+            <div class="space-y-2 p-3 rounded-xl bg-amber-500/10 border border-amber-400/30">
+                <div class="flex items-center justify-between">
+                    <span class="text-[11px] font-bold uppercase tracking-wider text-amber-300">Shore Excavation & Sand Sculpting</span>
+                    <span id="excavation-volume-badge" class="font-mono-code text-[10px] text-amber-200">0 m³ dug</span>
+                </div>
+                <p class="text-[11px] text-slate-300 leading-snug">
+                    Select <strong>Dig Trench</strong> or <strong>Build Sandbar</strong> below and drag directly on the beach or shallow seabed. Right-click drag (or switch to Orbit) rotates the camera.
+                </p>
+                <div class="grid grid-cols-2 gap-2 pt-1">
+                    <div>
+                        <div class="flex justify-between text-[10px] mb-1">
+                            <span class="text-slate-300">Shovel Radius</span>
+                            <span id="val-brush-radius" class="font-mono-code text-amber-300">12 m</span>
+                        </div>
+                        <input type="range" id="slider-brush-radius" min="4" max="32" step="1" value="12">
+                    </div>
+                    <div>
+                        <div class="flex justify-between text-[10px] mb-1">
+                            <span class="text-slate-300">Dig Power</span>
+                            <span id="val-brush-strength" class="font-mono-code text-amber-300">1.0x</span>
+                        </div>
+                        <input type="range" id="slider-brush-strength" min="0.2" max="2.5" step="0.1" value="1.0">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Real-World Sea State Presets -->
+            <div class="space-y-1.5">
+                <span class="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Weather & Swell Conditions</span>
+                <div class="grid grid-cols-2 gap-1.5">
+                    <button data-preset="tropical" class="preset-btn px-2.5 py-2 rounded-xl border border-slate-700/80 bg-slate-900/60 hover:bg-slate-800 text-left transition">
+                        <div class="font-semibold text-[11px]">Calm Lagoon Swell</div>
+                        <div class="text-[10px] text-slate-400">Gentle lapping shore</div>
+                    </button>
+                    <button data-preset="tradewind" class="preset-btn active px-2.5 py-2 rounded-xl border border-slate-700/80 bg-slate-900/60 hover:bg-slate-800 text-left transition">
+                        <div class="font-semibold text-[11px]">Monsoon / Trade Surf</div>
+                        <div class="text-[10px] text-slate-400">Active coastal breakers</div>
+                    </button>
+                    <button data-preset="gale" class="preset-btn px-2.5 py-2 rounded-xl border border-slate-700/80 bg-slate-900/60 hover:bg-slate-800 text-left transition">
+                        <div class="font-semibold text-[11px]">Cyclonic Storm Surge</div>
+                        <div class="text-[10px] text-slate-400">Heavy crashing surf</div>
+                    </button>
+                    <button data-preset="sunset" class="preset-btn px-2.5 py-2 rounded-xl border border-slate-700/80 bg-slate-900/60 hover:bg-slate-800 text-left transition">
+                        <div class="font-semibold text-[11px]">Golden Shore Sunset</div>
+                        <div class="text-[10px] text-slate-400">Wet-sand mirror glow</div>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Hydrodynamics Sliders -->
+            <div class="space-y-3 pt-1 border-t border-slate-800">
+                <span class="text-[11px] font-semibold uppercase tracking-wider text-cyan-400 block">Hydrodynamic Spectrum</span>
+
+                <div>
+                    <div class="flex justify-between mb-1">
+                        <span class="text-slate-300">Wave Amplitude Scale</span>
+                        <span id="val-amplitude" class="font-mono-code text-cyan-300">1.15x</span>
+                    </div>
+                    <input type="range" id="slider-amplitude" min="0.15" max="2.2" step="0.01" value="1.15">
+                </div>
+
+                <div>
+                    <div class="flex justify-between mb-1">
+                        <span class="text-slate-300">Trochoidal Steepness (Q Pinch)</span>
+                        <span id="val-steepness" class="font-mono-code text-cyan-300">0.78</span>
+                    </div>
+                    <input type="range" id="slider-steepness" min="0.0" max="1.15" step="0.01" value="0.78">
+                </div>
+
+                <div>
+                    <div class="flex justify-between mb-1">
+                        <span class="text-slate-300">Dominant Wavelength (λ)</span>
+                        <span id="val-wavelength" class="font-mono-code text-cyan-300">64 m</span>
+                    </div>
+                    <input type="range" id="slider-wavelength" min="28" max="120" step="1" value="64">
+                </div>
+
+                <div>
+                    <div class="flex justify-between mb-1">
+                        <span class="text-slate-300">Cross-Sea Directional Spread</span>
+                        <span id="val-spread" class="font-mono-code text-cyan-300">0.65</span>
+                    </div>
+                    <input type="range" id="slider-spread" min="0.1" max="1.4" step="0.01" value="0.65">
+                </div>
+
+                <div>
+                    <div class="flex justify-between mb-1">
+                        <span class="text-slate-300">Capillary Micro-Ripples (FBM)</span>
+                        <span id="val-chop" class="font-mono-code text-cyan-300">1.00</span>
+                    </div>
+                    <input type="range" id="slider-chop" min="0.0" max="2.0" step="0.02" value="1.00">
+                </div>
+            </div>
+
+            <!-- Optical & Atmospheric Sliders -->
+            <div class="space-y-3 pt-2 border-t border-slate-800">
+                <span class="text-[11px] font-semibold uppercase tracking-wider text-emerald-400 block">Optical & Atmospheric Physics</span>
+
+                <div>
+                    <div class="flex justify-between mb-1">
+                        <span class="text-slate-300">Subsurface Scattering (SSS Glow)</span>
+                        <span id="val-sss" class="font-mono-code text-emerald-300">1.15</span>
+                    </div>
+                    <input type="range" id="slider-sss" min="0.0" max="2.2" step="0.02" value="1.15">
+                </div>
+
+                <div>
+                    <div class="flex justify-between mb-1">
+                        <span class="text-slate-300">Jacobian Whitecap Foam Intensity</span>
+                        <span id="val-foam" class="font-mono-code text-emerald-300">1.05</span>
+                    </div>
+                    <input type="range" id="slider-foam" min="0.0" max="2.0" step="0.02" value="1.05">
+                </div>
+
+                <div>
+                    <div class="flex justify-between mb-1">
+                        <span class="text-slate-300">Sun Elevation Angle</span>
+                        <span id="val-sun-el" class="font-mono-code text-amber-300">19°</span>
+                    </div>
+                    <input type="range" id="slider-sun-el" min="2" max="75" step="0.5" value="19">
+                </div>
+
+                <div>
+                    <div class="flex justify-between mb-1">
+                        <span class="text-slate-300">Sun Azimuth Heading</span>
+                        <span id="val-sun-az" class="font-mono-code text-amber-300">195°</span>
+                    </div>
+                    <input type="range" id="slider-sun-az" min="0" max="360" step="1" value="195">
+                </div>
+            </div>
+        </div>
+    </aside>
+
+    <!-- Bottom Interactive Digging & Camera Dock -->
+    <footer class="fixed bottom-3 left-1/2 -translate-x-1/2 z-20 pointer-events-none flex flex-wrap items-center justify-center gap-2 w-[96vw] max-w-4xl">
+        <div class="glass-panel rounded-2xl px-3 py-1.5 pointer-events-auto flex flex-wrap items-center justify-center gap-1.5 text-[11px] text-slate-300">
+            <!-- Tool Mode Buttons -->
+            <button data-tool="dig" class="tool-btn active px-3 py-1.5 rounded-xl font-semibold transition flex items-center gap-1.5 bg-amber-500/25 text-amber-200 border border-amber-400/60 shadow-lg shadow-amber-500/10">
+                <svg class="w-3.5 h-3.5 text-amber-300" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M19 14l-7 7m0 0l-7-7m7 7V3"/>
+                </svg>
+                <span>Dig Shore / Trench</span>
+            </button>
+            <button data-tool="build" class="tool-btn px-3 py-1.5 rounded-xl font-semibold transition flex items-center gap-1.5 bg-slate-800/70 hover:bg-slate-700/70 text-slate-300 border border-slate-700">
+                <svg class="w-3.5 h-3.5 text-emerald-300" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M5 10l7-7m0 0l7 7m-7-7v18"/>
+                </svg>
+                <span>Build Sandbar</span>
+            </button>
+            <button data-tool="orbit" class="tool-btn px-3 py-1.5 rounded-xl font-semibold transition flex items-center gap-1.5 bg-slate-800/70 hover:bg-slate-700/70 text-slate-300 border border-slate-700">
+                <svg class="w-3.5 h-3.5 text-cyan-300" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
+                </svg>
+                <span>Orbit Camera</span>
+            </button>
+            <button id="reset-shore-btn" class="px-2.5 py-1.5 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 border border-rose-400/30 text-rose-200 font-medium transition">
+                Reset Shore
+            </button>
+
+            <span class="hidden md:inline text-slate-600 px-1">|</span>
+
+            <button id="cam-shore-btn" class="hover:text-cyan-300 transition font-medium px-1.5">Beach View</button>
+            <span class="text-slate-600">•</span>
+            <button id="cam-surface-btn" class="hover:text-cyan-300 transition font-medium px-1.5">Surf Skim</button>
+            <span class="text-slate-600">•</span>
+            <button id="cam-aerial-btn" class="hover:text-cyan-300 transition font-medium px-1.5">Aerial Coast</button>
+            <span class="text-slate-600">•</span>
+            <button id="pause-sim-btn" class="text-cyan-300 hover:text-cyan-200 font-semibold transition px-1.5">Pause</button>
+        </div>
+    </footer>
+
+    <!-- ========================================================================= -->
+    <!-- GLSL SHADERS: GERSTNER WAVE CASCADE + SKY DOME + COASTAL SHORE & WATER    -->
+    <!-- ========================================================================= -->
+    <!-- GLSL SHADERS: GERSTNER WAVE CASCADE + SKY DOME + OPTICAL WATER FRAGMENT   -->
+    <!-- ========================================================================= -->
+    <script id="sky-vertex-shader" type="x-shader/x-vertex">
+        varying vec3 vWorldPosition;
+        void main() {
+            vec4 worldPosition = modelMatrix * vec4(position, 1.0);
+            vWorldPosition = worldPosition.xyz;
+            gl_Position = projectionMatrix * viewMatrix * worldPosition;
+        }
+    </script>
+
+    <script id="sky-fragment-shader" type="x-shader/x-fragment">
+        precision highp float;
+        varying vec3 vWorldPosition;
+        uniform vec3 uSunDir;
+
+        // Shared procedural atmospheric scattering function
+        vec3 computeSkyColor(vec3 rd, vec3 sunDir) {
+            float sunElevation = clamp(sunDir.y, 0.0, 1.0);
+            float yd = max(rd.y, 0.0);
+
+            // Zenith and horizon colors adapt dynamically to sun elevation (Golden hour vs Midday)
+            vec3 dayZenith = vec3(0.04, 0.16, 0.42);
+            vec3 sunsetZenith = vec3(0.05, 0.08, 0.22);
+            vec3 zenithCol = mix(sunsetZenith, dayZenith, pow(sunElevation, 0.55));
+
+            vec3 dayHorizon = vec3(0.42, 0.65, 0.86);
+            vec3 sunsetHorizon = vec3(0.88, 0.44, 0.24);
+            vec3 horizonCol = mix(sunsetHorizon, dayHorizon, pow(sunElevation, 0.45));
+
+            // Rayleigh gradient
+            vec3 sky = mix(horizonCol, zenithCol, pow(yd, 0.48));
+
+            // Mie forward scattering haze around the sun
+            float sunDot = max(dot(rd, sunDir), 0.0);
+            vec3 mieColor = mix(vec3(1.0, 0.48, 0.16), vec3(1.0, 0.92, 0.80), sunElevation);
+            sky += mieColor * pow(sunDot, 7.0) * 0.42;
+            sky += mieColor * pow(sunDot, 64.0) * 0.55;
+
+            // Crisp solar disk
+            float sunDisk = smoothstep(0.9993, 0.99985, sunDot);
+            sky += vec3(1.0, 0.96, 0.88) * sunDisk * 4.5;
+
+            // Subtle horizon atmospheric mist
+            float horizonGlow = exp(-abs(rd.y) * 14.0);
+            sky = mix(sky, horizonCol * 1.08, horizonGlow * 0.35);
+
+            return sky;
+        }
+
+        void main() {
+            vec3 rd = normalize(vWorldPosition - cameraPosition);
+            vec3 col = computeSkyColor(rd, normalize(uSunDir));
+            // Tone mapping & gamma correction
+            col = col / (1.0 + col * 0.25);
+            col = pow(col, vec3(1.0 / 2.2));
+            gl_FragColor = vec4(col, 1.0);
+        }
+    </script>
+
+    <script id="ocean-vertex-shader" type="x-shader/x-vertex">
+        precision highp float;
+
+        uniform float uTime;
+        uniform float uAmplitude;
+        uniform float uSteepness;
+        uniform float uWavelength;
+        uniform float uSpread;
+        uniform sampler2D uHeightMap;
+        uniform float uWorldSize;
+
+        varying vec3 vWorldPos;
+        varying vec3 vNormal;
+        varying float vJacobian;
+        varying float vWaveHeight;
+        varying vec2 vUvXZ;
+        varying vec2 vBaseXZ;
+        varying float vSeabedHeight;
+
+        const float PI = 3.14159265359;
+        const float G = 9.81;
+
+        // Decode 16-bit height from RG texture channels [-25.0m to +15.0m]
+        float sampleSeabedHeight(vec2 worldXZ) {
+            vec2 uv = (worldXZ / uWorldSize) + 0.5;
+            uv = clamp(uv, 0.002, 0.998);
+            vec4 tex = texture2D(uHeightMap, uv);
+            float normH = tex.r + tex.g / 255.0;
+            return mix(-25.0, 15.0, normH);
+        }
+
+        // 8-Wave Directional Spectrum Base Directions & Relative Wavelengths
+        // Primary waves propagate toward the +Z beach shoreline
+        void getWaveParams(int idx, out vec2 dir, out float relLen, out float relAmp, out float phaseOffset) {
+            if (idx == 0) { dir = vec2( 0.14,  0.99); relLen = 1.00; relAmp = 1.00; phaseOffset = 0.0; }
+            else if (idx == 1) { dir = vec2(-0.28,  0.96); relLen = 0.72; relAmp = 0.72; phaseOffset = 1.7; }
+            else if (idx == 2) { dir = vec2( 0.36,  0.93); relLen = 0.50; relAmp = 0.50; phaseOffset = 3.1; }
+            else if (idx == 3) { dir = vec2(-0.48,  0.88); relLen = 0.35; relAmp = 0.35; phaseOffset = 4.3; }
+            else if (idx == 4) { dir = vec2( 0.58,  0.81); relLen = 0.24; relAmp = 0.24; phaseOffset = 2.2; }
+            else if (idx == 5) { dir = vec2(-0.18,  0.98); relLen = 0.16; relAmp = 0.16; phaseOffset = 5.4; }
+            else if (idx == 6) { dir = vec2( 0.75,  0.66); relLen = 0.11; relAmp = 0.11; phaseOffset = 0.9; }
+            else               { dir = vec2(-0.68,  0.73); relLen = 0.075; relAmp = 0.075; phaseOffset = 3.8; }
+        }
+
+        void main() {
+            vec3 worldBase = (modelMatrix * vec4(position, 1.0)).xyz;
+            vUvXZ = worldBase.xz;
+            vBaseXZ = worldBase.xz;
+
+            float bedH = sampleSeabedHeight(worldBase.xz);
+            vSeabedHeight = bedH;
+
+            // Local still-water depth h = max(0, -bedH)
+            float waterDepth = max(0.0, -bedH);
+
+            // Shallow-water shoaling transformation:
+            // In intermediate/shallow water (depth < 6m), waves peak steeper before damping in the swash zone
+            float shoalPeak = 1.0 + 0.42 * exp(-pow((waterDepth - 2.2) / 1.8, 2.0));
+            float swashDamp = smoothstep(0.0, 0.85, waterDepth + 0.45);
+            float depthAmpFactor = shoalPeak * swashDamp;
+
+            vec3 displaced = worldBase;
+            vec3 dPdx = vec3(1.0, 0.0, 0.0);
+            vec3 dPdz = vec3(0.0, 0.0, 1.0);
+
+            vec2 primaryWind = normalize(vec2(0.08, 0.99));
+
+            for (int i = 0; i < 8; i++) {
+                vec2 rawDir;
+                float relLen, relAmp, phaseOff;
+                getWaveParams(i, rawDir, relLen, relAmp, phaseOff);
+
+                vec2 D = normalize(mix(primaryWind, normalize(rawDir), uSpread));
+
+                float wl = max(3.5, uWavelength * relLen);
+                float k = 2.0 * PI / wl;
+                float omega = sqrt(G * k);
+
+                float A = (wl / 28.0) * 0.40 * relAmp * uAmplitude * depthAmpFactor;
+
+                // Coastal shoaling increases wave steepness Q near the surf zone
+                float shoalSteep = uSteepness * (1.0 + 0.45 * smoothstep(6.0, 1.2, waterDepth));
+                float Qi = clamp(shoalSteep * 0.165 / (k * A + 0.0001), 0.0, 0.23);
+
+                // Phase retardation in shallow water bends waves toward the shore normal
+                float shallowPhaseDelay = k * log(1.0 + exp(-waterDepth * 0.38)) * 2.2;
+                float theta = k * dot(D, worldBase.xz) - omega * uTime + phaseOff - shallowPhaseDelay;
+                float s = sin(theta);
+                float c = cos(theta);
+
+                displaced.x -= Qi * A * D.x * s;
+                displaced.z -= Qi * A * D.y * s;
+                displaced.y += A * c;
+
+                float kA = k * A;
+                float QkA = Qi * kA;
+
+                dPdx.x -= QkA * D.x * D.x * c;
+                dPdx.z -= QkA * D.x * D.y * c;
+                dPdx.y -= kA * D.x * s;
+
+                dPdz.x -= QkA * D.y * D.x * c;
+                dPdz.z -= QkA * D.y * D.y * c;
+                dPdz.y -= kA * D.y * s;
+            }
+
+            // Tidal swash run-up surge near the shoreline
+            float swashSurge = 0.28 * uAmplitude * sin(uTime * 1.45 - worldBase.z * 0.08);
+            displaced.y += swashSurge * exp(-abs(waterDepth) * 0.45);
+
+            vec3 norm = normalize(cross(dPdz, dPdx));
+            float jacobian = dPdx.x * dPdz.z - dPdx.z * dPdz.x;
+
+            vWorldPos = displaced;
+            vNormal = norm;
+            vJacobian = jacobian;
+            vWaveHeight = displaced.y;
+
+            gl_Position = projectionMatrix * viewMatrix * vec4(displaced, 1.0);
+        }
+    </script>
+
+    <script id="ocean-fragment-shader" type="x-shader/x-fragment">
+        precision highp float;
+
+        uniform float uTime;
+        uniform vec3 uSunDir;
+        uniform float uChop;
+        uniform float uSSSIntensity;
+        uniform float uFoamIntensity;
+        uniform int uDebugMode;
+        uniform sampler2D uHeightMap;
+        uniform float uWorldSize;
+        uniform vec3 uAbyssalColor;
+        uniform vec3 uShallowColor;
+        uniform vec3 uSSSTint;
+        uniform vec3 uSandColor;
+
+        varying vec3 vWorldPos;
+        varying vec3 vNormal;
+        varying float vJacobian;
+        varying float vWaveHeight;
+        varying vec2 vUvXZ;
+        varying vec2 vBaseXZ;
+        varying float vSeabedHeight;
+
+        float sampleSeabedExact(vec2 worldXZ) {
+            vec2 uv = (worldXZ / uWorldSize) + 0.5;
+            uv = clamp(uv, 0.002, 0.998);
+            vec4 tex = texture2D(uHeightMap, uv);
+            float normH = tex.r + tex.g / 255.0;
+            return mix(-25.0, 15.0, normH);
+        }
+
+        float hash21(vec2 p) {
+            p = fract(p * vec2(234.34, 435.345));
+            p += dot(p, p + 34.23);
+            return fract(p.x * p.y);
+        }
+
+        float noise2D(vec2 p) {
+            vec2 i = floor(p);
+            vec2 f = fract(p);
+            vec2 u = f * f * (3.0 - 2.0 * f);
+            float a = hash21(i);
+            float b = hash21(i + vec2(1.0, 0.0));
+            float c = hash21(i + vec2(0.0, 1.0));
+            float d = hash21(i + vec2(1.0, 1.0));
+            return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
+        }
+
+        const mat2 rotMat = mat2(0.80, -0.60, 0.60, 0.80);
+
+        float capillaryFBM(vec2 p, float t) {
+            float val = 0.0;
+            float amp = 0.5;
+            vec2 shift = vec2(t * 0.85, -t * 0.55);
+            for (int i = 0; i < 5; i++) {
+                val += amp * noise2D(p + shift);
+                p = rotMat * p * 2.12;
+                shift = rotMat * shift * 1.35;
+                amp *= 0.48;
+            }
+            return val;
+        }
+
+        // Procedural Underwater Solar Caustics Network
+        float computeCaustics(vec2 p, float t) {
+            vec2 uv1 = p * 0.85 + vec2(t * 0.4, -t * 0.3);
+            vec2 uv2 = rotMat * p * 1.15 - vec2(t * 0.35, t * 0.45);
+            float n1 = abs(noise2D(uv1) - 0.5);
+            float n2 = abs(noise2D(uv2) - 0.5);
+            float c = pow(1.0 - clamp((n1 + n2) * 2.2, 0.0, 1.0), 3.5);
+            return c;
+        }
+
+        vec3 evaluateSkyReflection(vec3 rd, vec3 sunDir) {
+            float sunElevation = clamp(sunDir.y, 0.0, 1.0);
+            float yd = max(rd.y, 0.0);
+
+            vec3 dayZenith = vec3(0.04, 0.16, 0.42);
+            vec3 sunsetZenith = vec3(0.05, 0.08, 0.22);
+            vec3 zenithCol = mix(sunsetZenith, dayZenith, pow(sunElevation, 0.55));
+
+            vec3 dayHorizon = vec3(0.42, 0.65, 0.86);
+            vec3 sunsetHorizon = vec3(0.88, 0.44, 0.24);
+            vec3 horizonCol = mix(sunsetHorizon, dayHorizon, pow(sunElevation, 0.45));
+
+            vec3 sky = mix(horizonCol, zenithCol, pow(yd, 0.48));
+
+            float sunDot = max(dot(rd, sunDir), 0.0);
+            vec3 mieColor = mix(vec3(1.0, 0.48, 0.16), vec3(1.0, 0.92, 0.80), sunElevation);
+            sky += mieColor * pow(sunDot, 7.0) * 0.42;
+            sky += mieColor * pow(sunDot, 64.0) * 0.55;
+
+            return sky;
+        }
+
+        void main() {
+            // Exact seabed height at the displaced world position
+            float bedY = sampleSeabedExact(vWorldPos.xz);
+            float waterColumnDepth = vWorldPos.y - bedY;
+
+            // Clip ocean surface where the sandy beach rises above the wave swash
+            if (waterColumnDepth < -0.02) {
+                discard;
+            }
+
+            vec3 V = normalize(cameraPosition - vWorldPos);
+            vec3 L = normalize(uSunDir);
+            float dist = length(cameraPosition - vWorldPos);
+
+            float detailFade = exp(-dist * 0.0045);
+
+            vec2 uv = vWorldPos.xz * 0.36;
+            float eps = 0.08;
+            float h0 = capillaryFBM(uv, uTime);
+            float hx = capillaryFBM(uv + vec2(eps, 0.0), uTime);
+            float hz = capillaryFBM(uv + vec2(0.0, eps), uTime);
+
+            vec3 microPerturb = vec3(-(hx - h0) / eps, 0.0, -(hz - h0) / eps) * 0.19 * uChop * detailFade;
+            vec3 N = normalize(vNormal + microPerturb);
+
+            if (dot(N, V) < 0.0) {
+                N = normalize(N - V * dot(N, V) * 1.01);
+            }
+
+            if (uDebugMode == 1) {
+                float jNorm = clamp(vJacobian, 0.0, 1.4);
+                vec3 col = mix(vec3(1.0, 0.18, 0.12), vec3(0.98, 0.85, 0.20), smoothstep(0.15, 0.65, jNorm));
+                col = mix(col, vec3(0.04, 0.28, 0.68), smoothstep(0.65, 1.15, jNorm));
+                float breakMask = smoothstep(0.45, 0.12, vJacobian);
+                col = mix(col, vec3(1.0), breakMask * 0.75);
+                gl_FragColor = vec4(col, 1.0);
+                return;
+            }
+            if (uDebugMode == 2) {
+                float NoV = clamp(dot(N, V), 0.0, 1.0);
+                float fresnel = 0.02 + 0.98 * pow(1.0 - NoV, 5.0);
+                float crestFactor = smoothstep(-0.2, 2.2, vWaveHeight);
+                float backLight = pow(clamp(dot(V, -L + N * 0.55), 0.0, 1.0), 3.0);
+                vec3 sssVis = uSSSTint * (crestFactor * (0.35 + backLight * 1.4)) * uSSSIntensity;
+                vec3 fresVis = vec3(0.15, 0.45, 1.0) * fresnel;
+                gl_FragColor = vec4(pow(sssVis + fresVis * 0.5, vec3(1.0 / 2.2)), 1.0);
+                return;
+            }
+            if (uDebugMode == 3) {
+                vec3 normCol = N * 0.5 + 0.5;
+                gl_FragColor = vec4(normCol, 1.0);
+                return;
+            }
+
+            float NoV = clamp(dot(N, V), 0.001, 1.0);
+            float NoL = clamp(dot(N, L), 0.0, 1.0);
+
+            // 1. Schlick's Fresnel Law
+            float fresnel = 0.02 + 0.98 * pow(1.0 - NoV, 5.0);
+
+            // 2. Sky Reflection
+            vec3 R = reflect(-V, N);
+            R.y = max(R.y, 0.015);
+            vec3 skyReflection = evaluateSkyReflection(R, L);
+
+            // 3. Theme-Driven Deep Water Absorption & Shallow Coastal Bathymetry Refraction
+            float sunElev = clamp(L.y, 0.0, 1.0);
+            vec3 abyssalColor = uAbyssalColor * (0.45 + 0.65 * sunElev);
+            vec3 shallowScatter = uShallowColor * (0.55 + 0.60 * sunElev);
+            vec3 deepWaterCol = mix(shallowScatter, abyssalColor, pow(1.0 - NoV, 0.65));
+
+            // Beer-Lambert optical transmission through shallow coastal water & excavated pools
+            float opticalDepth = max(0.0, waterColumnDepth);
+            float seabedVisibility = exp(-opticalDepth * 0.48);
+            float caustics = computeCaustics(vWorldPos.xz + N.xz * 0.65, uTime) * smoothstep(5.5, 0.2, opticalDepth);
+            vec3 submergedSand = uSandColor * (0.42 + 0.58 * max(L.y, 0.15)) + vec3(1.0, 0.95, 0.80) * caustics * 0.48;
+
+            vec3 waterBodyColor = mix(deepWaterCol, shallowScatter, exp(-opticalDepth * 0.18));
+            waterBodyColor = mix(waterBodyColor, submergedSand, seabedVisibility * 0.82);
+
+            // 4. Subsurface Scattering (SSS)
+            float waveThinness = clamp((vWaveHeight + 0.6) * 0.42, 0.0, 1.0) * pow(1.0 - N.y, 0.35);
+            vec3 sssDir = normalize(L + N * 0.6);
+            float forwardScatter = pow(clamp(dot(V, -sssDir), 0.0, 1.0), 3.5);
+            float ambientCrestScatter = clamp(vWaveHeight * 0.35 + 0.15, 0.0, 1.0) * (1.0 - NoV * 0.5);
+
+            vec3 sssContribution = uSSSTint * (forwardScatter * 1.45 + ambientCrestScatter * 0.55) * waveThinness * uSSSIntensity;
+
+            vec3 refracted = waterBodyColor + sssContribution * (1.0 - seabedVisibility * 0.6);
+            vec3 surfaceColor = mix(refracted, skyReflection, fresnel);
+
+            // 5. Solar Specular Glitter Path
+            vec3 H = normalize(L + V);
+            float NoH = max(dot(N, H), 0.0);
+            vec3 sunLightCol = mix(vec3(1.0, 0.55, 0.25), vec3(1.0, 0.96, 0.88), sunElev);
+            float specCore = pow(NoH, 720.0) * 6.5;
+            float specSheen = pow(NoH, 48.0) * 0.35;
+            surfaceColor += sunLightCol * (specCore + specSheen) * (0.25 + 0.75 * fresnel) * max(NoL, 0.08);
+
+            // 6. Jacobian Whitecap Foam + Shallow Surf Breakers + Shoreline Swash Lace
+            float foamNoiseA = noise2D(vWorldPos.xz * 1.4 + vec2(uTime * 0.35, -uTime * 0.2));
+            float foamNoiseB = noise2D(vWorldPos.xz * 5.2 - vec2(uTime * 0.5, uTime * 0.4));
+            float bubblePattern = smoothstep(0.20, 0.78, foamNoiseA * 0.60 + foamNoiseB * 0.40);
+
+            // Shallow surf zone amplifies wave breaking
+            float surfZoneBoost = smoothstep(3.8, 0.4, opticalDepth) * 0.42 * max(0.0, vWaveHeight + 0.2);
+            float crestCompression = clamp(((0.68 - vJacobian) * 2.1 + surfZoneBoost) * uFoamIntensity, 0.0, 1.0);
+            float crestFoam = smoothstep(0.16, 0.70, crestCompression) * (0.55 + 0.45 * bubblePattern);
+            float trailFoam = smoothstep(0.04, 0.45, crestCompression) * smoothstep(0.45, 0.82, bubblePattern) * 0.55;
+
+            // Shoreline water's edge swash foam lace
+            float swashEdge = smoothstep(0.55, 0.0, opticalDepth) * (0.55 + 0.45 * sin(opticalDepth * 16.0 - uTime * 3.0)) * bubblePattern;
+
+            float totalFoam = clamp(crestFoam + trailFoam + swashEdge * 0.85, 0.0, 0.96) * detailFade;
+
+            vec3 foamAlbedo = mix(vec3(0.82, 0.76, 0.72), vec3(0.95, 0.98, 1.0), sunElev);
+            foamAlbedo *= (0.45 + 0.55 * max(NoL, 0.25));
+            surfaceColor = mix(surfaceColor, foamAlbedo, totalFoam);
+
+            // 7. Horizon Atmospheric Fog
+            vec3 fogColor = evaluateSkyReflection(vec3(-V.x, 0.01, -V.z), L);
+            float fogFactor = 1.0 - exp(-dist * 0.0018);
+            surfaceColor = mix(surfaceColor, fogColor, clamp(fogFactor, 0.0, 1.0));
+
+            // 8. ACES Tone Mapping & Soft Swash Edge Feathering
+            surfaceColor = (surfaceColor * (2.51 * surfaceColor + 0.03)) / (surfaceColor * (2.43 * surfaceColor + 0.59) + 0.14);
+            surfaceColor = pow(clamp(surfaceColor, 0.0, 1.0), vec3(1.0 / 2.2));
+
+            gl_FragColor = vec4(surfaceColor, 1.0);
+        }
+    </script>
+
+    <!-- ========================================================================= -->
+    <!-- SHORE / BEACH TERRAIN SHADER (WET SAND MIRROR, GRANULAR MICRO-RELIEF)     -->
+    <!-- ========================================================================= -->
+    <script id="shore-vertex-shader" type="x-shader/x-vertex">
+        precision highp float;
+
+        varying vec3 vWorldPos;
+        varying vec3 vNormal;
+
+        void main() {
+            vec4 worldPosition = modelMatrix * vec4(position, 1.0);
+            vWorldPos = worldPosition.xyz;
+            vNormal = normalize(normalMatrix * normal);
+            gl_Position = projectionMatrix * viewMatrix * worldPosition;
+        }
+    </script>
+
+    <script id="shore-fragment-shader" type="x-shader/x-fragment">
+        precision highp float;
+
+        uniform float uTime;
+        uniform vec3 uSunDir;
+        uniform vec3 uSandColor;
+        uniform vec3 uBrushWorldPos;
+        uniform float uBrushRadius;
+        uniform int uBrushActive;
+
+        varying vec3 vWorldPos;
+        varying vec3 vNormal;
+
+        float hash21(vec2 p) {
+            p = fract(p * vec2(234.34, 435.345));
+            p += dot(p, p + 34.23);
+            return fract(p.x * p.y);
+        }
+
+        float noise2D(vec2 p) {
+            vec2 i = floor(p);
+            vec2 f = fract(p);
+            vec2 u = f * f * (3.0 - 2.0 * f);
+            float a = hash21(i);
+            float b = hash21(i + vec2(1.0, 0.0));
+            float c = hash21(i + vec2(0.0, 1.0));
+            float d = hash21(i + vec2(1.0, 1.0));
+            return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
+        }
+
+        void main() {
+            vec3 V = normalize(cameraPosition - vWorldPos);
+            vec3 L = normalize(uSunDir);
+            float sunElev = clamp(L.y, 0.0, 1.0);
+
+            // Multi-scale coastal sand ripples & fine quartz grain texture
+            float sandRipple = sin(vWorldPos.z * 3.8 + noise2D(vWorldPos.xz * 0.45) * 4.0) * 0.5 + 0.5;
+            float fineGrain = noise2D(vWorldPos.xz * 18.0) * 0.6 + noise2D(vWorldPos.xz * 55.0) * 0.4;
+            float pebbleNoise = smoothstep(0.72, 0.95, noise2D(vWorldPos.xz * 6.5));
+
+            // Perturb beach normal with wind/wave ripples and sand grains
+            vec3 N = normalize(vNormal + vec3(
+                (fineGrain - 0.5) * 0.14,
+                0.0,
+                (sandRipple - 0.5) * 0.10
+            ));
+
+            // Wetness zone: sand below y = +1.35m is damp/saturated by wave swash & groundwater table
+            float wetness = smoothstep(1.55, -0.15, vWorldPos.y);
+
+            // Dry sand vs Darkened wet saturated sand
+            vec3 drySand = uSandColor * (0.90 + 0.20 * fineGrain) - vec3(0.06) * pebbleNoise;
+            vec3 wetSand = drySand * 0.46;
+            vec3 baseAlbedo = mix(drySand, wetSand, wetness);
+
+            // Sun diffuse + ambient sky hemisphere lighting
+            float NoL = max(dot(N, L), 0.0);
+            vec3 sunCol = mix(vec3(1.0, 0.55, 0.25), vec3(1.0, 0.96, 0.88), sunElev);
+            vec3 skyAmb = mix(vec3(0.24, 0.22, 0.30), vec3(0.28, 0.42, 0.62), sunElev);
+
+            vec3 color = baseAlbedo * (sunCol * NoL * 0.88 + skyAmb * 0.45);
+
+            // Wet-sand thin-film water mirror reflection & solar specular sheen
+            vec3 H = normalize(L + V);
+            float NoH = max(dot(N, H), 0.0);
+            float NoV = clamp(dot(N, V), 0.001, 1.0);
+            float wetFresnel = 0.02 + 0.98 * pow(1.0 - NoV, 5.0);
+
+            vec3 skyMirror = mix(vec3(0.65, 0.50, 0.45), vec3(0.45, 0.68, 0.90), sunElev);
+            color = mix(color, skyMirror, wetness * wetFresnel * 0.55);
+            color += sunCol * pow(NoH, 160.0) * wetness * 1.65;
+
+            // Interactive 3D Digging / Sculpting Brush Ring Indicator on the Beach
+            if (uBrushActive == 1) {
+                float dBrush = length(vWorldPos.xz - uBrushWorldPos.xz);
+                float ring = smoothstep(uBrushRadius, uBrushRadius - 0.6, dBrush) *
+                             smoothstep(uBrushRadius - 1.4, uBrushRadius - 0.6, dBrush);
+                float innerFill = smoothstep(uBrushRadius, 0.0, dBrush) * 0.14;
+                color = mix(color, vec3(0.98, 0.75, 0.18), clamp(ring * 0.9 + innerFill, 0.0, 1.0));
+            }
+
+            // Distance atmospheric mist
+            float dist = length(cameraPosition - vWorldPos);
+            float fogFactor = 1.0 - exp(-dist * 0.0018);
+            vec3 fogCol = mix(vec3(0.88, 0.44, 0.24), vec3(0.42, 0.65, 0.86), pow(sunElev, 0.45));
+            color = mix(color, fogCol, clamp(fogFactor, 0.0, 1.0));
+
+            color = (color * (2.51 * color + 0.03)) / (color * (2.43 * color + 0.59) + 0.14);
+            color = pow(clamp(color, 0.0, 1.0), vec3(1.0 / 2.2));
+
+            gl_FragColor = vec4(color, 1.0);
+        }
+    </script>
+
+    <!-- ========================================================================= -->
+    <!-- MAIN JAVASCRIPT APPLICATION: THREE.JS + DIGGABLE SHORE + OCEAN THEMES     -->
+    <!-- ========================================================================= -->
+    <script>
+        // World & Bathymetry Grid Constants
+        const WORLD_SIZE = 460;
+        const GRID_RES = 160; // 160x160 interactive coastal heightmap
+
+        // Ocean Basin Theme Definitions (Bay of Bengal, Atlantic, Pacific)
+        const OCEAN_THEMES = {
+            bengal: {
+                name: 'Bay of Bengal Coast',
+                badgeClass: 'text-[10px] font-mono-code uppercase px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-400/30',
+                abyssalColor: [0.008, 0.052, 0.068],  // Warm tropical teal-emerald abyss
+                shallowColor: [0.035, 0.320, 0.265],  // Mineral-rich coastal turquoise-green
+                sssTint:      [0.060, 0.820, 0.620],  // Warm jade subsurface glow
+                sandColor:    [0.830, 0.710, 0.520],  // Golden Coromandel / Marina quartz sand
+                amplitude: 1.18,
+                steepness: 0.80,
+                wavelength: 62.0,
+                spread: 0.62,
+                chop: 1.05,
+                sssIntensity: 1.25,
+                foamIntensity: 1.15
+            },
+            atlantic: {
+                name: 'North Atlantic Swell',
+                badgeClass: 'text-[10px] font-mono-code uppercase px-2 py-0.5 rounded-full bg-teal-500/20 text-teal-300 border border-teal-400/30',
+                abyssalColor: [0.005, 0.028, 0.052],  // Deep slate-indigo Atlantic water
+                shallowColor: [0.020, 0.195, 0.215],  // Cold emerald-slate coastal shelf
+                sssTint:      [0.040, 0.640, 0.580],  // Crisp sea-green crest translucency
+                sandColor:    [0.720, 0.690, 0.630],  // Cool silver-taupe Atlantic beach sand
+                amplitude: 1.38,
+                steepness: 0.88,
+                wavelength: 68.0,
+                spread: 0.82,
+                chop: 1.25,
+                sssIntensity: 1.05,
+                foamIntensity: 1.35
+            },
+            pacific: {
+                name: 'Pacific Reef & Shore',
+                badgeClass: 'text-[10px] font-mono-code uppercase px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-400/30',
+                abyssalColor: [0.004, 0.038, 0.115],  // Pure deep cobalt-sapphire Pacific
+                shallowColor: [0.015, 0.360, 0.440],  // Crystal cyan-aquamarine lagoon scatter
+                sssTint:      [0.030, 0.880, 0.860],  // Electric cyan subsurface glow
+                sandColor:    [0.910, 0.860, 0.760],  // Bright coral-cream Pacific beach sand
+                amplitude: 1.10,
+                steepness: 0.75,
+                wavelength: 82.0,
+                spread: 0.48,
+                chop: 0.88,
+                sssIntensity: 1.45,
+                foamIntensity: 1.00
+            }
+        };
+
+        // Simulation State & Parameters
+        const simState = {
+            time: 0,
+            paused: false,
+            oceanTheme: 'bengal',
+            amplitude: 1.18,
+            steepness: 0.80,
+            wavelength: 62.0,
+            spread: 0.62,
+            chop: 1.05,
+            sssIntensity: 1.25,
+            foamIntensity: 1.15,
+            sunElevationDeg: 22.0,
+            sunAzimuthDeg: 195.0,
+            debugMode: 0,
+            wireframe: false,
+            showBuoys: true,
+            compareSine: true,
+            // Interactive Shore Digging & Sculpting State
+            toolMode: 'dig', // 'dig' | 'build' | 'orbit'
+            brushRadius: 12.0,
+            brushStrength: 1.0,
+            excavatedVolume: 0
+        };
+
+        // Exact 8-Wave Spectrum Mirror on CPU (propagating toward +Z coastal beach)
+        const WAVE_SPECTRUM = [
+            { dir: [ 0.14,  0.99], relLen: 1.00, relAmp: 1.00, phase: 0.0 },
+            { dir: [-0.28,  0.96], relLen: 0.72, relAmp: 0.72, phase: 1.7 },
+            { dir: [ 0.36,  0.93], relLen: 0.50, relAmp: 0.50, phase: 3.1 },
+            { dir: [-0.48,  0.88], relLen: 0.35, relAmp: 0.35, phase: 4.3 },
+            { dir: [ 0.58,  0.81], relLen: 0.24, relAmp: 0.24, phase: 2.2 },
+            { dir: [-0.18,  0.98], relLen: 0.16, relAmp: 0.16, phase: 5.4 },
+            { dir: [ 0.75,  0.66], relLen: 0.11, relAmp: 0.11, phase: 0.9 },
+            { dir: [-0.68,  0.73], relLen: 0.075, relAmp: 0.075, phase: 3.8 }
+        ];
+
+        const G_ACCEL = 9.81;
+
+        // Bathymetry / Beach Heightmap Storage (CPU Float32 + GPU RGBA DataTexture)
+        const heightGrid = new Float32Array((GRID_RES + 1) * (GRID_RES + 1));
+        const initialHeightGrid = new Float32Array((GRID_RES + 1) * (GRID_RES + 1));
+        const heightTexData = new Uint8Array(GRID_RES * GRID_RES * 4);
+        let heightDataTexture = null;
+        let shoreGeometry = null;
+        let shoreMesh = null;
+        let shoreMaterial = null;
+
+        /**
+         * Procedural natural coastal bathymetry profile:
+         * Deep offshore (-Z) -> Continental shelf -> Surf sandbar -> Gentle sandy beach slope (+Z) -> Coastal dunes
+         */
+        function computeNaturalShoreHeight(worldX, worldZ) {
+            // Subtle natural bay curvature & rhythmic beach cusps along X
+            const bayCurve = Math.sin(worldX * 0.018) * 14.0 + Math.cos(worldX * 0.042) * 5.0;
+            const zShore = worldZ - 58.0 + bayCurve; // Shoreline water's edge sits around Z = +58m
+
+            let h;
+            if (zShore < 0) {
+                // Submerged seabed sloping down toward offshore deep water
+                const distOffshore = -zShore;
+                h = -18.5 * Math.tanh(distOffshore * 0.0115);
+                // Natural submerged offshore sandbar at ~45m from beach
+                const sandbar = 1.15 * Math.exp(-Math.pow((distOffshore - 44.0) / 15.0, 2.0));
+                h += sandbar;
+            } else {
+                // Gently sloping foreshore beach rising into coastal sand dunes
+                h = zShore * 0.072 + 1.65 * Math.tanh(Math.max(0, zShore - 28.0) * 0.025);
+                // Soft coastal dune undulations
+                h += 0.55 * Math.sin(worldX * 0.055 + worldZ * 0.04) * Math.min(1.0, zShore / 35.0);
+            }
+            return Math.max(-24.5, Math.min(14.5, h));
+        }
+
+        function sampleHeightGridCPU(worldX, worldZ) {
+            const u = (worldX / WORLD_SIZE + 0.5) * GRID_RES;
+            const v = (worldZ / WORLD_SIZE + 0.5) * GRID_RES;
+            const ix = Math.max(0, Math.min(GRID_RES, Math.round(u)));
+            const iz = Math.max(0, Math.min(GRID_RES, Math.round(v)));
+            return heightGrid[iz * (GRID_RES + 1) + ix];
+        }
+
+        function syncHeightGridToGPUAndMesh() {
+            // 1. Update 3D Shore Mesh vertices & normals
+            if (shoreGeometry) {
+                const posAttr = shoreGeometry.attributes.position;
+                for (let i = 0; i < posAttr.count; i++) {
+                    posAttr.setY(i, heightGrid[i]);
+                }
+                posAttr.needsUpdate = true;
+                shoreGeometry.computeVertexNormals();
+            }
+
+            // 2. Encode height [-25m, +15m] into 16-bit RG channels of DataTexture
+            for (let z = 0; z < GRID_RES; z++) {
+                for (let x = 0; x < GRID_RES; x++) {
+                    const h = heightGrid[z * (GRID_RES + 1) + x];
+                    const norm = Math.max(0, Math.min(1, (h - (-25.0)) / 40.0));
+                    const scaled = norm * 65535.0;
+                    const hi = Math.floor(scaled / 256.0);
+                    const lo = Math.floor(scaled - hi * 256.0);
+
+                    const idx = (z * GRID_RES + x) * 4;
+                    heightTexData[idx] = hi;
+                    heightTexData[idx + 1] = lo;
+                    heightTexData[idx + 2] = 0;
+                    heightTexData[idx + 3] = 255;
+                }
+            }
+            if (heightDataTexture) {
+                heightDataTexture.needsUpdate = true;
+            }
+        }
+
+        function resetCoastalBathymetry() {
+            for (let z = 0; z <= GRID_RES; z++) {
+                const worldZ = (z / GRID_RES - 0.5) * WORLD_SIZE;
+                for (let x = 0; x <= GRID_RES; x++) {
+                    const worldX = (x / GRID_RES - 0.5) * WORLD_SIZE;
+                    const h = computeNaturalShoreHeight(worldX, worldZ);
+                    const idx = z * (GRID_RES + 1) + x;
+                    heightGrid[idx] = h;
+                    initialHeightGrid[idx] = h;
+                }
+            }
+            simState.excavatedVolume = 0;
+            const badge = document.getElementById('excavation-volume-badge');
+            if (badge) badge.textContent = '0 m³ dug';
+            syncHeightGridToGPUAndMesh();
+        }
+
+        /**
+         * Excavates (digs) or raises (builds sandbar) on the coastal terrain around (hitX, hitZ)
+         */
+        function applyShoreExcavationBrush(hitX, hitZ, dt) {
+            const radius = simState.brushRadius;
+            const sign = simState.toolMode === 'dig' ? -1.0 : 1.0;
+            const deltaScale = sign * simState.brushStrength * 6.5 * dt;
+
+            let modified = false;
+            const cellArea = Math.pow(WORLD_SIZE / GRID_RES, 2);
+
+            for (let z = 0; z <= GRID_RES; z++) {
+                const wz = (z / GRID_RES - 0.5) * WORLD_SIZE;
+                const dz = wz - hitZ;
+                if (Math.abs(dz) > radius) continue;
+
+                for (let x = 0; x <= GRID_RES; x++) {
+                    const wx = (x / GRID_RES - 0.5) * WORLD_SIZE;
+                    const dx = wx - hitX;
+                    const dist = Math.hypot(dx, dz);
+
+                    if (dist < radius) {
+                        // Smooth cosine bell falloff for natural trench & sandbar slopes
+                        const falloff = 0.5 * (1.0 + Math.cos((Math.PI * dist) / radius));
+                        const idx = z * (GRID_RES + 1) + x;
+                        const oldH = heightGrid[idx];
+                        const newH = Math.max(-22.0, Math.min(12.0, oldH + deltaScale * falloff));
+                        heightGrid[idx] = newH;
+                        simState.excavatedVolume += Math.abs(newH - oldH) * cellArea * 0.25;
+                        modified = true;
+                    }
+                }
+            }
+
+            if (modified) {
+                syncHeightGridToGPUAndMesh();
+                const badge = document.getElementById('excavation-volume-badge');
+                if (badge) {
+                    badge.textContent = `${Math.round(simState.excavatedVolume)} m³ moved`;
+                }
+            }
+        }
+
+        /**
+         * Evaluates the exact 8-Wave Gerstner surface displacement & normal on the CPU
+         * so floating physics buoys ride and pitch accurately on the waves.
+         */
+        function evaluateGerstnerPointCPU(x, z, t) {
+            let dx = 0, dy = 0, dz = 0;
+            let dPdx_x = 1, dPdx_y = 0, dPdx_z = 0;
+            let dPdz_x = 0, dPdz_y = 0, dPdz_z = 1;
+
+            const bedH = sampleHeightGridCPU(x, z);
+            const waterDepth = Math.max(0.0, -bedH);
+            const shoalPeak = 1.0 + 0.42 * Math.exp(-Math.pow((waterDepth - 2.2) / 1.8, 2.0));
+            const swashDamp = Math.max(0.0, Math.min(1.0, (waterDepth + 0.45) / 0.85));
+            const depthAmpFactor = shoalPeak * swashDamp;
+
+            const pwLen = Math.hypot(0.08, 0.99);
+            const pwx = 0.08 / pwLen;
+            const pwz = 0.99 / pwLen;
+
+            for (let i = 0; i < 8; i++) {
+                const w = WAVE_SPECTRUM[i];
+                const rLen = Math.hypot(w.dir[0], w.dir[1]);
+                const rx = w.dir[0] / rLen;
+                const rz = w.dir[1] / rLen;
+
+                let mx = pwx * (1 - simState.spread) + rx * simState.spread;
+                let mz = pwz * (1 - simState.spread) + rz * simState.spread;
+                const mLen = Math.hypot(mx, mz) || 1;
+                const Dx = mx / mLen;
+                const Dz = mz / mLen;
+
+                const wl = Math.max(3.5, simState.wavelength * w.relLen);
+                const k = (2 * Math.PI) / wl;
+                const omega = Math.sqrt(G_ACCEL * k);
+                const A = (wl / 28.0) * 0.40 * w.relAmp * simState.amplitude * depthAmpFactor;
+                const Qi = Math.min(0.23, Math.max(0.0, (simState.steepness * 0.165) / (k * A + 0.0001)));
+
+                const shallowPhaseDelay = k * Math.log(1.0 + Math.exp(-waterDepth * 0.38)) * 2.2;
+                const theta = k * (Dx * x + Dz * z) - omega * t + w.phase - shallowPhaseDelay;
+                const s = Math.sin(theta);
+                const c = Math.cos(theta);
+
+                dx -= Qi * A * Dx * s;
+                dz -= Qi * A * Dz * s;
+                dy += A * c;
+
+                const kA = k * A;
+                const QkA = Qi * kA;
+
+                dPdx_x -= QkA * Dx * Dx * c;
+                dPdx_z -= QkA * Dx * Dz * c;
+                dPdx_y -= kA * Dx * s;
+
+                dPdz_x -= QkA * Dz * Dx * c;
+                dPdz_z -= QkA * Dz * Dz * c;
+                dPdz_y -= kA * Dz * s;
+            }
+
+            const nx = dPdz_y * dPdx_z - dPdz_z * dPdx_y;
+            const ny = dPdz_z * dPdx_x - dPdz_x * dPdx_z;
+            const nz = dPdz_x * dPdx_y - dPdz_y * dPdx_x;
+            const nLen = Math.hypot(nx, ny, nz) || 1;
+
+            return {
+                x: x + dx,
+                y: Math.max(bedH + 0.15, dy),
+                z: z + dz,
+                nx: nx / nLen,
+                ny: ny / nLen,
+                nz: nz / nLen,
+                jacobian: dPdx_x * dPdz_z - dPdx_z * dPdx_x
+            };
+        }
+
+        // Three.js Globals
+        let scene, camera, renderer;
+        let oceanMesh, oceanMaterial, skyMesh, skyMaterial;
+        let buoyGroup;
+        const buoys = [];
+        const raycaster = new THREE.Raycaster();
+        const pointerNDC = new THREE.Vector2();
+        const brushHitWorld = new THREE.Vector3();
+        let isBrushDown = false;
+        let isHoveringShore = false;
+
+        // Spherical Camera Orbit Controller State (Positioned looking across the surf & beach)
+        const camOrbit = {
+            theta: -0.62,      // Angled to view both oncoming ocean swells and the sandy beach
+            phi: 1.24,         // Elevated coastal perspective
+            radius: 68.0,      // Distance from target
+            target: new THREE.Vector3(0, 1.2, 36), // Centered near the shoreline surf zone
+            isDragging: false,
+            prevX: 0,
+            prevY: 0,
+            pinchDist: 0
+        };
+
+        function computeSunDirectionVector() {
+            const elRad = THREE.MathUtils.degToRad(simState.sunElevationDeg);
+            const azRad = THREE.MathUtils.degToRad(simState.sunAzimuthDeg);
+            const y = Math.sin(elRad);
+            const horiz = Math.cos(elRad);
+            const x = horiz * Math.sin(azRad);
+            const z = horiz * Math.cos(azRad);
+            return new THREE.Vector3(x, y, z).normalize();
+        }
+
+        function initThreeScene() {
+            const container = document.getElementById('webgl-container');
+            scene = new THREE.Scene();
+
+            camera = new THREE.PerspectiveCamera(52, window.innerWidth / window.innerHeight, 0.5, 2500);
+            updateCameraTransform();
+
+            renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            renderer.domElement.classList.add('webgl-canvas');
+            container.appendChild(renderer.domElement);
+
+            const sunDir = computeSunDirectionVector();
+            const theme = OCEAN_THEMES[simState.oceanTheme];
+
+            // 1. Initialize Bathymetry DataTexture
+            heightDataTexture = new THREE.DataTexture(
+                heightTexData,
+                GRID_RES,
+                GRID_RES,
+                THREE.RGBAFormat,
+                THREE.UnsignedByteType
+            );
+            heightDataTexture.magFilter = THREE.LinearFilter;
+            heightDataTexture.minFilter = THREE.LinearFilter;
+            heightDataTexture.wrapS = THREE.ClampToEdgeWrapping;
+            heightDataTexture.wrapT = THREE.ClampToEdgeWrapping;
+
+            // 2. Procedural Atmospheric Sky Dome
+            const skyGeo = new THREE.SphereGeometry(1400, 48, 32);
+            skyMaterial = new THREE.ShaderMaterial({
+                vertexShader: document.getElementById('sky-vertex-shader').textContent,
+                fragmentShader: document.getElementById('sky-fragment-shader').textContent,
+                uniforms: {
+                    uSunDir: { value: sunDir }
+                },
+                side: THREE.BackSide,
+                depthWrite: false
+            });
+            skyMesh = new THREE.Mesh(skyGeo, skyMaterial);
+            scene.add(skyMesh);
+
+            // 3. Diggable 3D Coastal Shore & Seabed Mesh
+            shoreGeometry = new THREE.PlaneGeometry(WORLD_SIZE, WORLD_SIZE, GRID_RES, GRID_RES);
+            shoreGeometry.rotateX(-Math.PI / 2);
+
+            shoreMaterial = new THREE.ShaderMaterial({
+                vertexShader: document.getElementById('shore-vertex-shader').textContent,
+                fragmentShader: document.getElementById('shore-fragment-shader').textContent,
+                uniforms: {
+                    uTime: { value: 0 },
+                    uSunDir: { value: sunDir },
+                    uSandColor: { value: new THREE.Vector3(...theme.sandColor) },
+                    uBrushWorldPos: { value: new THREE.Vector3(0, 0, 0) },
+                    uBrushRadius: { value: simState.brushRadius },
+                    uBrushActive: { value: 0 }
+                }
+            });
+
+            shoreMesh = new THREE.Mesh(shoreGeometry, shoreMaterial);
+            scene.add(shoreMesh);
+
+            // Initialize natural coastal slope & sync to GPU
+            resetCoastalBathymetry();
+
+            // 4. High-Density Tessellated Ocean Surface
+            const oceanGeo = new THREE.PlaneGeometry(WORLD_SIZE, WORLD_SIZE, 380, 380);
+            oceanGeo.rotateX(-Math.PI / 2);
+
+            oceanMaterial = new THREE.ShaderMaterial({
+                vertexShader: document.getElementById('ocean-vertex-shader').textContent,
+                fragmentShader: document.getElementById('ocean-fragment-shader').textContent,
+                uniforms: {
+                    uTime: { value: 0 },
+                    uAmplitude: { value: simState.amplitude },
+                    uSteepness: { value: simState.steepness },
+                    uWavelength: { value: simState.wavelength },
+                    uSpread: { value: simState.spread },
+                    uChop: { value: simState.chop },
+                    uSSSIntensity: { value: simState.sssIntensity },
+                    uFoamIntensity: { value: simState.foamIntensity },
+                    uSunDir: { value: sunDir },
+                    uDebugMode: { value: simState.debugMode },
+                    uHeightMap: { value: heightDataTexture },
+                    uWorldSize: { value: WORLD_SIZE },
+                    uAbyssalColor: { value: new THREE.Vector3(...theme.abyssalColor) },
+                    uShallowColor: { value: new THREE.Vector3(...theme.shallowColor) },
+                    uSSSTint: { value: new THREE.Vector3(...theme.sssTint) },
+                    uSandColor: { value: new THREE.Vector3(...theme.sandColor) }
+                },
+                wireframe: simState.wireframe
+            });
+
+            oceanMesh = new THREE.Mesh(oceanGeo, oceanMaterial);
+            scene.add(oceanMesh);
+
+            // 5. Create Interactive Floating Wave-Rider Physics Buoys
+            createPhysicsBuoys();
+
+            // 6. Bind Mouse & Touch Camera + Shore Digging Controls
+            setupCameraInteraction(renderer.domElement);
+
+            // 7. Handle Viewport Resize
+            window.addEventListener('resize', onWindowResize);
+        }
+
+        function createPhysicsBuoys() {
+            buoyGroup = new THREE.Group();
+            scene.add(buoyGroup);
+
+            const dirLight = new THREE.DirectionalLight(0xfff4e0, 1.5);
+            dirLight.position.set(40, 80, -60);
+            scene.add(dirLight);
+            scene.add(new THREE.AmbientLight(0x38bdf8, 0.65));
+
+            // Positioned offshore and in the near-shore surf zone
+            const buoyCoords = [
+                { x: -18, z: 12, color: 0xf97316 },
+                { x: 16, z: 18, color: 0x38bdf8 },
+                { x: 0, z: -12, color: 0x10b981 },
+                { x: -24, z: -22, color: 0xfacc15 }
+            ];
+
+            buoyCoords.forEach((coord) => {
+                const holder = new THREE.Group();
+
+                const torusGeo = new THREE.TorusGeometry(1.15, 0.35, 16, 32);
+                torusGeo.rotateX(Math.PI / 2);
+                const torusMat = new THREE.MeshStandardMaterial({
+                    color: coord.color,
+                    roughness: 0.25,
+                    metalness: 0.2
+                });
+                const ring = new THREE.Mesh(torusGeo, torusMat);
+                holder.add(ring);
+
+                const domeGeo = new THREE.SphereGeometry(0.75, 24, 16);
+                const domeMat = new THREE.MeshStandardMaterial({
+                    color: 0xf8fafc,
+                    roughness: 0.3,
+                    metalness: 0.4
+                });
+                const dome = new THREE.Mesh(domeGeo, domeMat);
+                dome.position.y = 0.25;
+                holder.add(dome);
+
+                const mastGeo = new THREE.CylinderGeometry(0.08, 0.12, 2.8, 12);
+                const mastMat = new THREE.MeshStandardMaterial({ color: 0x334155, metalness: 0.7, roughness: 0.3 });
+                const mast = new THREE.Mesh(mastGeo, mastMat);
+                mast.position.y = 1.6;
+                holder.add(mast);
+
+                const beaconGeo = new THREE.SphereGeometry(0.24, 16, 16);
+                const beaconMat = new THREE.MeshBasicMaterial({ color: coord.color });
+                const beacon = new THREE.Mesh(beaconGeo, beaconMat);
+                beacon.position.y = 3.05;
+                holder.add(beacon);
+
+                buoyGroup.add(holder);
+                buoys.push({
+                    mesh: holder,
+                    anchorX: coord.x,
+                    anchorZ: coord.z,
+                    upVec: new THREE.Vector3(0, 1, 0)
+                });
+            });
+        }
+
+        function updatePhysicsBuoys(t) {
+            if (!buoyGroup) return;
+            buoyGroup.visible = simState.showBuoys;
+            if (!simState.showBuoys) return;
+
+            const defaultUp = new THREE.Vector3(0, 1, 0);
+
+            for (let i = 0; i < buoys.length; i++) {
+                const b = buoys[i];
+                const sample = evaluateGerstnerPointCPU(b.anchorX, b.anchorZ, t);
+
+                // Buoy rides the exact trochoidal orbital path (both horizontal surge and vertical heave!)
+                b.mesh.position.set(sample.x, sample.y, sample.z);
+
+                // Smoothly tilt buoy normal to match wave slope
+                const targetNormal = new THREE.Vector3(sample.nx, sample.ny, sample.nz).normalize();
+                b.upVec.lerp(targetNormal, 0.18).normalize();
+                b.mesh.quaternion.setFromUnitVectors(defaultUp, b.upVec);
+            }
+        }
+
+        function updateCameraTransform() {
+            // Clamp polar angle so camera stays above water surface
+            camOrbit.phi = Math.max(0.12, Math.min(Math.PI * 0.485, camOrbit.phi));
+            camOrbit.radius = Math.max(8.0, Math.min(220.0, camOrbit.radius));
+
+            const sinPhi = Math.sin(camOrbit.phi);
+            const x = camOrbit.target.x + camOrbit.radius * sinPhi * Math.sin(camOrbit.theta);
+            const y = Math.max(1.6, camOrbit.target.y + camOrbit.radius * Math.cos(camOrbit.phi));
+            const z = camOrbit.target.z + camOrbit.radius * sinPhi * Math.cos(camOrbit.theta);
+
+            camera.position.set(x, y, z);
+            camera.lookAt(camOrbit.target);
+        }
+
+        function setupCameraInteraction(domElem) {
+            // Prevent context menu on right-click so right-drag always orbits smoothly
+            domElem.addEventListener('contextmenu', (e) => e.preventDefault());
+
+            function updateRaycasterFromClient(clientX, clientY) {
+                const rect = domElem.getBoundingClientRect();
+                pointerNDC.x = ((clientX - rect.left) / rect.width) * 2 - 1;
+                pointerNDC.y = -((clientY - rect.top) / rect.height) * 2 + 1;
+                raycaster.setFromCamera(pointerNDC, camera);
+                if (!shoreMesh) return false;
+                const hits = raycaster.intersectObject(shoreMesh, false);
+                if (hits.length > 0) {
+                    brushHitWorld.copy(hits[0].point);
+                    if (shoreMaterial) {
+                        shoreMaterial.uniforms.uBrushWorldPos.value.copy(brushHitWorld);
+                    }
+                    return true;
+                }
+                return false;
+            }
+
+            domElem.addEventListener('mousedown', (e) => {
+                // Right click, middle click, Shift+click, or 'orbit' tool -> Orbit Camera
+                if (e.button === 2 || e.button === 1 || e.shiftKey || simState.toolMode === 'orbit') {
+                    camOrbit.isDragging = true;
+                    camOrbit.prevX = e.clientX;
+                    camOrbit.prevY = e.clientY;
+                } else if (e.button === 0) {
+                    // Left click in Dig or Build mode -> Excavate if hitting shore, else Orbit
+                    const hit = updateRaycasterFromClient(e.clientX, e.clientY);
+                    if (hit) {
+                        isBrushDown = true;
+                        applyShoreExcavationBrush(brushHitWorld.x, brushHitWorld.z, 0.045);
+                    } else {
+                        camOrbit.isDragging = true;
+                        camOrbit.prevX = e.clientX;
+                        camOrbit.prevY = e.clientY;
+                    }
+                }
+            });
+
+            window.addEventListener('mousemove', (e) => {
+                if (camOrbit.isDragging) {
+                    const dx = e.clientX - camOrbit.prevX;
+                    const dy = e.clientY - camOrbit.prevY;
+                    camOrbit.prevX = e.clientX;
+                    camOrbit.prevY = e.clientY;
+
+                    camOrbit.theta -= dx * 0.0055;
+                    camOrbit.phi -= dy * 0.0045;
+                    updateCameraTransform();
+                    return;
+                }
+
+                if (simState.toolMode !== 'orbit') {
+                    isHoveringShore = updateRaycasterFromClient(e.clientX, e.clientY);
+                    if (shoreMaterial) {
+                        shoreMaterial.uniforms.uBrushActive.value = isHoveringShore ? 1 : 0;
+                    }
+                    if (isBrushDown && isHoveringShore) {
+                        applyShoreExcavationBrush(brushHitWorld.x, brushHitWorld.z, 0.025);
+                    }
+                } else if (shoreMaterial) {
+                    shoreMaterial.uniforms.uBrushActive.value = 0;
+                }
+            });
+
+            window.addEventListener('mouseup', () => {
+                camOrbit.isDragging = false;
+                isBrushDown = false;
+            });
+
+            domElem.addEventListener('wheel', (e) => {
+                e.preventDefault();
+                camOrbit.radius += e.deltaY * 0.035;
+                updateCameraTransform();
+            }, { passive: false });
+
+            // Touch Support (1-finger dig or orbit depending on mode, 2-finger pinch zoom & orbit)
+            domElem.addEventListener('touchstart', (e) => {
+                if (e.touches.length === 1) {
+                    const t = e.touches[0];
+                    if (simState.toolMode !== 'orbit' && updateRaycasterFromClient(t.clientX, t.clientY)) {
+                        isBrushDown = true;
+                        if (shoreMaterial) shoreMaterial.uniforms.uBrushActive.value = 1;
+                        applyShoreExcavationBrush(brushHitWorld.x, brushHitWorld.z, 0.045);
+                    } else {
+                        camOrbit.isDragging = true;
+                        camOrbit.prevX = t.clientX;
+                        camOrbit.prevY = t.clientY;
+                    }
+                } else if (e.touches.length === 2) {
+                    isBrushDown = false;
+                    camOrbit.isDragging = false;
+                    camOrbit.pinchDist = Math.hypot(
+                        e.touches[0].clientX - e.touches[1].clientX,
+                        e.touches[0].clientY - e.touches[1].clientY
+                    );
+                }
+            }, { passive: true });
+
+            domElem.addEventListener('touchmove', (e) => {
+                if (e.touches.length === 1) {
+                    const t = e.touches[0];
+                    if (isBrushDown && updateRaycasterFromClient(t.clientX, t.clientY)) {
+                        applyShoreExcavationBrush(brushHitWorld.x, brushHitWorld.z, 0.028);
+                    } else if (camOrbit.isDragging) {
+                        const dx = t.clientX - camOrbit.prevX;
+                        const dy = t.clientY - camOrbit.prevY;
+                        camOrbit.prevX = t.clientX;
+                        camOrbit.prevY = t.clientY;
+                        camOrbit.theta -= dx * 0.006;
+                        camOrbit.phi -= dy * 0.005;
+                        updateCameraTransform();
+                    }
+                } else if (e.touches.length === 2) {
+                    const dist = Math.hypot(
+                        e.touches[0].clientX - e.touches[1].clientX,
+                        e.touches[0].clientY - e.touches[1].clientY
+                    );
+                    const delta = camOrbit.pinchDist - dist;
+                    camOrbit.pinchDist = dist;
+                    camOrbit.radius += delta * 0.12;
+                    updateCameraTransform();
+                }
+            }, { passive: true });
+
+            domElem.addEventListener('touchend', () => {
+                camOrbit.isDragging = false;
+                isBrushDown = false;
+                if (shoreMaterial) shoreMaterial.uniforms.uBrushActive.value = 0;
+            });
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            resizeOrbitalCanvas();
+        }
+
+        // =====================================================================
+        // LIVE 2D ORBITAL PARTICLE & TROCHOIDAL WAVE CROSS-SECTION ANALYZER
+        // =====================================================================
+        const orbitalCanvas = document.getElementById('orbital-canvas');
+        const orbitalCtx = orbitalCanvas.getContext('2d');
+
+        function resizeOrbitalCanvas() {
+            const rect = orbitalCanvas.parentElement.getBoundingClientRect();
+            const dpr = Math.min(window.devicePixelRatio || 1, 2);
+            orbitalCanvas.width = rect.width * dpr;
+            orbitalCanvas.height = rect.height * dpr;
+            orbitalCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        }
+
+        function renderOrbitalCrossSection(t) {
+            const w = orbitalCanvas.clientWidth;
+            const h = orbitalCanvas.clientHeight;
+            if (w === 0 || h === 0) return;
+
+            orbitalCtx.clearRect(0, 0, w, h);
+
+            // Subtle depth grid
+            orbitalCtx.strokeStyle = 'rgba(51, 65, 85, 0.35)';
+            orbitalCtx.lineWidth = 1;
+            const meanSurfaceY = h * 0.42;
+
+            orbitalCtx.beginPath();
+            orbitalCtx.setLineDash([3, 3]);
+            orbitalCtx.moveTo(0, meanSurfaceY);
+            orbitalCtx.lineTo(w, meanSurfaceY);
+            orbitalCtx.stroke();
+            orbitalCtx.setLineDash([]);
+
+            // Wave parameters derived from live sliders
+            const k = (2 * Math.PI) / (w * 0.58);
+            const omega = Math.sqrt(G_ACCEL * (2 * Math.PI / simState.wavelength));
+            const A = Math.min(h * 0.24, 14 * simState.amplitude);
+            const Q = Math.min(0.92, simState.steepness * 0.82);
+
+            // 1. Optional Naive Sine Wave Comparison (Dashed Rose Curve)
+            if (simState.compareSine) {
+                orbitalCtx.beginPath();
+                orbitalCtx.strokeStyle = 'rgba(251, 113, 133, 0.65)';
+                orbitalCtx.lineWidth = 1.5;
+                for (let x = 0; x <= w; x += 3) {
+                    const theta = k * x - omega * t;
+                    const y = meanSurfaceY - A * Math.cos(theta);
+                    if (x === 0) orbitalCtx.moveTo(x, y);
+                    else orbitalCtx.lineTo(x, y);
+                }
+                orbitalCtx.stroke();
+            }
+
+            // 2. True Gerstner (Trochoidal) Wave Surface & Shaded Water Volume
+            orbitalCtx.beginPath();
+            for (let i = -20; i <= w + 20; i += 3) {
+                const theta = k * i - omega * t;
+                // Horizontal orbital shift pinches the wave peak!
+                const gx = i - Q * A * Math.sin(theta);
+                const gy = meanSurfaceY - A * Math.cos(theta);
+                if (i === -20) orbitalCtx.moveTo(gx, gy);
+                else orbitalCtx.lineTo(gx, gy);
+            }
+            orbitalCtx.lineTo(w + 20, h);
+            orbitalCtx.lineTo(-20, h);
+            orbitalCtx.closePath();
+
+            const grad = orbitalCtx.createLinearGradient(0, meanSurfaceY - A, 0, h);
+            grad.addColorStop(0, 'rgba(34, 211, 238, 0.35)');
+            grad.addColorStop(0.5, 'rgba(14, 116, 144, 0.25)');
+            grad.addColorStop(1, 'rgba(2, 6, 23, 0.6)');
+            orbitalCtx.fillStyle = grad;
+            orbitalCtx.fill();
+
+            // Draw crisp Trochoidal crest line
+            orbitalCtx.beginPath();
+            orbitalCtx.strokeStyle = '#22d3ee';
+            orbitalCtx.lineWidth = 2.2;
+            for (let i = -20; i <= w + 20; i += 3) {
+                const theta = k * i - omega * t;
+                const gx = i - Q * A * Math.sin(theta);
+                const gy = meanSurfaceY - A * Math.cos(theta);
+                if (i === -20) orbitalCtx.moveTo(gx, gy);
+                else orbitalCtx.lineTo(gx, gy);
+            }
+            orbitalCtx.stroke();
+
+            // 2b. Draw Sloping Coastal Beach Profile on Right Side of Cross-Section
+            orbitalCtx.beginPath();
+            orbitalCtx.moveTo(w * 0.62, h);
+            for (let x = w * 0.62; x <= w; x += 4) {
+                const normX = (x - w * 0.62) / (w * 0.38);
+                const worldZ = 15 + normX * 95;
+                const bedH = sampleHeightGridCPU(0, worldZ);
+                const sy = meanSurfaceY - bedH * 5.2;
+                orbitalCtx.lineTo(x, Math.min(h, Math.max(8, sy)));
+            }
+            orbitalCtx.lineTo(w, h);
+            orbitalCtx.closePath();
+            orbitalCtx.fillStyle = 'rgba(217, 169, 98, 0.45)';
+            orbitalCtx.fill();
+            orbitalCtx.strokeStyle = '#f59e0b';
+            orbitalCtx.lineWidth = 1.5;
+            orbitalCtx.stroke();
+
+            // 3. Draw Water Particle Circular Orbitals at 3 Depths (Exponential Decay r = A * e^(k*z))
+            const columns = [w * 0.20, w * 0.44, w * 0.68];
+            const depthLevels = [0, 28, 56];
+
+            columns.forEach((baseX) => {
+                depthLevels.forEach((depthPx, dIdx) => {
+                    const decay = Math.exp(-depthPx * 0.026);
+                    const rx = Q * A * decay;
+                    const ry = A * decay;
+                    const centerY = meanSurfaceY + depthPx;
+
+                    // Draw dashed orbital circle
+                    orbitalCtx.beginPath();
+                    orbitalCtx.strokeStyle = dIdx === 0 ? 'rgba(251, 191, 36, 0.45)' : 'rgba(148, 163, 184, 0.28)';
+                    orbitalCtx.lineWidth = 1;
+                    orbitalCtx.ellipse(baseX, centerY, Math.max(1.5, rx), Math.max(1.5, ry), 0, 0, Math.PI * 2);
+                    orbitalCtx.stroke();
+
+                    // Particle position on the orbit
+                    const theta = k * baseX - omega * t;
+                    const px = baseX - rx * Math.sin(theta);
+                    const py = centerY - ry * Math.cos(theta);
+
+                    // Velocity vector arrow on top particles
+                    if (dIdx === 0) {
+                        const vx = rx * Math.cos(theta) * 0.55;
+                        const vy = -ry * Math.sin(theta) * 0.55;
+                        orbitalCtx.beginPath();
+                        orbitalCtx.strokeStyle = '#fbbf24';
+                        orbitalCtx.lineWidth = 1.4;
+                        orbitalCtx.moveTo(px, py);
+                        orbitalCtx.lineTo(px + vx, py + vy);
+                        orbitalCtx.stroke();
+                    }
+
+                    // Particle dot
+                    orbitalCtx.beginPath();
+                    orbitalCtx.fillStyle = dIdx === 0 ? '#fbbf24' : '#38bdf8';
+                    orbitalCtx.arc(px, py, dIdx === 0 ? 3.5 : 2.3, 0, Math.PI * 2);
+                    orbitalCtx.fill();
+                });
+            });
+
+            // Caption label inside canvas
+            orbitalCtx.fillStyle = 'rgba(226, 232, 240, 0.75)';
+            orbitalCtx.font = '10px "JetBrains Mono", monospace';
+            orbitalCtx.fillText(`r(z) = A·e^(kz)  |  Q = ${simState.steepness.toFixed(2)}`, 8, h - 7);
+        }
+
+        // =====================================================================
+        // UI CONTROLS, TELEMETRY & PRESETS
+        // =====================================================================
+        function updateLiveTelemetry() {
+            // Compute physical metrics from current spectrum parameters
+            const kDom = (2 * Math.PI) / simState.wavelength;
+            const celerity = Math.sqrt(G_ACCEL / kDom); // Deep water phase speed c = sqrt(g/k)
+            const sigWaveHeight = (simState.wavelength / 28.0) * 1.15 * simState.amplitude;
+            const minJacobian = Math.max(0.02, 1.0 - simState.steepness * simState.amplitude * 0.68);
+
+            document.getElementById('telemetry-hs').textContent = `${sigWaveHeight.toFixed(2)} m`;
+            document.getElementById('telemetry-speed').textContent = `${celerity.toFixed(2)} m/s`;
+
+            const jElem = document.getElementById('telemetry-jacobian');
+            const status = minJacobian < 0.45 ? 'Breaking Foam' : 'Laminar Swell';
+            jElem.textContent = `J_min = ${minJacobian.toFixed(2)} (${status})`;
+            jElem.className = minJacobian < 0.45
+                ? 'font-mono-code font-semibold text-amber-300'
+                : 'font-mono-code font-semibold text-cyan-300';
+        }
+
+        function syncUniformsFromState() {
+            if (!oceanMaterial || !skyMaterial || !shoreMaterial) return;
+            oceanMaterial.uniforms.uAmplitude.value = simState.amplitude;
+            oceanMaterial.uniforms.uSteepness.value = simState.steepness;
+            oceanMaterial.uniforms.uWavelength.value = simState.wavelength;
+            oceanMaterial.uniforms.uSpread.value = simState.spread;
+            oceanMaterial.uniforms.uChop.value = simState.chop;
+            oceanMaterial.uniforms.uSSSIntensity.value = simState.sssIntensity;
+            oceanMaterial.uniforms.uFoamIntensity.value = simState.foamIntensity;
+            oceanMaterial.uniforms.uDebugMode.value = simState.debugMode;
+            oceanMaterial.wireframe = simState.wireframe;
+
+            const theme = OCEAN_THEMES[simState.oceanTheme];
+            if (theme) {
+                oceanMaterial.uniforms.uAbyssalColor.value.set(...theme.abyssalColor);
+                oceanMaterial.uniforms.uShallowColor.value.set(...theme.shallowColor);
+                oceanMaterial.uniforms.uSSSTint.value.set(...theme.sssTint);
+                oceanMaterial.uniforms.uSandColor.value.set(...theme.sandColor);
+                shoreMaterial.uniforms.uSandColor.value.set(...theme.sandColor);
+            }
+
+            shoreMaterial.uniforms.uBrushRadius.value = simState.brushRadius;
+
+            const sunVec = computeSunDirectionVector();
+            oceanMaterial.uniforms.uSunDir.value.copy(sunVec);
+            skyMaterial.uniforms.uSunDir.value.copy(sunVec);
+            shoreMaterial.uniforms.uSunDir.value.copy(sunVec);
+
+            updateLiveTelemetry();
+        }
+
+        const PRESETS = {
+            tropical: {
+                amplitude: 0.72,
+                steepness: 0.58,
+                wavelength: 74,
+                spread: 0.42,
+                chop: 0.75,
+                sssIntensity: 1.65,
+                foamIntensity: 0.55,
+                sunElevationDeg: 38,
+                sunAzimuthDeg: 175
+            },
+            tradewind: {
+                amplitude: 1.15,
+                steepness: 0.78,
+                wavelength: 64,
+                spread: 0.65,
+                chop: 1.00,
+                sssIntensity: 1.15,
+                foamIntensity: 1.05,
+                sunElevationDeg: 19,
+                sunAzimuthDeg: 195
+            },
+            gale: {
+                amplitude: 1.75,
+                steepness: 0.98,
+                wavelength: 82,
+                spread: 0.95,
+                chop: 1.55,
+                sssIntensity: 0.95,
+                foamIntensity: 1.65,
+                sunElevationDeg: 11,
+                sunAzimuthDeg: 210
+            },
+            sunset: {
+                amplitude: 1.05,
+                steepness: 0.74,
+                wavelength: 58,
+                spread: 0.55,
+                chop: 1.10,
+                sssIntensity: 1.40,
+                foamIntensity: 0.90,
+                sunElevationDeg: 4.5,
+                sunAzimuthDeg: 185
+            }
+        };
+
+        function bindUIEvents() {
+            const sliderMap = [
+                { id: 'slider-amplitude', valId: 'val-amplitude', key: 'amplitude', fmt: v => `${v.toFixed(2)}x` },
+                { id: 'slider-steepness', valId: 'val-steepness', key: 'steepness', fmt: v => v.toFixed(2) },
+                { id: 'slider-wavelength', valId: 'val-wavelength', key: 'wavelength', fmt: v => `${Math.round(v)} m` },
+                { id: 'slider-spread', valId: 'val-spread', key: 'spread', fmt: v => v.toFixed(2) },
+                { id: 'slider-chop', valId: 'val-chop', key: 'chop', fmt: v => v.toFixed(2) },
+                { id: 'slider-sss', valId: 'val-sss', key: 'sssIntensity', fmt: v => v.toFixed(2) },
+                { id: 'slider-foam', valId: 'val-foam', key: 'foamIntensity', fmt: v => v.toFixed(2) },
+                { id: 'slider-sun-el', valId: 'val-sun-el', key: 'sunElevationDeg', fmt: v => `${v}°` },
+                { id: 'slider-sun-az', valId: 'val-sun-az', key: 'sunAzimuthDeg', fmt: v => `${Math.round(v)}°` }
+            ];
+
+            sliderMap.forEach((item) => {
+                const el = document.getElementById(item.id);
+                const label = document.getElementById(item.valId);
+                el.addEventListener('input', (e) => {
+                    const num = parseFloat(e.target.value);
+                    simState[item.key] = num;
+                    label.textContent = item.fmt(num);
+                    syncUniformsFromState();
+                });
+            });
+
+            // Sea State Presets
+            document.querySelectorAll('.preset-btn').forEach((btn) => {
+                btn.addEventListener('click', () => {
+                    document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
+                    btn.classList.add('active');
+                    const p = PRESETS[btn.dataset.preset];
+                    if (!p) return;
+
+                    Object.assign(simState, p);
+                    sliderMap.forEach((item) => {
+                        const el = document.getElementById(item.id);
+                        const label = document.getElementById(item.valId);
+                        el.value = simState[item.key];
+                        label.textContent = item.fmt(simState[item.key]);
+                    });
+                    syncUniformsFromState();
+                });
+            });
+
+            // Ocean Basin Theme Buttons (Bay of Bengal, Atlantic, Pacific)
+            document.querySelectorAll('.ocean-theme-btn').forEach((btn) => {
+                btn.addEventListener('click', () => {
+                    const oceanKey = btn.dataset.ocean;
+                    const theme = OCEAN_THEMES[oceanKey];
+                    if (!theme) return;
+
+                    simState.oceanTheme = oceanKey;
+                    simState.amplitude = theme.amplitude;
+                    simState.steepness = theme.steepness;
+                    simState.wavelength = theme.wavelength;
+                    simState.spread = theme.spread;
+                    simState.chop = theme.chop;
+                    simState.sssIntensity = theme.sssIntensity;
+                    simState.foamIntensity = theme.foamIntensity;
+
+                    // Update active button styling
+                    document.querySelectorAll('.ocean-theme-btn').forEach((b) => {
+                        b.className = 'ocean-theme-btn px-3 py-1.5 rounded-xl font-semibold transition flex items-center gap-1.5 text-slate-300 hover:text-white border border-transparent';
+                    });
+                    btn.className = 'ocean-theme-btn active px-3 py-1.5 rounded-xl font-semibold transition flex items-center gap-1.5 bg-cyan-500/25 text-cyan-200 border border-cyan-400/50';
+
+                    const badge = document.getElementById('active-ocean-badge');
+                    if (badge) {
+                        badge.textContent = theme.name;
+                        badge.className = theme.badgeClass;
+                    }
+
+                    sliderMap.forEach((item) => {
+                        const el = document.getElementById(item.id);
+                        const label = document.getElementById(item.valId);
+                        if (el && simState[item.key] !== undefined) {
+                            el.value = simState[item.key];
+                            label.textContent = item.fmt(simState[item.key]);
+                        }
+                    });
+                    syncUniformsFromState();
+                });
+            });
+
+            // Interactive Shore Digging & Sculpting Tool Buttons
+            document.querySelectorAll('.tool-btn').forEach((btn) => {
+                btn.addEventListener('click', () => {
+                    simState.toolMode = btn.dataset.tool;
+                    document.querySelectorAll('.tool-btn').forEach((b) => {
+                        b.className = 'tool-btn px-3 py-1.5 rounded-xl font-semibold transition flex items-center gap-1.5 bg-slate-800/70 hover:bg-slate-700/70 text-slate-300 border border-slate-700';
+                    });
+                    btn.className = 'tool-btn active px-3 py-1.5 rounded-xl font-semibold transition flex items-center gap-1.5 bg-amber-500/25 text-amber-200 border border-amber-400/60 shadow-lg shadow-amber-500/10';
+                    if (simState.toolMode === 'orbit' && shoreMaterial) {
+                        shoreMaterial.uniforms.uBrushActive.value = 0;
+                    }
+                });
+            });
+
+            // Brush Radius & Strength Sliders
+            const radSlider = document.getElementById('slider-brush-radius');
+            const radVal = document.getElementById('val-brush-radius');
+            radSlider.addEventListener('input', (e) => {
+                simState.brushRadius = parseFloat(e.target.value);
+                radVal.textContent = `${Math.round(simState.brushRadius)} m`;
+                syncUniformsFromState();
+            });
+
+            const strSlider = document.getElementById('slider-brush-strength');
+            const strVal = document.getElementById('val-brush-strength');
+            strSlider.addEventListener('input', (e) => {
+                simState.brushStrength = parseFloat(e.target.value);
+                strVal.textContent = `${simState.brushStrength.toFixed(1)}x`;
+            });
+
+            document.getElementById('reset-shore-btn').addEventListener('click', () => {
+                resetCoastalBathymetry();
+            });
+
+            // Diagnostic Render Modes
+            document.querySelectorAll('.mode-btn').forEach((btn) => {
+                btn.addEventListener('click', () => {
+                    document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
+                    btn.classList.add('active');
+                    simState.debugMode = parseInt(btn.dataset.mode, 10);
+                    syncUniformsFromState();
+                });
+            });
+
+            // Wireframe & Buoy Toggles
+            const wireBtn = document.getElementById('toggle-wireframe-btn');
+            wireBtn.addEventListener('click', () => {
+                simState.wireframe = !simState.wireframe;
+                wireBtn.classList.toggle('border-cyan-400', simState.wireframe);
+                wireBtn.classList.toggle('text-cyan-300', simState.wireframe);
+                syncUniformsFromState();
+            });
+
+            const buoyBtn = document.getElementById('toggle-buoys-btn');
+            buoyBtn.addEventListener('click', () => {
+                simState.showBuoys = !simState.showBuoys;
+                buoyBtn.textContent = `Floating Physics Buoys: ${simState.showBuoys ? 'ON' : 'OFF'}`;
+                buoyBtn.classList.toggle('opacity-60', !simState.showBuoys);
+            });
+
+            document.getElementById('compare-sine-toggle').addEventListener('change', (e) => {
+                simState.compareSine = e.target.checked;
+            });
+
+            // Panel Visibility Toggles
+            const analyzerPanel = document.getElementById('analyzer-panel');
+            const controlsPanel = document.getElementById('controls-panel');
+
+            document.getElementById('toggle-analyzer-btn').addEventListener('click', () => {
+                analyzerPanel.classList.toggle('hidden');
+                resizeOrbitalCanvas();
+            });
+            document.getElementById('close-analyzer-btn').addEventListener('click', () => {
+                analyzerPanel.classList.add('hidden');
+            });
+
+            document.getElementById('toggle-controls-btn').addEventListener('click', () => {
+                controlsPanel.classList.toggle('hidden');
+            });
+            document.getElementById('close-controls-btn').addEventListener('click', () => {
+                controlsPanel.classList.add('hidden');
+            });
+
+            // Camera Quick Views & Pause
+            document.getElementById('cam-shore-btn').addEventListener('click', () => {
+                camOrbit.theta = -0.58;
+                camOrbit.phi = 1.26;
+                camOrbit.radius = 64.0;
+                camOrbit.target.set(0, 1.2, 36);
+                updateCameraTransform();
+            });
+
+            document.getElementById('cam-surface-btn').addEventListener('click', () => {
+                camOrbit.theta = -0.35;
+                camOrbit.phi = 1.48;
+                camOrbit.radius = 28.0;
+                camOrbit.target.set(0, 0.8, 28);
+                updateCameraTransform();
+            });
+
+            document.getElementById('cam-aerial-btn').addEventListener('click', () => {
+                camOrbit.theta = -0.45;
+                camOrbit.phi = 0.95;
+                camOrbit.radius = 125.0;
+                camOrbit.target.set(0, 0.5, 25);
+                updateCameraTransform();
+            });
+
+            const pauseBtn = document.getElementById('pause-sim-btn');
+            pauseBtn.addEventListener('click', () => {
+                simState.paused = !simState.paused;
+                pauseBtn.textContent = simState.paused ? 'Resume' : 'Pause';
+            });
+        }
+
+        // =====================================================================
+        // MAIN ANIMATION LOOP (STARTED ON WINDOW.ONLOAD)
+        // =====================================================================
+        let lastFrameTime = performance.now();
+
+        function animate() {
+            requestAnimationFrame(animate);
+
+            const now = performance.now();
+            const dt = Math.min(0.05, (now - lastFrameTime) * 0.001);
+            lastFrameTime = now;
+
+            if (!simState.paused) {
+                simState.time += dt;
+            }
+
+            if (oceanMaterial) {
+                oceanMaterial.uniforms.uTime.value = simState.time;
+            }
+            if (shoreMaterial) {
+                shoreMaterial.uniforms.uTime.value = simState.time;
+            }
+
+            // Continuous excavation when holding mouse/touch stationary on the beach
+            if (isBrushDown && isHoveringShore && simState.toolMode !== 'orbit') {
+                applyShoreExcavationBrush(brushHitWorld.x, brushHitWorld.z, dt * 0.65);
+            }
+
+            // Update floating buoys on CPU using synchronized Gerstner equations
+            updatePhysicsBuoys(simState.time);
+
+            // Update 2D Orbital Mechanics Analyzer Canvas
+            renderOrbitalCrossSection(simState.time);
+
+            renderer.render(scene, camera);
+        }
+
+        window.onload = function () {
+            initThreeScene();
+            bindUIEvents();
+            resizeOrbitalCanvas();
+            syncUniformsFromState();
+            animate();
+        };
+    </script>
+</body>
+</html>

@@ -40,6 +40,20 @@ export class DreamlineAudio {
   private chordIndex = 0;
   private paused = false;
 
+  // Expedition flagship vehicles continuous audio nodes
+  private expEngineOsc: OscillatorNode | null = null;
+  private expEngineFilter: BiquadFilterNode | null = null;
+  private expEngineGain: GainNode | null = null;
+  private expNoiseFilter: BiquadFilterNode | null = null;
+  private expNoiseGain: GainNode | null = null;
+  private wildlifeCallTimer = 6.5;
+
+  // Underwater deep-ocean hydrophone current, bubbles & whale song
+  private underwaterGain: GainNode | null = null;
+  private underwaterFilter: BiquadFilterNode | null = null;
+  private underwaterBubbleTimer = 1.4;
+  private underwaterWhaleTimer = 7.5;
+
   // Peaceful nostalgic Japanese pentatonic / Maj9 chords (Hz)
   private readonly chords: number[][] = [
     [261.63, 329.63, 392.0, 493.88, 587.33], // Cmaj9
@@ -190,6 +204,49 @@ export class DreamlineAudio {
       crowdModGain.connect(this.crowdGain);
       this.crowdGain.connect(this.masterSfx);
       crowdSrc.start();
+
+      // Expedition flagship vehicle propulsion bed (Safari Jeep 4WD / VTOL Ducted Fans / Jet Ski Engine)
+      this.expEngineOsc = ctx.createOscillator();
+      this.expEngineOsc.type = 'sawtooth';
+      this.expEngineOsc.frequency.value = 52;
+      this.expEngineFilter = ctx.createBiquadFilter();
+      this.expEngineFilter.type = 'lowpass';
+      this.expEngineFilter.frequency.value = 260;
+      this.expEngineGain = ctx.createGain();
+      this.expEngineGain.gain.value = 0.0;
+      this.expEngineOsc.connect(this.expEngineFilter);
+      this.expEngineFilter.connect(this.expEngineGain);
+      this.expEngineGain.connect(this.masterSfx);
+      this.expEngineOsc.start();
+
+      const expNoiseSrc = ctx.createBufferSource();
+      expNoiseSrc.buffer = noiseBuf;
+      expNoiseSrc.loop = true;
+      this.expNoiseFilter = ctx.createBiquadFilter();
+      this.expNoiseFilter.type = 'bandpass';
+      this.expNoiseFilter.frequency.value = 900;
+      this.expNoiseFilter.Q.value = 0.9;
+      this.expNoiseGain = ctx.createGain();
+      this.expNoiseGain.gain.value = 0.0;
+      expNoiseSrc.connect(this.expNoiseFilter);
+      this.expNoiseFilter.connect(this.expNoiseGain);
+      this.expNoiseGain.connect(this.masterSfx);
+      expNoiseSrc.start();
+
+      // Deep ocean underwater muffled hydrophone rumble bed
+      const uwSrc = ctx.createBufferSource();
+      uwSrc.buffer = noiseBuf;
+      uwSrc.loop = true;
+      this.underwaterFilter = ctx.createBiquadFilter();
+      this.underwaterFilter.type = 'lowpass';
+      this.underwaterFilter.frequency.value = 185;
+      this.underwaterFilter.Q.value = 1.2;
+      this.underwaterGain = ctx.createGain();
+      this.underwaterGain.gain.value = 0.0;
+      uwSrc.connect(this.underwaterFilter);
+      this.underwaterFilter.connect(this.underwaterGain);
+      this.underwaterGain.connect(this.masterSfx);
+      uwSrc.start();
 
       this.unlocked = true;
     } catch {
@@ -995,6 +1052,219 @@ export class DreamlineAudio {
 
   public playDestructionCrash(): void {
     this.playWallBreakBoom(2);
+  }
+
+  /**
+   * Dynamically drives realistic procedural Web Audio for Safari Jeep 4WD, VTOL ducted fans,
+   * Jet Ski marine propulsion & water splashes, plus periodic ambient wildlife calls.
+   */
+  public updateExpeditionAudio(params: {
+    dt: number;
+    vehicle: 'none' | 'safari_jeep' | 'vtol_aircraft' | 'jetski_sport' | 'jetski_perf' | 'dirt_bike_49cc';
+    speedKmh: number;
+    throttle: number;
+    surfaceOrWaveIntensity: number;
+    nearestWildlifeSpecies?: string | null;
+    nearestWildlifeDistM?: number;
+  }): void {
+    if (!this.unlocked || !this.ctx || !this.expEngineOsc || !this.expEngineFilter || !this.expEngineGain || !this.expNoiseFilter || !this.expNoiseGain) {
+      return;
+    }
+    const now = this.ctx.currentTime;
+    if (this.paused || this.muted) {
+      this.expEngineGain.gain.setTargetAtTime(0, now, 0.08);
+      this.expNoiseGain.gain.setTargetAtTime(0, now, 0.08);
+      return;
+    }
+
+    if (params.vehicle === 'safari_jeep') {
+      // Rugged 4WD diesel growl + gravel/mud tyre crunch
+      const speedNorm = Math.min(1, params.speedKmh / 90);
+      this.expEngineOsc.type = 'sawtooth';
+      this.expEngineOsc.frequency.setTargetAtTime(46 + speedNorm * 68 + params.throttle * 18, now, 0.09);
+      this.expEngineFilter.frequency.setTargetAtTime(220 + speedNorm * 420, now, 0.1);
+      this.expEngineGain.gain.setTargetAtTime(0.055 + speedNorm * 0.065, now, 0.1);
+
+      this.expNoiseFilter.frequency.setTargetAtTime(460 + params.surfaceOrWaveIntensity * 650, now, 0.12);
+      this.expNoiseGain.gain.setTargetAtTime(speedNorm * (0.04 + params.surfaceOrWaveIntensity * 0.08), now, 0.1);
+    } else if (params.vehicle === 'vtol_aircraft') {
+      // Twin circular ducted-fan turbine hum + aerodynamic airflow rush
+      const speedNorm = Math.min(1, params.speedKmh / 180);
+      this.expEngineOsc.type = 'triangle';
+      this.expEngineOsc.frequency.setTargetAtTime(92 + params.throttle * 165 + speedNorm * 70, now, 0.12);
+      this.expEngineFilter.frequency.setTargetAtTime(640 + params.throttle * 1200, now, 0.12);
+      this.expEngineGain.gain.setTargetAtTime(0.06 + params.throttle * 0.08, now, 0.12);
+
+      this.expNoiseFilter.frequency.setTargetAtTime(750 + speedNorm * 1400, now, 0.15);
+      this.expNoiseGain.gain.setTargetAtTime(0.03 + params.throttle * 0.075 + speedNorm * 0.05, now, 0.14);
+    } else if (params.vehicle === 'jetski_sport' || params.vehicle === 'jetski_perf') {
+      // High-revving marine watercraft engine + frothy water spray hiss
+      const speedNorm = Math.min(1, params.speedKmh / 105);
+      const isPerf = params.vehicle === 'jetski_perf';
+      this.expEngineOsc.type = 'sawtooth';
+      this.expEngineOsc.frequency.setTargetAtTime(
+        (isPerf ? 84 : 72) + speedNorm * (isPerf ? 155 : 125) + params.throttle * 34,
+        now,
+        0.08
+      );
+      this.expEngineFilter.frequency.setTargetAtTime(420 + speedNorm * 950, now, 0.09);
+      this.expEngineGain.gain.setTargetAtTime(0.05 + speedNorm * 0.075, now, 0.09);
+
+      this.expNoiseFilter.frequency.setTargetAtTime(1600 + speedNorm * 1600, now, 0.1);
+      this.expNoiseGain.gain.setTargetAtTime(
+        speedNorm * 0.09 + params.surfaceOrWaveIntensity * 0.07,
+        now,
+        0.09
+      );
+    } else if (params.vehicle === 'dirt_bike_49cc') {
+      // Authentic crisp raspy 49cc 2-stroke dirt bike engine pitch + knobby dirt roost crunch
+      const speedNorm = Math.min(1, params.speedKmh / 78);
+      const revNorm = Math.min(1, speedNorm * 0.72 + params.throttle * 0.55);
+      const popJitter = (Math.random() - 0.5) * 3.5;
+      this.expEngineOsc.type = 'sawtooth';
+      this.expEngineOsc.frequency.setTargetAtTime(48 + revNorm * 158 + popJitter, now, 0.045);
+      this.expEngineFilter.frequency.setTargetAtTime(360 + revNorm * 880, now, 0.06);
+      this.expEngineGain.gain.setTargetAtTime(0.045 + revNorm * 0.075, now, 0.05);
+
+      this.expNoiseFilter.frequency.setTargetAtTime(620 + params.surfaceOrWaveIntensity * 900, now, 0.09);
+      this.expNoiseGain.gain.setTargetAtTime(speedNorm * (0.03 + params.surfaceOrWaveIntensity * 0.07), now, 0.08);
+    } else {
+      this.expEngineGain.gain.setTargetAtTime(0, now, 0.14);
+      this.expNoiseGain.gain.setTargetAtTime(0, now, 0.14);
+    }
+
+    // Spatially attenuated ambient wildlife vocalisations when nearby
+    this.wildlifeCallTimer -= Math.min(params.dt, 0.1);
+    if (
+      this.wildlifeCallTimer <= 0 &&
+      params.nearestWildlifeSpecies &&
+      (params.nearestWildlifeDistM ?? 999) < 55
+    ) {
+      this.wildlifeCallTimer = 7.5 + Math.random() * 6.5;
+      const atten = Math.max(0.15, 1 - (params.nearestWildlifeDistM ?? 30) / 60);
+      this.playWildlifeVocalisation(params.nearestWildlifeSpecies, atten);
+    }
+  }
+
+  public playWildlifeVocalisation(speciesId: string, volumeScale = 0.6): void {
+    if (!this.unlocked || !this.ctx || !this.masterSfx || this.muted || this.paused) return;
+    const now = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    const amp = 0.075 * Math.max(0.1, Math.min(1, volumeScale));
+
+    if (speciesId === 'elephant') {
+      // Resonant brassy elephant trumpet
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(220, now);
+      osc.frequency.exponentialRampToValueAtTime(520, now + 0.25);
+      osc.frequency.exponentialRampToValueAtTime(280, now + 0.72);
+      gain.gain.setValueAtTime(0.001, now);
+      gain.gain.linearRampToValueAtTime(amp, now + 0.08);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.75);
+      osc.connect(gain);
+      gain.connect(this.masterSfx);
+      osc.start(now);
+      osc.stop(now + 0.78);
+    } else if (speciesId === 'peacock' || speciesId === 'eagle' || speciesId === 'hornbill') {
+      // Clear avian call
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(speciesId === 'eagle' ? 1480 : 940, now);
+      osc.frequency.exponentialRampToValueAtTime(speciesId === 'eagle' ? 920 : 680, now + 0.36);
+      gain.gain.setValueAtTime(0.001, now);
+      gain.gain.linearRampToValueAtTime(amp * 0.85, now + 0.04);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.4);
+      osc.connect(gain);
+      gain.connect(this.masterSfx);
+      osc.start(now);
+      osc.stop(now + 0.42);
+    } else if (speciesId === 'frog') {
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(280, now);
+      osc.frequency.exponentialRampToValueAtTime(420, now + 0.14);
+      gain.gain.setValueAtTime(0.001, now);
+      gain.gain.linearRampToValueAtTime(amp * 0.7, now + 0.03);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.18);
+      osc.connect(gain);
+      gain.connect(this.masterSfx);
+      osc.start(now);
+      osc.stop(now + 0.2);
+    } else {
+      // Gentle melodious forest bird chirp
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(1650, now);
+      osc.frequency.exponentialRampToValueAtTime(2280, now + 0.09);
+      osc.frequency.exponentialRampToValueAtTime(1520, now + 0.22);
+      gain.gain.setValueAtTime(0.001, now);
+      gain.gain.linearRampToValueAtTime(amp * 0.55, now + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.25);
+      osc.connect(gain);
+      gain.connect(this.masterSfx);
+      osc.start(now);
+      osc.stop(now + 0.28);
+    }
+  }
+
+  public updateUnderwaterAmbience(submersionBlend: number, depthM: number, dt: number): void {
+    if (!this.unlocked || !this.ctx || !this.underwaterGain || !this.underwaterFilter || !this.masterSfx) {
+      return;
+    }
+    const now = this.ctx.currentTime;
+    const blend = Math.max(0, Math.min(1, submersionBlend));
+    if (this.paused || this.muted || blend < 0.02) {
+      this.underwaterGain.gain.setTargetAtTime(0, now, 0.14);
+      return;
+    }
+
+    // Muffled deep-ocean pressure hush & low-pass cutoff darkening with depth
+    const cutoff = Math.max(105, 220 - depthM * 7.5);
+    this.underwaterFilter.frequency.setTargetAtTime(cutoff, now, 0.25);
+    this.underwaterGain.gain.setTargetAtTime(0.24 * blend, now, 0.2);
+
+    // Dampen surface wind & rain while submerged
+    this.windGain?.gain.setTargetAtTime(0.01, now, 0.18);
+    this.rainGain?.gain.setTargetAtTime(0.0, now, 0.18);
+
+    const safeDt = Math.min(dt, 0.1);
+    this.underwaterBubbleTimer -= safeDt;
+    if (this.underwaterBubbleTimer <= 0) {
+      this.underwaterBubbleTimer = 1.1 + Math.random() * 1.9;
+      const osc = this.ctx.createOscillator();
+      const g = this.ctx.createGain();
+      const f0 = 360 + Math.random() * 340;
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(f0, now);
+      osc.frequency.exponentialRampToValueAtTime(f0 * 2.1, now + 0.085);
+      g.gain.setValueAtTime(0.001, now);
+      g.gain.linearRampToValueAtTime(0.045 * blend, now + 0.018);
+      g.gain.exponentialRampToValueAtTime(0.0008, now + 0.095);
+      osc.connect(g);
+      g.connect(this.masterSfx);
+      osc.start(now);
+      osc.stop(now + 0.11);
+    }
+
+    this.underwaterWhaleTimer -= safeDt;
+    if (this.underwaterWhaleTimer <= 0 && depthM > 3.0) {
+      this.underwaterWhaleTimer = 9.5 + Math.random() * 7.5;
+      const osc = this.ctx.createOscillator();
+      const filter = this.ctx.createBiquadFilter();
+      const g = this.ctx.createGain();
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(118, now);
+      osc.frequency.exponentialRampToValueAtTime(182, now + 0.65);
+      osc.frequency.exponentialRampToValueAtTime(92, now + 1.9);
+      filter.type = 'lowpass';
+      filter.frequency.value = 340;
+      g.gain.setValueAtTime(0.001, now);
+      g.gain.linearRampToValueAtTime(0.05 * blend, now + 0.35);
+      g.gain.exponentialRampToValueAtTime(0.0008, now + 2.0);
+      osc.connect(filter);
+      filter.connect(g);
+      g.connect(this.masterSfx);
+      osc.start(now);
+      osc.stop(now + 2.1);
+    }
   }
 
   public dispose(): void {

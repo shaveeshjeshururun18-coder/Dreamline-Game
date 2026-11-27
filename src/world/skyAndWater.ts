@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import type { SkyPalette } from '../game/timeWeather';
 import { LAKE_CENTER, LAKE_RX, LAKE_RZ, WATER_LEVEL } from '../game/terrain';
+import { DINOSAUR_ISLAND_CENTER, DINOSAUR_ISLAND_RADIUS } from '../game/dinosaurIsland';
 
 export interface SkyWaterRig {
   group: THREE.Group;
@@ -30,10 +31,11 @@ export function createSkyAndWater(scene: THREE.Scene): SkyWaterRig {
     uSunDir: { value: new THREE.Vector3(-0.6, 0.14, -0.78).normalize() },
     uStarOpacity: { value: 0.25 },
     uNightDarkness: { value: 0.0 },
+    uCloudStrength: { value: 1.0 },
     uTime: { value: 0 },
   };
 
-  const skyGeo = new THREE.SphereGeometry(950, 36, 24);
+  const skyGeo = new THREE.SphereGeometry(2400, 36, 24);
   const skyMat = new THREE.ShaderMaterial({
     side: THREE.BackSide,
     depthWrite: false,
@@ -57,6 +59,7 @@ export function createSkyAndWater(scene: THREE.Scene): SkyWaterRig {
       uniform vec3 uSunDir;
       uniform float uStarOpacity;
       uniform float uNightDarkness;
+      uniform float uCloudStrength;
       uniform float uTime;
 
       varying vec3 vWorldDir;
@@ -108,8 +111,8 @@ export function createSkyAndWater(scene: THREE.Scene): SkyWaterRig {
         float sunHalo = pow(sunDot, 14.0) * 0.42 + pow(sunDot, 84.0) * 0.52;
         col += uSunColor * (sunHalo * 0.68 + sunDisc * 1.6) * daySunVis;
 
-        // Layered painted anime cloud streaks across upper & mid sky
-        if (dir.y > 0.015) {
+        // Layered painted anime cloud streaks across upper & mid sky (cleared completely over Dinosaur Island!)
+        if (dir.y > 0.015 && uCloudStrength > 0.01) {
           vec2 uv1 = dir.xz / (dir.y + 0.19) * 1.15 + vec2(uTime * 0.006, uTime * 0.002);
           float cBase = fbm(uv1 * 1.35);
           float cDetail = fbm(uv1 * 3.1 - vec2(uTime * 0.004, 0.0));
@@ -117,7 +120,7 @@ export function createSkyAndWater(scene: THREE.Scene): SkyWaterRig {
           float cloudMask = smoothstep(0.45, 0.75, cBase * 0.68 + cDetail * 0.32) * bandFade;
           float litMix = smoothstep(0.32, 0.85, cDetail * 0.75 + sunDot * 0.5 + (1.0 - h) * 0.25);
           vec3 cloudCol = mix(uCloudShadow, uCloudLit, litMix);
-          col = mix(col, cloudCol, cloudMask * 0.78 * (1.0 - uNightDarkness * 0.78));
+          col = mix(col, cloudCol, cloudMask * 0.78 * (1.0 - uNightDarkness * 0.78) * uCloudStrength);
         }
 
         // Delicate twinkling stars at twilight / night
@@ -225,13 +228,13 @@ export function createSkyAndWater(scene: THREE.Scene): SkyWaterRig {
   disposables.push(puffGeo);
 
   const cloudClusters: Array<{ group: THREE.Group; baseAngle: number; radius: number; height: number; speed: number }> = [];
+  // Keep distant horizon clouds far beyond Dinosaur Island (r >= 1350m, y >= 220m) so zero white clouds ever appear over or inside Dinosaur Island!
   const clusterSpecs = [
-    { angle: 1.35, radius: 520, height: 78, scale: 38, puffs: 11, speed: 0.0018 },
-    { angle: 2.15, radius: 540, height: 70, scale: 32, puffs: 9, speed: 0.0015 },
-    { angle: -0.65, radius: 525, height: 76, scale: 36, puffs: 10, speed: 0.0017 },
-    { angle: -1.55, radius: 550, height: 68, scale: 30, puffs: 8, speed: 0.0014 },
-    { angle: 0.35, radius: 530, height: 72, scale: 33, puffs: 9, speed: 0.0016 },
-    { angle: 3.35, radius: 520, height: 74, scale: 34, puffs: 9, speed: 0.0015 },
+    { angle: 1.55, radius: 1380, height: 235, scale: 52, puffs: 10, speed: 0.0012 },
+    { angle: 2.35, radius: 1460, height: 245, scale: 48, puffs: 9, speed: 0.0010 },
+    { angle: -1.15, radius: 1400, height: 255, scale: 50, puffs: 9, speed: 0.0011 },
+    { angle: -2.05, radius: 1520, height: 225, scale: 46, puffs: 8, speed: 0.0009 },
+    { angle: 3.15, radius: 1420, height: 240, scale: 50, puffs: 9, speed: 0.0011 },
   ];
 
   clusterSpecs.forEach((spec, idx) => {
@@ -312,8 +315,8 @@ export function createSkyAndWater(scene: THREE.Scene): SkyWaterRig {
   });
   disposables.push(mountainMatFar, mountainMatMid);
 
-  buildMountainRing(560, 22, 54, 0.7, mountainMatFar);
-  buildMountainRing(485, 12, 30, 2.4, mountainMatMid);
+  buildMountainRing(1680, 38, 86, 0.7, mountainMatFar);
+  buildMountainRing(1520, 22, 52, 2.4, mountainMatMid);
 
   // 4. Reflective Calm Lakeside Water (Aomizu Lake) with glassy sunset mirror reflections & shimmering ripple bands
   const waterUniforms = {
@@ -328,22 +331,29 @@ export function createSkyAndWater(scene: THREE.Scene): SkyWaterRig {
     uFogDensity: { value: 0.004 },
   };
 
-  const waterGeo = new THREE.CircleGeometry(1, 56);
+  const waterGeo = new THREE.CircleGeometry(1, 64);
   waterGeo.rotateX(-Math.PI / 2);
   const waterMat = new THREE.ShaderMaterial({
     transparent: true,
     uniforms: waterUniforms,
-    vertexShader: `
+    vertexShader: /* glsl */ `
+      uniform float uTime;
       varying vec3 vWorldPos;
       varying vec2 vUv;
       void main() {
         vUv = uv;
         vec4 wp = modelMatrix * vec4(position, 1.0);
+        // Gentle lake swell displacement matched to OceanLab wave cadence
+        float edge = length(uv - vec2(0.5)) * 2.0;
+        float swellMask = smoothstep(1.0, 0.25, edge);
+        wp.y += (sin(wp.x * 0.22 + uTime * 1.4) * 0.045 + cos(wp.z * 0.26 - uTime * 1.15) * 0.035) * swellMask;
         vWorldPos = wp.xyz;
         gl_Position = projectionMatrix * viewMatrix * wp;
       }
     `,
-    fragmentShader: `
+    fragmentShader: /* glsl */ `
+      precision highp float;
+
       uniform float uTime;
       uniform vec3 uHorizon;
       uniform vec3 uZenith;
@@ -357,33 +367,108 @@ export function createSkyAndWater(scene: THREE.Scene): SkyWaterRig {
       varying vec3 vWorldPos;
       varying vec2 vUv;
 
+      float hash21(vec2 p) {
+        p = fract(p * vec2(234.34, 435.345));
+        p += dot(p, p + 34.23);
+        return fract(p.x * p.y);
+      }
+
+      float noise2D(vec2 p) {
+        vec2 i = floor(p);
+        vec2 f = fract(p);
+        vec2 u = f * f * (3.0 - 2.0 * f);
+        float a = hash21(i);
+        float b = hash21(i + vec2(1.0, 0.0));
+        float c = hash21(i + vec2(0.0, 1.0));
+        float d = hash21(i + vec2(1.0, 1.0));
+        return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
+      }
+
+      const mat2 rotMat = mat2(0.80, -0.60, 0.60, 0.80);
+
+      float capillaryFBM(vec2 p, float t) {
+        float val = 0.0;
+        float amp = 0.5;
+        vec2 shift = vec2(t * 0.72, -t * 0.48);
+        for (int i = 0; i < 5; i++) {
+          val += amp * noise2D(p + shift);
+          p = rotMat * p * 2.12;
+          shift = rotMat * shift * 1.32;
+          amp *= 0.48;
+        }
+        return val;
+      }
+
+      float computeCaustics(vec2 p, float t) {
+        vec2 uv1 = p * 0.92 + vec2(t * 0.35, -t * 0.25);
+        vec2 uv2 = rotMat * p * 1.2 - vec2(t * 0.3, t * 0.4);
+        float n1 = abs(noise2D(uv1) - 0.5);
+        float n2 = abs(noise2D(uv2) - 0.5);
+        return pow(1.0 - clamp((n1 + n2) * 2.2, 0.0, 1.0), 3.4);
+      }
+
       void main() {
-        vec2 p = vWorldPos.xz;
-        float w1 = sin(p.x * 0.48 + uTime * 0.95) * cos(p.y * 0.62 - uTime * 0.75);
-        float w2 = sin(p.x * 1.4 - p.y * 1.2 + uTime * 1.55) * 0.35;
-        float w3 = cos(p.y * 2.4 + uTime * 1.15) * 0.18;
-        vec3 n = normalize(vec3((w1 + w2) * 0.032, 1.0, (w2 + w3) * 0.032));
-
-        vec3 viewDir = normalize(cameraPosition - vWorldPos);
-        float fresnel = pow(1.0 - max(dot(viewDir, n), 0.0), 2.6);
-        fresnel = clamp(fresnel * 0.85 + 0.18, 0.0, 0.95);
-
-        vec3 reflDir = reflect(-viewDir, n);
-        vec3 skyLow = mix(uHorizon, uMidSky, smoothstep(0.0, 0.25, reflDir.y));
-        vec3 skyRefl = mix(skyLow, uZenith, smoothstep(0.2, 0.75, reflDir.y));
-        vec3 col = mix(uWaterTint, skyRefl, fresnel);
-
-        vec3 halfVec = normalize(normalize(uSunDir) + viewDir);
-        float spec = pow(max(dot(n, halfVec), 0.0), 110.0);
-        float broadSpec = pow(max(dot(n, halfVec), 0.0), 18.0);
-        col += uSunColor * (spec * 1.4 + broadSpec * 0.26);
-
+        vec3 V = normalize(cameraPosition - vWorldPos);
+        vec3 L = normalize(uSunDir);
         float dist = length(cameraPosition - vWorldPos);
+        float detailFade = exp(-dist * 0.0045);
+
+        vec2 uv = vWorldPos.xz * 0.40;
+        float eps = 0.08;
+        float h0 = capillaryFBM(uv, uTime);
+        float hx = capillaryFBM(uv + vec2(eps, 0.0), uTime);
+        float hz = capillaryFBM(uv + vec2(0.0, eps), uTime);
+        vec3 N = normalize(vec3(-(hx - h0) / eps * 0.14 * detailFade, 1.0, -(hz - h0) / eps * 0.14 * detailFade));
+
+        float NoV = clamp(dot(N, V), 0.001, 1.0);
+        float NoL = clamp(dot(N, L), 0.0, 1.0);
+        float sunElev = clamp(L.y, 0.0, 1.0);
+        float dayFactor = smoothstep(-0.14, 0.16, L.y);
+        float lightScale = 0.25 + 0.75 * dayFactor;
+
+        // Schlick Fresnel reflection of live DREAMLINE sky dome
+        float fresnel = 0.02 + 0.98 * pow(1.0 - NoV, 5.0);
+        vec3 R = reflect(-V, N);
+        R.y = max(R.y, 0.015);
+        vec3 skyLow = mix(uHorizon, uMidSky, smoothstep(0.0, 0.25, R.y));
+        vec3 skyRefl = mix(skyLow, uZenith, smoothstep(0.2, 0.75, R.y));
+        vec3 skyReflLin = pow(clamp(skyRefl, 0.001, 1.0), vec3(2.2));
+
+        // Optical depth across lake basin: shallow turquoise shore with caustics -> deep emerald-teal center
+        float edge = length(vUv - vec2(0.5)) * 2.0;
+        float opticalDepth = max(0.05, (1.0 - edge) * 5.8);
+        vec3 abyssal = vec3(0.008, 0.052, 0.072) * (0.45 + 0.65 * sunElev) * lightScale;
+        vec3 shallow = vec3(0.032, 0.305, 0.275) * (0.55 + 0.60 * sunElev) * lightScale;
+        vec3 deepWater = mix(shallow, abyssal, pow(1.0 - NoV, 0.65));
+
+        float seabedVis = exp(-opticalDepth * 0.52);
+        float caustics = computeCaustics(vWorldPos.xz + N.xz * 0.55, uTime) * smoothstep(4.2, 0.2, opticalDepth) * dayFactor;
+        vec3 sandBed = vec3(0.76, 0.68, 0.52) * (0.36 + 0.58 * max(L.y, 0.15)) * lightScale + vec3(1.0, 0.95, 0.80) * caustics * 0.45;
+        vec3 waterBody = mix(deepWater, shallow, exp(-opticalDepth * 0.22));
+        waterBody = mix(waterBody, sandBed, seabedVis * 0.72);
+
+        vec3 col = mix(waterBody, skyReflLin, clamp(fresnel * 0.92 + 0.08, 0.0, 0.96));
+
+        // Crisp OceanLab solar specular glitter path
+        vec3 H = normalize(L + V);
+        float NoH = max(dot(N, H), 0.0);
+        vec3 sunLin = pow(clamp(uSunColor, 0.01, 1.0), vec3(2.0));
+        col += sunLin * (pow(NoH, 640.0) * 5.2 + pow(NoH, 42.0) * 0.32) * (0.25 + 0.75 * fresnel) * max(NoL, 0.08);
+
+        // Shoreline swash foam lace around lake edge
+        float bubble = smoothstep(0.24, 0.76, noise2D(vWorldPos.xz * 2.2 + vec2(uTime * 0.3, -uTime * 0.2)));
+        float swash = smoothstep(0.68, 0.94, edge) * (0.5 + 0.5 * sin(edge * 22.0 - uTime * 2.6)) * bubble * detailFade;
+        vec3 foamCol = vec3(0.92, 0.96, 0.98) * lightScale * (0.45 + 0.55 * max(NoL, 0.25));
+        col = mix(col, foamCol, clamp(swash * 0.65, 0.0, 0.75));
+
+        // ACES tone mapping + gamma
+        col = (col * (2.51 * col + 0.03)) / (col * (2.43 * col + 0.59) + 0.14);
+        col = pow(clamp(col, 0.0, 1.0), vec3(1.0 / 2.2));
+
         float fogFactor = 1.0 - exp(-pow(dist * uFogDensity, 2.0));
         col = mix(col, uFogColor, clamp(fogFactor, 0.0, 1.0));
 
-        float edge = length(vUv - vec2(0.5)) * 2.0;
-        float alpha = smoothstep(1.0, 0.82, edge) * 0.92;
+        float alpha = smoothstep(1.0, 0.84, edge) * 0.96;
         gl_FragColor = vec4(col, alpha);
       }
     `,
@@ -422,12 +507,24 @@ export function createSkyAndWater(scene: THREE.Scene): SkyWaterRig {
     skyUniforms.uNightDarkness.value = palette.nightDarkness;
     skyUniforms.uTime.value = elapsed;
 
+    // Smoothly clear all white clouds when exploring Dinosaur Island so the sky & sanctuary are 100% crisp!
+    const distCamToDino = Math.hypot(
+      cameraX - DINOSAUR_ISLAND_CENTER.x,
+      cameraZ - DINOSAUR_ISLAND_CENTER.z
+    );
+    const dinoClearBlend = Math.max(
+      0,
+      Math.min(1, (distCamToDino - (DINOSAUR_ISLAND_RADIUS + 40)) / 180)
+    );
+    skyUniforms.uCloudStrength.value = dinoClearBlend;
+
     cloudUniforms.uCloudLit.value.setRGB(palette.cloudLit.r, palette.cloudLit.g, palette.cloudLit.b);
     cloudUniforms.uCloudShadow.value.setRGB(palette.cloudShadow.r, palette.cloudShadow.g, palette.cloudShadow.b);
     cloudUniforms.uHorizon.value.setRGB(palette.horizon.r, palette.horizon.g, palette.horizon.b);
     cloudUniforms.uSunDir.value.copy(sunDir);
+    const showClouds = palette.nightDarkness < 0.85 && dinoClearBlend > 0.25;
     for (let i = 0; i < cloudClusters.length; i++) {
-      cloudClusters[i].group.visible = palette.nightDarkness < 0.85;
+      cloudClusters[i].group.visible = showClouds;
     }
 
     for (let i = 0; i < cloudClusters.length; i++) {

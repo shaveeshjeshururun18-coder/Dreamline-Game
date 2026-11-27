@@ -11,6 +11,7 @@ import {
   METRO_PLATFORM_BOARD_POS,
   METRO_SURFACE_ENTRANCES,
   PARACHUTE_TOWER_POS,
+  computeSimultaneousSubwayState,
   getAirportColliders,
   type AirlinerState,
   type MetroStationId,
@@ -18,6 +19,7 @@ import {
   type SubwayTrainState,
 } from '../game/airportMetro';
 import { groundHeightAt, type AabbCollider } from '../game/terrain';
+import { AIRPORT_AIRCRAFT_STANDS } from '../game/skyExplorer';
 import type { InteractableItem } from '../game/types';
 
 export interface AirportMetroWorldHandle {
@@ -584,6 +586,134 @@ export function buildAirportMetroWorld(_isSoftwareGl = false): AirportMetroWorld
   pTowerGroup.add(jumpDeck, jumpRing, towerSign);
   airportGroup.add(pTowerGroup);
 
+  // =========================================================================
+  // 2B. ALL 3 PERSONAL AIRCRAFT PARKED CLEANLY ON ILLUMINATED AIRPORT APRON STANDS
+  //     (Orange Rescue Helicopter, Gold/Wood Ducted-Fan VTOL, SSJ Sky Explorer)
+  // =========================================================================
+  const padSteelMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.72, metalness: 0.25 });
+  const padOrangeMat = new THREE.MeshStandardMaterial({ color: 0xea580c, roughness: 0.34, metalness: 0.2 });
+  const padGoldMat = new THREE.MeshStandardMaterial({ color: 0xd97706, roughness: 0.32, metalness: 0.55 });
+  const padBambooMat = new THREE.MeshStandardMaterial({ color: 0xb45309, roughness: 0.55, metalness: 0.1 });
+  const padCyanMat = new THREE.MeshStandardMaterial({
+    color: 0x38bdf8,
+    emissive: 0x0284c7,
+    emissiveIntensity: 1.4,
+    roughness: 0.2,
+  });
+  const padWhiteMat = new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.38 });
+
+  for (let i = 0; i < AIRPORT_AIRCRAFT_STANDS.length; i++) {
+    const stand = AIRPORT_AIRCRAFT_STANDS[i];
+    const standGroup = new THREE.Group();
+    standGroup.position.set(stand.x, agY, stand.z);
+
+    // Circular illuminated helipad/apron stand disc + H ring
+    const padDisc = new THREE.Mesh(new THREE.CylinderGeometry(4.8, 5.0, 0.14, 24), padSteelMat);
+    padDisc.position.y = 0.07;
+    standGroup.add(padDisc);
+    const ringMat = stand.aircraft === 'orange_heli' ? padOrangeMat : stand.aircraft === 'vtol_aircraft' ? padGoldMat : padCyanMat;
+    const padRing = new THREE.Mesh(new THREE.RingGeometry(3.8, 4.25, 24), ringMat);
+    padRing.rotation.x = -Math.PI * 0.5;
+    padRing.position.y = 0.16;
+    standGroup.add(padRing);
+
+    // Standing aircraft silhouette right on the stand so player sees all 3 aircraft ready to fly!
+    const craftGroup = new THREE.Group();
+    craftGroup.rotation.y = stand.heading;
+    if (stand.aircraft === 'orange_heli') {
+      const fuse = new THREE.Mesh(new THREE.CapsuleGeometry(0.95, 2.5, 8, 12), padOrangeMat);
+      fuse.rotation.x = Math.PI * 0.5;
+      fuse.position.set(0, 1.75, 0.1);
+      const canopy = new THREE.Mesh(new THREE.SphereGeometry(0.88, 12, 10), glassCanopyMat);
+      canopy.position.set(0, 1.88, 1.3);
+      const boom = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.35, 3.8, 8), padOrangeMat);
+      boom.rotation.x = Math.PI * 0.5;
+      boom.position.set(0, 1.9, -2.9);
+      const fin = new THREE.Mesh(new THREE.BoxGeometry(0.14, 1.35, 0.75), padWhiteMat);
+      fin.position.set(0, 2.4, -4.6);
+      const rotor1 = new THREE.Mesh(new THREE.BoxGeometry(7.6, 0.06, 0.26), padSteelMat);
+      rotor1.position.set(0, 3.2, -0.1);
+      const rotor2 = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.06, 7.6), padSteelMat);
+      rotor2.position.set(0, 3.2, -0.1);
+      const skidL = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.12, 3.6), padSteelMat);
+      skidL.position.set(-0.95, 0.22, 0.1);
+      const skidR = skidL.clone();
+      skidR.position.x = 0.95;
+      craftGroup.add(fuse, canopy, boom, fin, rotor1, rotor2, skidL, skidR);
+    } else if (stand.aircraft === 'vtol_aircraft') {
+      const hull = new THREE.Mesh(new THREE.BoxGeometry(1.85, 1.1, 4.6), padGoldMat);
+      hull.position.set(0, 1.45, 0);
+      const nose = new THREE.Mesh(new THREE.SphereGeometry(0.92, 12, 10), glassCanopyMat);
+      nose.position.set(0, 1.58, 2.0);
+      const wing = new THREE.Mesh(new THREE.BoxGeometry(6.8, 0.18, 1.4), padBambooMat);
+      wing.position.set(0, 1.62, -0.2);
+      for (const fx of [-2.8, 2.8]) {
+        const duct = new THREE.Mesh(new THREE.TorusGeometry(0.75, 0.14, 8, 16), padGoldMat);
+        duct.rotation.x = Math.PI * 0.5;
+        duct.position.set(fx, 1.62, 0.1);
+        craftGroup.add(duct);
+      }
+      craftGroup.add(hull, nose, wing);
+    } else {
+      const deck = new THREE.Mesh(new THREE.BoxGeometry(2.6, 0.28, 4.4), padBambooMat);
+      deck.position.set(0, 1.15, 0);
+      const cabin = new THREE.Mesh(new THREE.BoxGeometry(1.75, 1.05, 1.9), glassCanopyMat);
+      cabin.position.set(0, 1.82, 0.35);
+      const roof = new THREE.Mesh(new THREE.BoxGeometry(2.1, 0.16, 2.3), padCyanMat);
+      roof.position.set(0, 2.42, 0.35);
+      for (const [fx, fz] of [
+        [-1.65, 1.65],
+        [1.65, 1.65],
+        [-1.65, -1.65],
+        [1.65, -1.65],
+      ]) {
+        const thruster = new THREE.Mesh(new THREE.CylinderGeometry(0.45, 0.52, 0.22, 12), padCyanMat);
+        thruster.position.set(fx, 1.05, fz);
+        craftGroup.add(thruster);
+      }
+      craftGroup.add(deck, cabin, roof);
+    }
+    standGroup.add(craftGroup);
+
+    // Overhead Stand Signboard
+    const standSignTex = makeCanvasTex(384, 96, (ctx, w, h) => {
+      ctx.fillStyle = '#0f172a';
+      ctx.fillRect(0, 0, w, h);
+      ctx.fillStyle = stand.aircraft === 'orange_heli' ? '#f97316' : stand.aircraft === 'vtol_aircraft' ? '#f59e0b' : '#38bdf8';
+      ctx.fillRect(0, 0, w, 10);
+      ctx.fillStyle = '#f8fafc';
+      ctx.font = 'bold 24px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(`STAND ${i + 1} · READY TO FLY`, w * 0.5, 42);
+      ctx.fillStyle = '#cbd5e1';
+      ctx.font = '600 18px sans-serif';
+      ctx.fillText(stand.name.toUpperCase(), w * 0.5, 74);
+    });
+    disposables.push(standSignTex);
+    const signBoard = new THREE.Mesh(
+      new THREE.BoxGeometry(3.8, 0.95, 0.16),
+      new THREE.MeshBasicMaterial({ map: standSignTex })
+    );
+    signBoard.position.set(0, 2.3, -5.2);
+    const signPost = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 2.2, 6), steelMat);
+    signPost.position.set(0, 1.1, -5.2);
+    standGroup.add(signBoard, signPost);
+    airportGroup.add(standGroup);
+
+    surfaceInteractables.push({
+      id: stand.id,
+      kind: 'airport_aircraft_stand',
+      label: `Fly ${stand.name} from Airport Stand ${i + 1}`,
+      sublabel: `${stand.tamilName} · Click [E] to start flight immediately!`,
+      x: stand.x,
+      y: agY + 1.4,
+      z: stand.z,
+      radius: 7.2,
+      locationId: 'dreamline_airport',
+      metaId: stand.aircraft,
+    });
+  }
+
   surfaceInteractables.push(
     {
       id: 'airport_board_airliner',
@@ -726,7 +856,7 @@ export function buildAirportMetroWorld(_isSoftwareGl = false): AirportMetroWorld
     ctx.fillText(st.name.toUpperCase(), 512, 82);
     ctx.fillStyle = '#7dd3fc';
     ctx.font = 'bold 28px sans-serif';
-    ctx.fillText('LINE M1: CENTRAL METRO  ⟷  METRO CITY (5TH AVE)  ⟷  AIRPORT TERMINAL 1', 512, 138);
+    ctx.fillText('LINE M1: CENTRAL METRO  ⟷  SURFACE VIADUCT RAMP  ⟷  AIRPORT TERMINAL 1', 512, 138);
     stationBannerTex.needsUpdate = true;
   };
   drawStationBanner('metro_central');
@@ -787,6 +917,114 @@ export function buildAirportMetroWorld(_isSoftwareGl = false): AirportMetroWorld
   headR.position.set(22.5, 1.4, 0.8);
   subwayTrainGroup.add(headL, headR);
   undergroundGroup.add(subwayTrainGroup);
+
+  // =========================================================================
+  // 4B. SIMULTANEOUS UP-ABOVE-SURFACE & INTO-TUNNEL DUAL-TRACK SUBWAY TRAINS!
+  // =========================================================================
+  const buildExpressSubwayTrain = (stripeHex: number) => {
+    const tg = new THREE.Group();
+    const sMat = new THREE.MeshStandardMaterial({
+      color: stripeHex,
+      emissive: stripeHex,
+      emissiveIntensity: 0.65,
+      roughness: 0.25,
+    });
+    for (let c = -1; c <= 1; c++) {
+      const cx = c * 11.4;
+      const body = new THREE.Mesh(new THREE.BoxGeometry(10.8, 2.85, 2.55), carBodyMat);
+      body.position.set(cx, 1.55, 0);
+      const band = new THREE.Mesh(new THREE.BoxGeometry(10.9, 0.45, 2.6), sMat);
+      band.position.set(cx, 1.0, 0);
+      const win = new THREE.Mesh(new THREE.BoxGeometry(9.8, 0.88, 2.58), carWinMat);
+      win.position.set(cx, 1.98, 0);
+      tg.add(body, band, win);
+    }
+    const hlF = new THREE.Mesh(new THREE.SphereGeometry(0.28, 8, 8), headlightMat);
+    hlF.position.set(16.9, 1.2, 0);
+    const hlB = new THREE.Mesh(
+      new THREE.SphereGeometry(0.26, 8, 8),
+      new THREE.MeshBasicMaterial({ color: 0xef4444 })
+    );
+    hlB.position.set(-16.9, 1.2, 0);
+    tg.add(hlF, hlB);
+    return tg;
+  };
+
+  // Surface Open-Cut Subway Tunnel Portal, Inclined Concrete Ramp & Elevated Surface Viaduct near Central Metro!
+  const surfacePortalGroup = new THREE.Group();
+  const portalCenterX = 16.0;
+  const portalCenterZ = 22.8;
+  const portalGroundY = groundHeightAt(portalCenterX, portalCenterZ);
+  surfacePortalGroup.position.set(portalCenterX, portalGroundY, portalCenterZ);
+
+  // Concrete Tunnel Portal Arch where trains dive inside & rise out of the earth
+  const portalWallN = new THREE.Mesh(new THREE.BoxGeometry(14.0, 5.4, 0.75), stairStoneMat);
+  portalWallN.position.set(-22, 1.2, -4.4);
+  const portalWallS = new THREE.Mesh(new THREE.BoxGeometry(14.0, 5.4, 0.75), stairStoneMat);
+  portalWallS.position.set(-22, 1.2, 4.4);
+  const portalRoof = new THREE.Mesh(new THREE.BoxGeometry(14.0, 0.8, 9.6), stairStoneMat);
+  portalRoof.position.set(-22, 4.1, 0);
+  const portalDarkMouth = new THREE.Mesh(new THREE.PlaneGeometry(8.2, 5.2), darkShaftMat);
+  portalDarkMouth.rotation.y = Math.PI / 2;
+  portalDarkMouth.position.set(-15.1, 1.4, 0);
+  const portalNeon = new THREE.Mesh(
+    new THREE.BoxGeometry(0.35, 0.35, 8.8),
+    new THREE.MeshBasicMaterial({ color: 0x38bdf8 })
+  );
+  portalNeon.position.set(-14.9, 3.85, 0);
+  surfacePortalGroup.add(portalWallN, portalWallS, portalRoof, portalDarkMouth, portalNeon);
+
+  // Inclined Dual-Track Ramp climbing smoothly from underground (-24m) up onto Elevated Viaduct (+24m..+58m)!
+  const rampSegments = 10;
+  for (let i = 0; i < rampSegments; i++) {
+    const a0 = -24 + (i / rampSegments) * 48;
+    const a1 = -24 + ((i + 1) / rampSegments) * 48;
+    const midA = (a0 + a1) * 0.5;
+    const t = (midA + 24) / 48;
+    const ySeg = -9.5 + t * t * (3 - 2 * t) * (5.4 - -9.5);
+    const dy = (6 * t * (1 - t) * (5.4 - -9.5)) / 48;
+    const pitchSeg = Math.atan(dy);
+    const deck = new THREE.Mesh(new THREE.BoxGeometry(5.3, 0.45, 7.6), stairStoneMat);
+    deck.position.set(midA, ySeg - 0.25, 0);
+    deck.rotation.z = pitchSeg;
+    surfacePortalGroup.add(deck);
+
+    // Concrete viaduct piers for the elevated above-ground half of the ramp!
+    if (ySeg > 0.6) {
+      const pierH = ySeg;
+      const pier = new THREE.Mesh(new THREE.BoxGeometry(0.95, pierH, 5.6), steelMat);
+      pier.position.set(midA, pierH * 0.5 - 0.2, 0);
+      surfacePortalGroup.add(pier);
+    }
+  }
+
+  // Elevated Surface Viaduct Deck (along +24..+56m at y = +5.4m above ground!)
+  const viaductDeck = new THREE.Mesh(new THREE.BoxGeometry(36, 0.55, 7.8), stairStoneMat);
+  viaductDeck.position.set(42, 5.12, 0);
+  surfacePortalGroup.add(viaductDeck);
+  for (const vx of [28, 40, 52]) {
+    const col = new THREE.Mesh(new THREE.BoxGeometry(1.1, 5.4, 5.6), steelMat);
+    col.position.set(vx, 2.55, 0);
+    surfacePortalGroup.add(col);
+  }
+  for (const rz of [-3.7, 3.7]) {
+    const railGuard = new THREE.Mesh(new THREE.BoxGeometry(36, 0.72, 0.22), steelMat);
+    railGuard.position.set(42, 5.75, rz);
+    surfacePortalGroup.add(railGuard);
+  }
+
+  // Twin Live Surface-to-Tunnel Subway Trains (Ascending Cyan Express + Descending Amber Express!)
+  const surfaceAscTrain = buildExpressSubwayTrain(0x38bdf8);
+  const surfaceDescTrain = buildExpressSubwayTrain(0xf59e0b);
+  surfacePortalGroup.add(surfaceAscTrain, surfaceDescTrain);
+  surfaceGroup.add(surfacePortalGroup);
+
+  // Underground Express Parallel Track (z = -14.8) showing opposite-direction train climbing UP toward surface simultaneously!
+  const ugExpressAscTrain = buildExpressSubwayTrain(0x38bdf8);
+  ugExpressAscTrain.position.set(0, METRO_FLOOR_Y - 1.0, -14.6);
+  const ugExpressDescTrain = buildExpressSubwayTrain(0xf59e0b);
+  ugExpressDescTrain.position.set(0, METRO_FLOOR_Y - 1.0, -18.2);
+  undergroundGroup.add(ugExpressAscTrain, ugExpressDescTrain);
 
   undergroundInteractables.push(
     {
@@ -878,7 +1116,18 @@ export function buildAirportMetroWorld(_isSoftwareGl = false): AirportMetroWorld
     aiJet.root.position.set(aiX, aiY, aiZ);
     aiJet.root.rotation.set(0, -aiAngle, 0.24);
 
-    // 3. Update Live Underground Subway Train & Sliding Doors
+    // 2B. Update Simultaneous Ascending (Tunnel -> Surface) & Descending (Surface -> Tunnel) Subway Trains!
+    const dualSubway = computeSimultaneousSubwayState(elapsed);
+    // Surface portal trains: one climbing UP above surface, one diving DOWN into the tunnel simultaneously!
+    surfaceAscTrain.position.set(dualSubway.ascendingTrain.along, dualSubway.ascendingTrain.elevation, -1.85);
+    surfaceAscTrain.rotation.set(0, 0, dualSubway.ascendingTrain.pitch);
+    surfaceAscTrain.visible = !inUndergroundMetro && dualSubway.ascendingTrain.along > -24;
+
+    surfaceDescTrain.position.set(dualSubway.descendingTrain.along, dualSubway.descendingTrain.elevation, 1.85);
+    surfaceDescTrain.rotation.set(0, Math.PI, -dualSubway.descendingTrain.pitch);
+    surfaceDescTrain.visible = !inUndergroundMetro && dualSubway.descendingTrain.along > -24;
+
+    // 3. Update Live Underground Subway Train & Sliding Doors + Simultaneous Rising/Diving Express Trains
     if (inUndergroundMetro) {
       subwayTrainGroup.position.x = subwayState.trainX;
       const openOffset = subwayState.doorOpen * 0.72;
@@ -886,6 +1135,20 @@ export function buildAirportMetroWorld(_isSoftwareGl = false): AirportMetroWorld
         const d = subwayDoors[i];
         d.mesh.position.x = d.baseX + d.side * openOffset;
       }
+      // Inside the underground station cavern, show the simultaneous ascending & descending trains too!
+      ugExpressAscTrain.position.set(
+        dualSubway.ascendingTrain.along * 0.85,
+        METRO_FLOOR_Y - 0.8 + Math.max(0, dualSubway.ascendingTrain.elevation + 9.5) * 0.55,
+        -14.6
+      );
+      ugExpressAscTrain.rotation.set(0, 0, dualSubway.ascendingTrain.pitch * 0.8);
+
+      ugExpressDescTrain.position.set(
+        dualSubway.descendingTrain.along * 0.85,
+        METRO_FLOOR_Y - 0.8 + Math.max(0, dualSubway.descendingTrain.elevation + 9.5) * 0.55,
+        -18.2
+      );
+      ugExpressDescTrain.rotation.set(0, Math.PI, -dualSubway.descendingTrain.pitch * 0.8);
     }
 
     // 4. Update Flyable DL-787 Dreamliner Airliner

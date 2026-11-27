@@ -19,6 +19,12 @@ export interface HeroPoseInput {
   attackKind?: string;
   previewAnim?: HeroPreviewAnim;
   webHandSide?: 1 | -1;
+  swingAngleRad?: number;
+  isDiving?: boolean;
+  airTrickKind?: 'none' | 'front_flip' | 'corkscrew_spin' | 'back_tuck' | 'web_cyclone';
+  airTrickAngle?: number;
+  dodgeTimer?: number;
+  dodgeKind?: 'none' | 'spider_flip' | 'combat_roll' | 'jet_dash' | 'cape_evade';
   dt?: number;
   bankRad?: number;
   pitchLeanRad?: number;
@@ -1836,22 +1842,43 @@ export function createHeroCharacterRig(_isSoftwareGl = false): HeroRig3D {
       h.leftKneePivot.rotation.set(0.16, 0, 0);
       h.rightKneePivot.rotation.set(0.46, 0, 0);
     } else if (isWebSwinging) {
-      // Dynamic Spider-Man pendulum web-swing pose!
+      // Insomniac-grade Spider-Man pendulum crouch-swing pose!
+      // Body pitches dynamically with pendulum arc angle (diving into low swoop, rising legs-tucked at apex!)
       const side = pose.webHandSide ?? 1;
-      targetBodyRotX = 0.42;
-      targetBodyRotZ = side * 0.14 + (pose.bankRad ?? 0) * 0.6;
-      targetBodyPosY = 0.18 + Math.sin(t * 4.5) * 0.08;
+      const arcRad = pose.swingAngleRad ?? 0;
+      targetBodyRotX = THREE.MathUtils.clamp(0.45 - arcRad * 0.55, -0.35, 0.92);
+      targetBodyRotZ = side * 0.22 + (pose.bankRad ?? 0) * 0.72;
+      targetBodyPosY = 0.2 + Math.sin(t * 5.2) * 0.06;
+      targetHeadRotX = -targetBodyRotX * 0.45;
       if (side === 1) {
-        h.rightArmPivot.rotation.set(-Math.PI * 0.88, 0, -0.18);
-        h.leftArmPivot.rotation.set(0.65, 0, 0.42);
+        h.rightArmPivot.rotation.set(-Math.PI * 0.94, 0, -0.14);
+        h.rightForearmPivot.rotation.set(-0.08, 0, 0);
+        h.leftArmPivot.rotation.set(0.75, 0.2, 0.52);
+        h.leftForearmPivot.rotation.set(-0.55, 0, 0);
       } else {
-        h.leftArmPivot.rotation.set(-Math.PI * 0.88, 0, 0.18);
-        h.rightArmPivot.rotation.set(0.65, 0, -0.42);
+        h.leftArmPivot.rotation.set(-Math.PI * 0.94, 0, 0.14);
+        h.leftForearmPivot.rotation.set(-0.08, 0, 0);
+        h.rightArmPivot.rotation.set(0.75, -0.2, -0.52);
+        h.rightForearmPivot.rotation.set(-0.55, 0, 0);
       }
-      h.leftLegPivot.rotation.set(-0.78, 0, 0.12);
-      h.rightLegPivot.rotation.set(0.25, 0, -0.1);
-      h.leftKneePivot.rotation.set(1.18, 0, 0);
-      h.rightKneePivot.rotation.set(0.55, 0, 0);
+      // Iconic tucked Spider-Man mid-swing leg crouch!
+      h.leftLegPivot.rotation.set(-1.05 + arcRad * 0.25, 0, 0.14);
+      h.rightLegPivot.rotation.set(-0.42 + arcRad * 0.2, 0, -0.12);
+      h.leftKneePivot.rotation.set(1.48, 0, 0);
+      h.rightKneePivot.rotation.set(0.95, 0, 0);
+    } else if (pose.isDiving) {
+      // Insomniac nose-down sky-dive pose building slingshot energy!
+      targetBodyRotX = 2.05;
+      targetHeadRotX = -0.65;
+      targetBodyPosY = 0.22;
+      h.leftArmPivot.rotation.set(0.42, 0, 0.35);
+      h.rightArmPivot.rotation.set(0.42, 0, -0.35);
+      h.leftForearmPivot.rotation.set(-0.25, 0, 0);
+      h.rightForearmPivot.rotation.set(-0.25, 0, 0);
+      h.leftLegPivot.rotation.set(0.22, 0, 0.08);
+      h.rightLegPivot.rotation.set(0.32, 0, -0.08);
+      h.leftKneePivot.rotation.set(0.35, 0, 0);
+      h.rightKneePivot.rotation.set(0.45, 0, 0);
     } else if (isGliding) {
       // Batman aerodynamic bat-cape rooftop glide!
       targetBodyRotX = 0.72;
@@ -1905,6 +1932,62 @@ export function createHeroCharacterRig(_isSoftwareGl = false): HeroRig3D {
     h.bodyGroup.rotation.z = smoothBodyRotZ;
     h.bodyGroup.position.y = smoothBodyPosY;
     h.headGroup.rotation.x = smoothHeadRotX;
+
+    // 4b. Insomniac 360° Mid-Air Acrobatic Spins / Flips on Web-Swing Release!
+    const trickKind = pose.airTrickKind ?? 'none';
+    const trickAngle = pose.airTrickAngle ?? 0;
+    if (trickKind !== 'none' && !isWebSwinging && trickAngle > 0.01) {
+      if (trickKind === 'front_flip') {
+        h.bodyGroup.rotation.x = trickAngle;
+        h.leftLegPivot.rotation.set(-1.35, 0, 0.08);
+        h.rightLegPivot.rotation.set(-1.35, 0, -0.08);
+        h.leftKneePivot.rotation.set(1.65, 0, 0);
+        h.rightKneePivot.rotation.set(1.65, 0, 0);
+        h.leftArmPivot.rotation.set(-0.95, 0, 0.32);
+        h.rightArmPivot.rotation.set(-0.95, 0, -0.32);
+      } else if (trickKind === 'corkscrew_spin') {
+        h.bodyGroup.rotation.x = 0.55;
+        h.bodyGroup.rotation.y = trickAngle * 1.4;
+        h.bodyGroup.rotation.z = Math.sin(trickAngle) * 0.45;
+        h.leftArmPivot.rotation.set(-0.4, 0, 0.95);
+        h.rightArmPivot.rotation.set(-0.4, 0, -0.95);
+      } else if (trickKind === 'back_tuck') {
+        h.bodyGroup.rotation.x = -trickAngle;
+        h.leftLegPivot.rotation.set(-1.25, 0, 0.1);
+        h.rightLegPivot.rotation.set(-1.25, 0, -0.1);
+        h.leftKneePivot.rotation.set(1.55, 0, 0);
+        h.rightKneePivot.rotation.set(1.55, 0, 0);
+      } else if (trickKind === 'web_cyclone') {
+        h.bodyGroup.rotation.y = trickAngle * 2.0;
+        h.leftArmPivot.rotation.set(-1.35, 0, 0.88);
+        h.rightArmPivot.rotation.set(-1.35, 0, -0.88);
+      }
+    }
+
+    // 4c. Acrobatic Dodge Roll / Spider-Flip / Jet-Dash Animation!
+    const dodgeT = pose.dodgeTimer ?? 0;
+    if (dodgeT > 0.01) {
+      const p = 1 - Math.min(1, dodgeT / 0.48);
+      const dk = pose.dodgeKind ?? 'combat_roll';
+      if (dk === 'spider_flip') {
+        h.bodyGroup.rotation.x = p * Math.PI * 2;
+        h.bodyGroup.position.y = Math.sin(p * Math.PI) * 0.95;
+        h.leftLegPivot.rotation.set(-1.3, 0, 0.1);
+        h.rightLegPivot.rotation.set(-1.3, 0, -0.1);
+        h.leftKneePivot.rotation.set(1.6, 0, 0);
+        h.rightKneePivot.rotation.set(1.6, 0, 0);
+      } else if (dk === 'jet_dash') {
+        h.bodyGroup.rotation.z = Math.sin(p * Math.PI) * 0.65;
+        h.bodyGroup.rotation.x = 0.55;
+        h.bodyGroup.position.y = 0.25 + Math.sin(p * Math.PI) * 0.35;
+      } else if (dk === 'cape_evade') {
+        h.bodyGroup.rotation.y = p * Math.PI * 2;
+        h.bodyGroup.position.y = Math.sin(p * Math.PI) * 0.45;
+      } else {
+        h.bodyGroup.rotation.x = p * Math.PI * 2;
+        h.bodyGroup.position.y = -0.25 + Math.sin(p * Math.PI) * 0.4;
+      }
+    }
 
     // 5. Primary Power / Attack Animations
     const isAttacking = attackTimer > 0.02;

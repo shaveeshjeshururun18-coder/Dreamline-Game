@@ -7,6 +7,7 @@ import {
   groundHeightAt,
   HILL_CENTER,
   HOME_CENTER,
+  VEHICLE_GARAGE_PLOT_CENTER,
   isWaterAt,
   lakeNormDist,
   MAIN_STATION_CENTER,
@@ -15,7 +16,11 @@ import {
 } from '../game/terrain';
 import type { RegionId, SeasonType, WeatherType } from '../game/types';
 import { getWeatherProfile } from '../game/extremeWeather';
-import { DINOSAUR_ISLAND_CENTER } from '../game/dinosaurIsland';
+import {
+  DINOSAUR_ISLAND_CENTER,
+  DINOSAUR_ISLAND_LAND_RADIUS,
+  ssjRiverLocalX,
+} from '../game/dinosaurIsland';
 import { MIDNIGHT_FRONTIER_PORTAL_POS } from '../game/midnightFrontier';
 import {
   isInsideExhibitionCampusClearing,
@@ -31,6 +36,7 @@ import {
   getSeasonalFoliageProfile,
   type SeasonalFoliageProfile,
 } from '../game/seasonalFoliage';
+import type { ProceduralTextureSet } from './textures';
 
 export interface WorldNature {
   group: THREE.Group;
@@ -78,17 +84,18 @@ function createSoftCircleTexture(): THREE.CanvasTexture {
 
 export function createWorldNature(
   scene: THREE.Scene,
-  isSoftwareGl: boolean
+  isSoftwareGl: boolean,
+  textures?: ProceduralTextureSet
 ): WorldNature {
   const group = new THREE.Group();
   const disposables: Array<{ dispose: () => void }> = [];
   const rand = mulberry32(20261119);
 
   // =========================================================================
-  // 1. SCULPTED COUNTRYSIDE TERRAIN WITH VERTEX-BLENDED BIOMES & PATHS
+  // 1. SCULPTED COUNTRYSIDE TERRAIN WITH VERTEX-BLENDED BIOMES & PBR MICRO-DETAIL
   // =========================================================================
-  const terrainSize = 900;
-  const terrainSegs = 128;
+  const terrainSize = 1360;
+  const terrainSegs = 240;
   const terrainGeo = new THREE.PlaneGeometry(terrainSize, terrainSize, terrainSegs, terrainSegs);
   terrainGeo.rotateX(-Math.PI / 2);
 
@@ -146,20 +153,34 @@ export function createWorldNature(
       cTmp.lerp(cSnow, Math.min(0.96, snowBlend * 1.15));
     }
 
-    // Kadalkarai Sandy Beach & Coastal shore (east x > 84, z > 14)
+    // Kadalkarai Sandy Beach & Deep Ocean Seabed (east x > 84, z > 14)
     if (x > 84 && z > 14) {
       const coastSand = Math.min(1, (x - 84) / 20) * Math.min(1, (z - 14) / 18);
       cTmp.lerp(cSand, coastSand * 0.88);
+      if (y < -2.6) {
+        const deepMix = Math.min(1, (-2.6 - y) / 12.5);
+        cTmp.lerp(new THREE.Color(0x285660), deepMix * 0.62);
+      }
     }
 
-    // SSJ Dinosaur Island volcanic jungle & sandy coastal rim at (166, 78)
+    // Enormous Jurassic Park · SSJ Dinosaur Island lush prehistoric jungle, sandy beach rim, 24m basalt cliff & wide river banks
     const dDinoIsland = Math.hypot(x - DINOSAUR_ISLAND_CENTER.x, z - DINOSAUR_ISLAND_CENTER.z);
-    if (dDinoIsland < 33) {
-      if (dDinoIsland < 24) {
-        cTmp.copy(cDinoJungle).lerp(cDinoVolcanic, dDinoIsland < 16 ? 0.65 : 0.25);
+    if (dDinoIsland < DINOSAUR_ISLAND_LAND_RADIUS + 14) {
+      const dlx = x - DINOSAUR_ISLAND_CENTER.x;
+      const dlz = z - DINOSAUR_ISLAND_CENTER.z;
+      const riverDist = dlz > -62 && dlz < 120 ? Math.abs(dlx - ssjRiverLocalX(dlz)) : 99;
+      if (y > 5.2) {
+        // Towering rocky volcanic waterfall basalt massif
+        cTmp.copy(cDinoVolcanic).lerp(cDinoJungle, 0.18);
+      } else if (riverDist < 8.5) {
+        // Sandy pebble riverbed & turquoise-washed banks
+        cTmp.copy(cSand).lerp(cLakeShore, 0.42);
+      } else if (dDinoIsland < DINOSAUR_ISLAND_LAND_RADIUS - 14) {
+        const plazaTint = Math.hypot(dlx + 4, dlz + 12) < 34 || Math.hypot(dlx, dlz - 76) < 22 ? 0.2 : 0.0;
+        cTmp.copy(cDinoJungle).lerp(cEmerald, 0.34).lerp(cPath, plazaTint);
       } else {
-        const beachMix = Math.min(1, (dDinoIsland - 24) / 6);
-        cTmp.copy(cDinoJungle).lerp(cSand, beachMix * 0.92);
+        const beachMix = Math.min(1, (dDinoIsland - (DINOSAUR_ISLAND_LAND_RADIUS - 14)) / 14);
+        cTmp.copy(cDinoJungle).lerp(cSand, beachMix * 0.94);
       }
     }
 
@@ -211,9 +232,33 @@ export function createWorldNature(
 
   const terrainMat = new THREE.MeshStandardMaterial({
     vertexColors: true,
-    roughness: 0.93,
+    map: textures?.groundDetailAlbedo ?? null,
+    normalMap: textures?.groundDetailNormal ?? null,
+    normalScale: new THREE.Vector2(0.58, 0.58),
+    roughnessMap: textures?.groundDetailRoughness ?? null,
+    roughness: 0.92,
     metalness: 0.0,
+    envMapIntensity: 0.72,
   });
+  terrainMat.onBeforeCompile = (shader) => {
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying vec3 vDreamlineWorldPos;')
+      .replace(
+        '#include <worldpos_vertex>',
+        '#include <worldpos_vertex>\nvDreamlineWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;'
+      );
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', '#include <common>\nvarying vec3 vDreamlineWorldPos;')
+      .replace(
+        '#include <clipping_planes_fragment>',
+        `#include <clipping_planes_fragment>
+        if ((vDreamlineWorldPos.x > -36.45 && vDreamlineWorldPos.x < -30.35 && vDreamlineWorldPos.z < -12.0 && vDreamlineWorldPos.z > -33.5) ||
+            (vDreamlineWorldPos.x > 108.0 && vDreamlineWorldPos.x < 122.2 && abs(vDreamlineWorldPos.z) < 5.25) ||
+            length(vDreamlineWorldPos.xz - vec2(${DINOSAUR_ISLAND_CENTER.x.toFixed(1)}, ${DINOSAUR_ISLAND_CENTER.z.toFixed(1)})) < ${(DINOSAUR_ISLAND_LAND_RADIUS + 4).toFixed(1)}) {
+          discard;
+        }`
+      );
+  };
   const terrainMesh = new THREE.Mesh(terrainGeo, terrainMat);
   terrainMesh.receiveShadow = true;
   group.add(terrainMesh);
@@ -287,6 +332,9 @@ export function createWorldNature(
     if (Math.hypot(x - VILLAGE_CENTER.x, z - VILLAGE_CENTER.z) < 15) continue;
     if (Math.hypot(x - HILL_CENTER.x, z - HILL_CENTER.z) < 4.5) continue;
     if (Math.hypot(x - HOME_CENTER.x, z - HOME_CENTER.z) < 14.5) continue;
+    if (Math.hypot(x - VEHICLE_GARAGE_PLOT_CENTER.x, z - VEHICLE_GARAGE_PLOT_CENTER.z) < 15.5) continue;
+    if (x > -39.5 && x < -27.5 && z > -35.5 && z < 1.5) continue; // Keep Superhero House Secret Tunnel driveway & ramp spotless
+    if (x > 106.0 && x < 134.0 && Math.abs(z) < 7.5) continue; // Keep East Tunnel Portal driveway spotless
     if (Math.hypot(x - CAMPSITE_CENTER.x, z - CAMPSITE_CENTER.z) < 9.5) continue;
     if (Math.hypot(x - MIDNIGHT_FRONTIER_PORTAL_POS.x, z - MIDNIGHT_FRONTIER_PORTAL_POS.z) < 42) continue;
     if (isInsideExhibitionCampusClearing(x, z)) continue;
@@ -501,6 +549,7 @@ export function createWorldNature(
     if (Math.hypot(x - VILLAGE_CENTER.x, z - VILLAGE_CENTER.z) < 24) continue;
     if (Math.hypot(x - HILL_CENTER.x, z - HILL_CENTER.z) < 9.0) continue;
     if (Math.hypot(x - HOME_CENTER.x, z - HOME_CENTER.z) < 17.5) continue;
+    if (Math.hypot(x - VEHICLE_GARAGE_PLOT_CENTER.x, z - VEHICLE_GARAGE_PLOT_CENTER.z) < 17.5) continue;
     if (Math.hypot(x - CAMPSITE_CENTER.x, z - CAMPSITE_CENTER.z) < 13.5) continue;
     if (Math.hypot(x - ENCHANTED_FOREST_CENTER.x, z - ENCHANTED_FOREST_CENTER.z) < 28.0) continue;
     if (Math.hypot(x - MIDNIGHT_FRONTIER_PORTAL_POS.x, z - MIDNIGHT_FRONTIER_PORTAL_POS.z) < 46.0) continue;
@@ -728,6 +777,10 @@ export function createWorldNature(
     const dPath = distToPath(x, z);
     if (dRail > 9.5 && dPath > 8.5) continue;
     if (dRail < 2.6 || dPath < 1.8 || isWaterAt(x, z)) continue;
+    if (Math.hypot(x - HOME_CENTER.x, z - HOME_CENTER.z) < 15.5) continue;
+    if (Math.hypot(x - VEHICLE_GARAGE_PLOT_CENTER.x, z - VEHICLE_GARAGE_PLOT_CENTER.z) < 15.5) continue;
+    if (x > -39.5 && x < -27.5 && z > -35.5 && z < 1.5) continue; // Keep Superhero House Secret Tunnel driveway & ramp spotless
+    if (x > 106.0 && x < 134.0 && Math.abs(z) < 7.5) continue; // Keep East Tunnel Portal driveway spotless
     if (isInsideDesertBiome(x, z)) continue;
     if (x < -56 && z < -38) continue;
     plantSpots.push({

@@ -1,10 +1,20 @@
 import { groundHeightAt, isWaterAt, WORLD_PLAYABLE_RADIUS } from './terrain';
 import {
   clampVaultPosition,
-  isInsideVaultDriveExitTunnel,
+  isEnteringHouseSecretTunnelFromSurface,
+  isInsideMegaChamber,
   VAULT_BATMOBILE_BAY,
-  VAULT_FLOOR_Y,
+  VAULT_CONNECTOR_MAX_X,
+  VAULT_CONNECTOR_MIN_X,
+  VAULT_HALF_X,
+  VAULT_HALF_Z,
+  VAULT_HOME_TUNNEL_MAX_X,
+  VAULT_HOME_TUNNEL_MIN_X,
+  VAULT_HOME_TUNNEL_MOUTH_Z,
+  VAULT_MEGA_START_Z,
+  VAULT_PASSAGE_HALF_Z,
   VAULT_SURFACE_DRIVE_EXIT,
+  vaultFloorYAt,
 } from './homeUndergroundVault';
 
 export interface BatmobileState {
@@ -59,15 +69,28 @@ export function stepBatmobileState(
   steerInput: number,
   boostPressed: boolean,
   brakePressed: boolean,
-  dt: number
-): { state: BatmobileState; ramImpulse: number; exitedToSurface?: boolean } {
+  dt: number,
+  exitGateProgress = 1,
+  houseTunnelProgress = 1
+): { state: BatmobileState; ramImpulse: number; exitedToSurface?: boolean; enteredVault?: boolean } {
   const safeDt = Math.min(Math.max(dt, 0.001), 0.1);
   const boosting = boostPressed && throttle > 0.1 && !brakePressed;
   const inVaultNow = Boolean(prev.inVault);
+  const inMega = inVaultNow && isInsideMegaChamber(prev.x, prev.z);
+  const inPassage =
+    inVaultNow && (prev.x > 25.0 || (prev.z < -VAULT_HALF_Z + 2.0 && prev.z > VAULT_MEGA_START_Z));
   const maxFwd = inVaultNow
-    ? boosting
-      ? 26.0
-      : 19.0
+    ? inMega
+      ? boosting
+        ? 64.0 // ~230 km/h Bat-Jet proving run down the 1 KM Mega-Chamber!
+        : 45.0
+      : inPassage
+        ? boosting
+          ? 38.0
+          : 28.0
+        : boosting
+          ? 26.0
+          : 19.0
     : boosting
       ? BATMOBILE_MAX_SPEED
       : BATMOBILE_CRUISE_SPEED;
@@ -78,7 +101,7 @@ export function stepBatmobileState(
     if (Math.abs(speed) <= brakeDecel) speed = 0;
     else speed -= Math.sign(speed) * brakeDecel;
   } else if (throttle > 0.05) {
-    const accel = boosting ? 32.0 : 20.5;
+    const accel = boosting ? 34.0 : 21.5;
     speed = Math.min(maxFwd, speed + throttle * accel * safeDt);
   } else if (throttle < -0.05) {
     if (speed > 0.5) {
@@ -88,7 +111,7 @@ export function stepBatmobileState(
     }
   } else {
     // Aerodynamic drag + rolling resistance
-    const drag = (6.5 + Math.abs(speed) * 0.25) * safeDt;
+    const drag = (6.5 + Math.abs(speed) * 0.23) * safeDt;
     if (Math.abs(speed) <= drag) speed = 0;
     else speed -= Math.sign(speed) * drag;
   }
@@ -97,42 +120,80 @@ export function stepBatmobileState(
   const steerAngle = prev.steerAngle + (targetSteer - prev.steerAngle) * Math.min(1, safeDt * 9.5);
 
   const speedSign = speed >= -0.05 ? 1 : -1;
-  const turnFactor = Math.min(1, Math.abs(speed) / 5.5) * (1 - Math.min(0.42, Math.abs(speed) / 90));
-  let heading = prev.heading + steerAngle * turnFactor * 2.45 * speedSign * safeDt;
+  const turnFactor = Math.min(1, Math.abs(speed) / 5.5) * (1 - Math.min(0.45, Math.abs(speed) / 98));
+  const heading = prev.heading + steerAngle * turnFactor * 2.45 * speedSign * safeDt;
 
   let nextX = prev.x + Math.sin(heading) * speed * safeDt;
   let nextZ = prev.z + Math.cos(heading) * speed * safeDt;
   let nextY = prev.y;
   let inVault = inVaultNow;
   let exitedToSurface = false;
+  let enteredVault = false;
 
   if (inVault) {
-    if (isInsideVaultDriveExitTunnel(nextX, nextZ) && speed > 1.5) {
+    const gateOpen = exitGateProgress > 0.6;
+    const houseOpen = houseTunnelProgress > 0.45;
+
+    // A. Real physical exit out the open Superhero House Secret Tunnel Portal (ZERO teleport!)
+    if (
+      houseOpen &&
+      nextX >= VAULT_HOME_TUNNEL_MIN_X - 0.5 &&
+      nextX <= VAULT_HOME_TUNNEL_MAX_X + 0.5 &&
+      nextZ >= VAULT_HOME_TUNNEL_MOUTH_Z - 0.15 &&
+      Math.cos(heading) * speed > 0.4
+    ) {
       inVault = false;
       exitedToSurface = true;
-      nextX = VAULT_SURFACE_DRIVE_EXIT.x;
-      nextZ = VAULT_SURFACE_DRIVE_EXIT.z;
-      heading = VAULT_SURFACE_DRIVE_EXIT.heading;
+      nextY = Math.max(0, groundHeightAt(nextX, nextZ));
+    }
+    // B. Real physical exit out the open 94m East Driving Ramp Crest (ZERO teleport!)
+    else if (
+      gateOpen &&
+      nextX >= VAULT_SURFACE_DRIVE_EXIT.x - 0.4 &&
+      Math.abs(nextZ) <= VAULT_PASSAGE_HALF_Z &&
+      speed > 0.5
+    ) {
+      inVault = false;
+      exitedToSurface = true;
+      nextX = Math.min(nextX, VAULT_SURFACE_DRIVE_EXIT.x + 0.35);
       nextY = Math.max(0, groundHeightAt(nextX, nextZ));
     } else {
-      const clamped = clampVaultPosition(nextX, nextZ, 2.5);
-      const safeZ = Math.max(-14.2, clamped.z);
+      const clamped = clampVaultPosition(nextX, nextZ, 2.0, gateOpen, houseOpen);
+      const inConnectorMouth =
+        clamped.x >= VAULT_CONNECTOR_MIN_X && clamped.x <= VAULT_CONNECTOR_MAX_X;
+      const inMainHall =
+        clamped.x > -VAULT_HALF_X &&
+        clamped.x <= VAULT_HALF_X &&
+        clamped.z >= -VAULT_HALF_Z &&
+        clamped.z <= VAULT_HALF_Z;
+      const safeZ =
+        inMainHall && !inConnectorMouth ? Math.max(-14.2, clamped.z) : clamped.z;
       if (clamped.hitWall || safeZ !== clamped.z) {
         speed *= -0.2;
       }
       nextX = clamped.x;
       nextZ = safeZ;
-      nextY = VAULT_FLOOR_Y;
+      nextY = vaultFloorYAt(nextX, nextZ);
     }
   } else {
-    // Keep cleanly within world boundary and out of deep water
-    const worldR = Math.hypot(nextX, nextZ);
-    if (worldR > WORLD_PLAYABLE_RADIUS - 12 || isWaterAt(nextX, nextZ)) {
-      nextX = prev.x;
-      nextZ = prev.z;
-      speed *= -0.25;
+    // Check if driving straight North from front yard INTO the open Superhero House Secret Tunnel!
+    if (
+      isEnteringHouseSecretTunnelFromSurface(nextX, nextZ, houseTunnelProgress) &&
+      Math.cos(heading) * speed < -0.35
+    ) {
+      inVault = true;
+      enteredVault = true;
+      nextY = vaultFloorYAt(nextX, nextZ);
+    } else {
+      // Keep cleanly within world boundary and out of deep water
+      const worldR = Math.hypot(nextX, nextZ);
+      if (worldR > WORLD_PLAYABLE_RADIUS - 12 || isWaterAt(nextX, nextZ)) {
+        nextX = prev.x;
+        nextZ = prev.z;
+        speed *= -0.25;
+      }
+      nextY = Math.max(0, groundHeightAt(nextX, nextZ));
     }
-    nextY = Math.max(0, groundHeightAt(nextX, nextZ));
   }
   const wheelSpin = prev.wheelSpin + (speed / 0.56) * safeDt;
   const targetCanopy = prev.canopyOpen ? 1 : 0;
@@ -165,6 +226,7 @@ export function stepBatmobileState(
     },
     ramImpulse,
     exitedToSurface,
+    enteredVault,
   };
 }
 

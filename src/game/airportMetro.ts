@@ -1,4 +1,5 @@
 import type { AabbCollider } from './terrain';
+import { computeLookToFlyVerticalRate } from './lookToFly';
 
 /**
  * Dreamline Underground Metro Station & Dreamline International Airport
@@ -133,7 +134,8 @@ export function stepAirlinerState(
   afterburner: boolean,
   dt: number,
   groundYFn: (x: number, z: number) => number,
-  worldRadius = 425
+  worldRadius = 425,
+  cameraPitch?: number
 ): AirlinerState {
   const safeDt = Math.min(0.08, Math.max(0.001, dt));
   const boostActive = afterburner && forwardInput > 0.1;
@@ -163,10 +165,18 @@ export function stepAirlinerState(
   const speedSteerFactor = prev.onGround ? Math.min(1, Math.abs(speed) / 4.0) : 1.0;
   let heading = prev.heading - steerInput * turnRate * speedSteerFactor * safeDt;
 
-  // Vertical flight control
+  // Vertical flight control (manual buttons OR buttonless camera Look-to-Fly!)
   const groundY = Math.max(-0.2, groundYFn(prev.x, prev.z));
   let y = prev.y;
   let targetPitch = 0;
+
+  const airDrive = !prev.onGround ? Math.max(forwardInput, Math.min(1, speed / 28.0)) : forwardInput;
+  const lookFly = computeLookToFlyVerticalRate(cameraPitch, airDrive, {
+    neutralPitch: 0.2,
+    deadzone: 0.09,
+    maxClimbRate: boostActive ? 22.0 : 16.0,
+    maxDiveRate: 16.5,
+  });
 
   const canLiftoff = speed >= AIRLINER_TAKEOFF_SPEED || !prev.onGround;
   if (ascend && canLiftoff) {
@@ -177,6 +187,9 @@ export function stepAirlinerState(
     const descendRate = 16.0;
     y = Math.max(groundY, y - descendRate * safeDt);
     targetPitch = y > groundY + 0.5 ? -0.2 : 0;
+  } else if (lookFly.active && (lookFly.verticalRate < 0 || canLiftoff)) {
+    y = Math.min(AIRLINER_MAX_ALTITUDE, Math.max(groundY, y + lookFly.verticalRate * safeDt));
+    targetPitch = y > groundY + 0.5 ? Math.max(-0.24, Math.min(0.26, lookFly.normalizedPitch * 0.25)) : 0;
   } else if (!prev.onGround && speed < 15.0) {
     // Gentle sink when below stall speed
     y = Math.max(groundY, y - 5.5 * safeDt);
@@ -431,6 +444,73 @@ export function stepSubwayTrainState(prev: SubwayTrainState, dt: number): Subway
     dwellTimer,
     etaSeconds,
     statusLabel,
+  };
+}
+
+// ─── SIMULTANEOUS SURFACE-TO-TUNNEL SUBWAY RAMP KINEMATICS ───────────────────
+
+export interface SimultaneousSubwayTrainPose {
+  /** Longitudinal distance along the portal ramp & viaduct (-58m underground .. +58m surface viaduct) */
+  along: number;
+  /** World elevation (meters relative to surface y = 0; negative = inside underground tunnel, positive = elevated above surface!) */
+  elevation: number;
+  /** Nose pitch angle in radians (positive = climbing upward, negative = diving downward) */
+  pitch: number;
+  phase: 'underground_tunnel' | 'climbing_up' | 'surface_above' | 'diving_down';
+}
+
+export interface SimultaneousSubwayState {
+  /** Train 1: continuously climbs UP from the underground tunnel onto the elevated surface viaduct */
+  ascendingTrain: SimultaneousSubwayTrainPose;
+  /** Train 2: simultaneously travels DOWN from the elevated surface viaduct right into the underground tunnel */
+  descendingTrain: SimultaneousSubwayTrainPose;
+}
+
+/**
+ * Pure deterministic kinematics for the dual-track simultaneous Subway portal:
+ * At every moment, one metro train rises UP from inside the underground tunnel onto the surface viaduct
+ * while the opposite-track metro train simultaneously descends DOWN from above the surface into the tunnel!
+ */
+export function computeSimultaneousSubwayState(elapsedSeconds: number): SimultaneousSubwayState {
+  const cycleSeconds = 18.0;
+  const uAsc = ((elapsedSeconds % cycleSeconds) + cycleSeconds) % cycleSeconds / cycleSeconds;
+  // Offset descending train by 0.12 so both trains cross dramatically on the ramp simultaneously!
+  const uDesc = (((elapsedSeconds + cycleSeconds * 0.12) % cycleSeconds) + cycleSeconds) % cycleSeconds / cycleSeconds;
+
+  const sampleProfile = (u: number, ascending: boolean): SimultaneousSubwayTrainPose => {
+    // u goes 0 -> 1.
+    // Ascending travels along: -56m (deep tunnel) -> 0m (portal mouth) -> +56m (high surface viaduct)
+    // Descending travels along: +56m (high surface viaduct) -> 0m (portal mouth) -> -56m (deep tunnel)
+    const along = ascending ? -56 + u * 112 : 56 - u * 112;
+
+    // Smooth S-curve elevation profile:
+    // along <= -24 => underground tunnel at y = -9.5m
+    // along in (-24, +24) => inclined ramp climbing smoothly from -9.5m up to +5.4m above surface!
+    // along >= +24 => elevated surface viaduct at y = +5.4m above ground
+    const rampHalf = 24.0;
+    const minY = -9.5;
+    const maxY = 5.4;
+    const tRaw = (along + rampHalf) / (2 * rampHalf);
+    const t = Math.max(0, Math.min(1, tRaw));
+    const smooth = t * t * (3 - 2 * t);
+    const elevation = minY + smooth * (maxY - minY);
+
+    // Derivative dY / dAlong for accurate nose pitch on the ramp
+    const dSmoothDt = 6 * t * (1 - t);
+    const slope = tRaw > 0 && tRaw < 1 ? (dSmoothDt * (maxY - minY)) / (2 * rampHalf) : 0;
+    const pitch = ascending ? Math.atan(slope) : -Math.atan(slope);
+
+    let phase: SimultaneousSubwayTrainPose['phase'];
+    if (along <= -20) phase = 'underground_tunnel';
+    else if (along >= 20) phase = 'surface_above';
+    else phase = ascending ? 'climbing_up' : 'diving_down';
+
+    return { along, elevation, pitch, phase };
+  };
+
+  return {
+    ascendingTrain: sampleProfile(uAsc, true),
+    descendingTrain: sampleProfile(uDesc, false),
   };
 }
 

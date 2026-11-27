@@ -1,5 +1,4 @@
 import * as THREE from 'three';
-import { DINOSAUR_ISLAND_CENTER } from '../game/dinosaurIsland';
 import {
   CAMPSITE_CENTER,
   COAST_CENTER,
@@ -17,7 +16,15 @@ import {
   ICELAND_RETURN_GATE_POS,
 } from '../game/iceland';
 import { isNearFrozenKingdomClearing } from '../game/frozenKingdom';
-import type { CampingState, InteractableItem } from '../game/types';
+import {
+  OCEAN_HEIGHTMAP_BOUNDS,
+  OCEAN_THEMES,
+  buildSeabedHeightTextureData,
+  computeOceanWeatherParams,
+  evaluateGerstnerOceanCPU,
+  type OceanThemeId,
+} from '../game/gerstnerOcean';
+import type { CampingState, InteractableItem, WeatherType } from '../game/types';
 import type { ProceduralTextureSet } from './textures';
 
 export interface RegionsWorldSystem {
@@ -25,6 +32,8 @@ export interface RegionsWorldSystem {
   colliders: AabbCollider[];
   interactables: InteractableItem[];
   triggerIglooManWave: () => void;
+  setOceanTheme: (themeId: OceanThemeId) => void;
+  getOceanTheme: () => OceanThemeId;
   update: (
     time: number,
     dt: number,
@@ -34,7 +43,8 @@ export interface RegionsWorldSystem {
     lanternStrength: number,
     camping: CampingState,
     playerX?: number,
-    playerZ?: number
+    playerZ?: number,
+    weather?: WeatherType
   ) => void;
   dispose: () => void;
 }
@@ -81,81 +91,406 @@ export function buildRegionsWorld(textures: ProceduralTextureSet): RegionsWorldS
   });
 
   // =========================================================================
-  // REGION 01: KADALKARAI COAST (கடற்கரை நகரம்)
+  // REGION 01: KADALKARAI COAST (கடற்கரை நகரம்) — OCEANLAB 3D GERSTNER OCEAN
   // =========================================================================
+  const BATHYMETRY_RES = 384;
+  const bathymetryData = buildSeabedHeightTextureData(
+    BATHYMETRY_RES,
+    groundHeightAt,
+    WATER_LEVEL
+  );
+  const heightDataTexture = new THREE.DataTexture(
+    bathymetryData,
+    BATHYMETRY_RES,
+    BATHYMETRY_RES,
+    THREE.RGBAFormat,
+    THREE.UnsignedByteType
+  );
+  heightDataTexture.magFilter = THREE.LinearFilter;
+  heightDataTexture.minFilter = THREE.LinearFilter;
+  heightDataTexture.wrapS = THREE.ClampToEdgeWrapping;
+  heightDataTexture.wrapT = THREE.ClampToEdgeWrapping;
+  heightDataTexture.needsUpdate = true;
+
+  let activeOceanTheme: OceanThemeId = 'bengal';
+  const initOceanParams = computeOceanWeatherParams('clear', activeOceanTheme);
+
   const oceanUniforms = {
     uTime: { value: 0 },
     uSunDir: { value: new THREE.Vector3(0.5, 0.4, -0.5) },
     uSkyColor: { value: new THREE.Color(0x6fb8d6) },
     uSunColor: { value: new THREE.Color(0xffd79e) },
+    uAmplitude: { value: initOceanParams.amplitude },
+    uSteepness: { value: initOceanParams.steepness },
+    uWavelength: { value: initOceanParams.wavelength },
+    uSpread: { value: initOceanParams.spread },
+    uChop: { value: initOceanParams.chop },
+    uSSSIntensity: { value: initOceanParams.sssIntensity },
+    uFoamIntensity: { value: initOceanParams.foamIntensity },
+    uHeightMap: { value: heightDataTexture },
+    uHeightMapCenter: {
+      value: new THREE.Vector2(OCEAN_HEIGHTMAP_BOUNDS.centerX, OCEAN_HEIGHTMAP_BOUNDS.centerZ),
+    },
+    uWorldSize: { value: OCEAN_HEIGHTMAP_BOUNDS.size },
+    uWaterLevel: { value: WATER_LEVEL },
+    uAbyssalColor: { value: new THREE.Color(...initOceanParams.theme.abyssalColor) },
+    uShallowColor: { value: new THREE.Color(...initOceanParams.theme.shallowColor) },
+    uSSSTint: { value: new THREE.Color(...initOceanParams.theme.sssTint) },
+    uSandColor: { value: new THREE.Color(...initOceanParams.theme.sandColor) },
   };
+
+  const applyOceanThemeUniforms = (themeId: OceanThemeId) => {
+    activeOceanTheme = themeId;
+    const t = OCEAN_THEMES[themeId] ?? OCEAN_THEMES.bengal;
+    oceanUniforms.uAbyssalColor.value.setRGB(t.abyssalColor[0], t.abyssalColor[1], t.abyssalColor[2]);
+    oceanUniforms.uShallowColor.value.setRGB(t.shallowColor[0], t.shallowColor[1], t.shallowColor[2]);
+    oceanUniforms.uSSSTint.value.setRGB(t.sssTint[0], t.sssTint[1], t.sssTint[2]);
+    oceanUniforms.uSandColor.value.setRGB(t.sandColor[0], t.sandColor[1], t.sandColor[2]);
+  };
+
   const oceanMat = new THREE.ShaderMaterial({
     uniforms: oceanUniforms,
-    transparent: true,
-    vertexShader: `
+    transparent: false,
+    side: THREE.DoubleSide,
+    vertexShader: /* glsl */ `
+      precision highp float;
+
       uniform float uTime;
+      uniform float uAmplitude;
+      uniform float uSteepness;
+      uniform float uWavelength;
+      uniform float uSpread;
+      uniform sampler2D uHeightMap;
+      uniform vec2 uHeightMapCenter;
+      uniform float uWorldSize;
+      uniform float uWaterLevel;
+
       varying vec3 vWorldPos;
-      varying vec2 vUv;
+      varying vec3 vNormal;
+      varying float vJacobian;
+      varying float vWaveHeight;
+
+      const float PI = 3.14159265359;
+      const float G = 9.81;
+
+      float sampleSeabedHeight(vec2 worldXZ) {
+        vec2 uv = ((worldXZ - uHeightMapCenter) / uWorldSize) + 0.5;
+        uv = clamp(uv, 0.002, 0.998);
+        vec4 tex = texture2D(uHeightMap, uv);
+        float normH = tex.r + tex.g / 255.0;
+        return mix(-25.0, 15.0, normH);
+      }
+
+      void getWaveParams(int idx, out vec2 dir, out float relLen, out float relAmp, out float phaseOffset) {
+        if (idx == 0) { dir = vec2( 0.14,  0.99); relLen = 1.00; relAmp = 1.00; phaseOffset = 0.0; }
+        else if (idx == 1) { dir = vec2(-0.28,  0.96); relLen = 0.72; relAmp = 0.72; phaseOffset = 1.7; }
+        else if (idx == 2) { dir = vec2( 0.36,  0.93); relLen = 0.50; relAmp = 0.50; phaseOffset = 3.1; }
+        else if (idx == 3) { dir = vec2(-0.48,  0.88); relLen = 0.35; relAmp = 0.35; phaseOffset = 4.3; }
+        else if (idx == 4) { dir = vec2( 0.58,  0.81); relLen = 0.24; relAmp = 0.24; phaseOffset = 2.2; }
+        else if (idx == 5) { dir = vec2(-0.18,  0.98); relLen = 0.16; relAmp = 0.16; phaseOffset = 5.4; }
+        else if (idx == 6) { dir = vec2( 0.75,  0.66); relLen = 0.11; relAmp = 0.11; phaseOffset = 0.9; }
+        else               { dir = vec2(-0.68,  0.73); relLen = 0.075; relAmp = 0.075; phaseOffset = 3.8; }
+      }
+
       void main() {
-        vUv = uv;
-        vec3 pos = position;
-        float swell = sin(pos.x * 0.16 + uTime * 1.45) * 0.14 + cos(pos.y * 0.12 - uTime * 1.1) * 0.10;
-        pos.z += swell;
-        vec4 wp = modelMatrix * vec4(pos, 1.0);
-        vWorldPos = wp.xyz;
-        gl_Position = projectionMatrix * viewMatrix * wp;
+        vec3 worldBase = (modelMatrix * vec4(position, 1.0)).xyz;
+        float bedH = sampleSeabedHeight(worldBase.xz);
+        float waterDepth = max(0.0, -bedH);
+        // Zero wave lift over dry land (eliminates ocean/white swash poking up through Dinosaur Island or beaches!)
+        float dryLandFade = smoothstep(0.08, -0.42, bedH);
+
+        // Coastal shoaling transformation: peaks steepen entering shallow shelves before damping cleanly at swash
+        float shoalPeak = 1.0 + 0.42 * exp(-pow((waterDepth - 2.2) / 1.8, 2.0));
+        float swashDamp = smoothstep(0.0, 0.85, waterDepth + 0.14) * dryLandFade;
+        float depthAmpFactor = shoalPeak * swashDamp;
+
+        vec3 displaced = worldBase;
+        vec3 dPdx = vec3(1.0, 0.0, 0.0);
+        vec3 dPdz = vec3(0.0, 0.0, 1.0);
+        vec2 primaryWind = normalize(vec2(0.08, 0.99));
+
+        for (int i = 0; i < 8; i++) {
+          vec2 rawDir;
+          float relLen, relAmp, phaseOff;
+          getWaveParams(i, rawDir, relLen, relAmp, phaseOff);
+
+          vec2 D = normalize(mix(primaryWind, normalize(rawDir), uSpread));
+          float wl = max(3.5, uWavelength * relLen);
+          float k = 2.0 * PI / wl;
+          float omega = sqrt(G * k);
+
+          float A = (wl / 28.0) * 0.40 * relAmp * uAmplitude * depthAmpFactor;
+          float shoalSteep = uSteepness * (1.0 + 0.45 * smoothstep(6.0, 1.2, waterDepth));
+          float Qi = clamp(shoalSteep * 0.165 / (k * A + 0.0001), 0.0, 0.23);
+
+          float shallowPhaseDelay = k * log(1.0 + exp(-waterDepth * 0.38)) * 2.2;
+          float theta = k * dot(D, worldBase.xz) - omega * uTime + phaseOff - shallowPhaseDelay;
+          float s = sin(theta);
+          float c = cos(theta);
+
+          displaced.x -= Qi * A * D.x * s;
+          displaced.z -= Qi * A * D.y * s;
+          displaced.y += A * c;
+
+          float kA = k * A;
+          float QkA = Qi * kA;
+
+          dPdx.x -= QkA * D.x * D.x * c;
+          dPdx.z -= QkA * D.x * D.y * c;
+          dPdx.y -= kA * D.x * s;
+
+          dPdz.x -= QkA * D.y * D.x * c;
+          dPdz.z -= QkA * D.y * D.y * c;
+          dPdz.y -= kA * D.y * s;
+        }
+
+        // Tidal swash run-up surge strictly along wet coastal shorelines (zero lift on dry inland terrain!)
+        float swashSurge = 0.20 * uAmplitude * sin(uTime * 1.45 - worldBase.z * 0.08);
+        displaced.y += swashSurge * exp(-abs(waterDepth) * 0.65) * dryLandFade;
+
+        vec3 norm = normalize(cross(dPdz, dPdx));
+        float jacobian = dPdx.x * dPdz.z - dPdx.z * dPdz.x;
+
+        vWorldPos = displaced;
+        vNormal = norm;
+        vJacobian = jacobian;
+        vWaveHeight = displaced.y - uWaterLevel;
+
+        gl_Position = projectionMatrix * viewMatrix * vec4(displaced, 1.0);
       }
     `,
-    fragmentShader: `
+    fragmentShader: /* glsl */ `
+      precision highp float;
+
       uniform float uTime;
       uniform vec3 uSunDir;
       uniform vec3 uSkyColor;
       uniform vec3 uSunColor;
+      uniform float uChop;
+      uniform float uSSSIntensity;
+      uniform float uFoamIntensity;
+      uniform sampler2D uHeightMap;
+      uniform vec2 uHeightMapCenter;
+      uniform float uWorldSize;
+      uniform float uWaterLevel;
+      uniform vec3 uAbyssalColor;
+      uniform vec3 uShallowColor;
+      uniform vec3 uSSSTint;
+      uniform vec3 uSandColor;
+
       varying vec3 vWorldPos;
-      varying vec2 vUv;
+      varying vec3 vNormal;
+      varying float vJacobian;
+      varying float vWaveHeight;
+
+      float sampleSeabedExact(vec2 worldXZ) {
+        vec2 uv = ((worldXZ - uHeightMapCenter) / uWorldSize) + 0.5;
+        uv = clamp(uv, 0.002, 0.998);
+        vec4 tex = texture2D(uHeightMap, uv);
+        float normH = tex.r + tex.g / 255.0;
+        return mix(-25.0, 15.0, normH);
+      }
+
+      float hash21(vec2 p) {
+        p = fract(p * vec2(234.34, 435.345));
+        p += dot(p, p + 34.23);
+        return fract(p.x * p.y);
+      }
+
+      float noise2D(vec2 p) {
+        vec2 i = floor(p);
+        vec2 f = fract(p);
+        vec2 u = f * f * (3.0 - 2.0 * f);
+        float a = hash21(i);
+        float b = hash21(i + vec2(1.0, 0.0));
+        float c = hash21(i + vec2(0.0, 1.0));
+        float d = hash21(i + vec2(1.0, 1.0));
+        return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
+      }
+
+      const mat2 rotMat = mat2(0.80, -0.60, 0.60, 0.80);
+
+      float capillaryFBM(vec2 p, float t) {
+        float val = 0.0;
+        float amp = 0.5;
+        vec2 shift = vec2(t * 0.85, -t * 0.55);
+        for (int i = 0; i < 5; i++) {
+          val += amp * noise2D(p + shift);
+          p = rotMat * p * 2.12;
+          shift = rotMat * shift * 1.35;
+          amp *= 0.48;
+        }
+        return val;
+      }
+
+      float computeCaustics(vec2 p, float t) {
+        vec2 uv1 = p * 0.85 + vec2(t * 0.4, -t * 0.3);
+        vec2 uv2 = rotMat * p * 1.15 - vec2(t * 0.35, t * 0.45);
+        float n1 = abs(noise2D(uv1) - 0.5);
+        float n2 = abs(noise2D(uv2) - 0.5);
+        return pow(1.0 - clamp((n1 + n2) * 2.2, 0.0, 1.0), 3.5);
+      }
+
+      vec3 evaluateSkyReflection(vec3 rd, vec3 sunDir, vec3 sceneSky, vec3 sceneSun, float dayFactor) {
+        float sunElevation = clamp(sunDir.y, 0.0, 1.0);
+        float yd = max(rd.y, 0.0);
+
+        vec3 dayZenith = vec3(0.02, 0.12, 0.34);
+        vec3 sunsetZenith = vec3(0.04, 0.07, 0.20);
+        vec3 zenithCol = mix(sunsetZenith, dayZenith, pow(sunElevation, 0.55));
+
+        vec3 dayHorizon = vec3(0.18, 0.44, 0.72);
+        vec3 sunsetHorizon = vec3(0.84, 0.40, 0.20);
+        vec3 horizonCol = mix(sunsetHorizon, dayHorizon, pow(sunElevation, 0.45));
+
+        // Harmonize OceanLab sky scattering with DREAMLINE's live sunset/night sky palette
+        vec3 linearSceneSky = pow(clamp(sceneSky, 0.001, 1.0), vec3(2.2));
+        vec3 skyDay = mix(horizonCol, zenithCol, pow(yd, 0.48));
+        skyDay = mix(skyDay, linearSceneSky * 0.92, 0.22);
+
+        vec3 nightSky = mix(linearSceneSky * 0.65 + vec3(0.015, 0.028, 0.065), vec3(0.012, 0.022, 0.055), pow(yd, 0.6));
+        vec3 sky = mix(nightSky, skyDay, dayFactor);
+
+        float sunDot = max(dot(rd, sunDir), 0.0);
+        vec3 mieColor = mix(pow(clamp(sceneSun, 0.01, 1.0), vec3(2.0)), vec3(1.0, 0.92, 0.80), sunElevation);
+        sky += mieColor * pow(sunDot, 7.0) * (0.14 + 0.28 * dayFactor);
+        sky += mieColor * pow(sunDot, 64.0) * (0.20 + 0.35 * dayFactor);
+        return sky;
+      }
+
       void main() {
-        float w1 = sin(vWorldPos.x * 0.42 + uTime * 1.8) * cos(vWorldPos.z * 0.35 - uTime * 1.3);
-        float w2 = sin((vWorldPos.x - vWorldPos.z) * 0.65 + uTime * 2.1);
-        vec3 normal = normalize(vec3(w1 * 0.08 + w2 * 0.04, 1.0, w2 * 0.07));
-        vec3 viewDir = normalize(cameraPosition - vWorldPos);
-        float fresnel = pow(1.0 - max(dot(viewDir, normal), 0.0), 3.0);
+        float bedY = sampleSeabedExact(vWorldPos.xz);
+        float waterColumnDepth = (vWorldPos.y - uWaterLevel) - bedY;
 
-        // Shallow turquoise near mainland coast AND around far-offshore SSJ Dinosaur Island
-        float distMainland = clamp((vWorldPos.x - 108.0) / 52.0, 0.0, 1.0);
-        float distDinoIsland = length(vWorldPos.xz - vec2(${DINOSAUR_ISLAND_CENTER.x.toFixed(1)}, ${DINOSAUR_ISLAND_CENTER.z.toFixed(1)}));
-        float islandShallow = 1.0 - smoothstep(26.0, 44.0, distDinoIsland);
-        float depthT = clamp(distMainland * (1.0 - islandShallow * 0.85), 0.0, 1.0);
-        vec3 shallowCol = vec3(0.19, 0.67, 0.72);
-        vec3 deepCol = vec3(0.08, 0.28, 0.48);
-        vec3 waterBase = mix(shallowCol, deepCol, depthT);
+        // Clip ocean & shoreline foam cleanly wherever dry beaches, mainland, or Dinosaur Island rise above water
+        if (bedY > 0.14 || waterColumnDepth < 0.02) {
+          discard;
+        }
 
-        // Soft animated shoreline foam band along mainland beach AND Dinosaur Island shore
-        float foamEdge = smoothstep(115.0, 108.5, vWorldPos.x + sin(vWorldPos.z * 0.16 + uTime * 1.4) * 2.4);
-        float islandFoamEdge = (1.0 - smoothstep(27.0, 33.5, distDinoIsland + sin(vWorldPos.x * 0.22 + uTime * 1.5) * 1.6)) * smoothstep(22.0, 27.5, distDinoIsland);
-        float foamRipple = smoothstep(0.35, 0.9, sin(vWorldPos.x * 1.1 - uTime * 2.6 + sin(vWorldPos.z * 0.25)));
-        float foam = clamp(max(foamEdge, islandFoamEdge) * (0.55 + foamRipple * 0.45), 0.0, 0.85);
+        vec3 V = normalize(cameraPosition - vWorldPos);
+        vec3 L = normalize(uSunDir);
+        float dist = length(cameraPosition - vWorldPos);
+        float detailFade = exp(-dist * 0.0038);
 
-        vec3 reflectDir = reflect(-normalize(uSunDir), normal);
-        float spec = pow(max(dot(viewDir, reflectDir), 0.0), 54.0);
+        vec2 uv = vWorldPos.xz * 0.36;
+        float eps = 0.08;
+        float h0 = capillaryFBM(uv, uTime);
+        float hx = capillaryFBM(uv + vec2(eps, 0.0), uTime);
+        float hz = capillaryFBM(uv + vec2(0.0, eps), uTime);
 
-        vec3 col = mix(waterBase, uSkyColor, fresnel * 0.62);
-        col += uSunColor * spec * 1.1;
-        col = mix(col, vec3(0.95, 0.98, 1.0), foam * 0.72);
-        gl_FragColor = vec4(col, 0.93);
+        vec3 microPerturb = vec3(-(hx - h0) / eps, 0.0, -(hz - h0) / eps) * 0.19 * uChop * detailFade;
+        vec3 N = normalize(vNormal + microPerturb);
+
+        // Preserve underwater upward Snell's Window when diving or piloting the submarine!
+        if (!gl_FrontFacing) {
+          vec3 underNorm = -N;
+          float cosUp = max(dot(V, underNorm), 0.0);
+          float snellWindow = smoothstep(0.42, 0.82, cosUp + (h0 - 0.5) * 0.18);
+          vec3 tirCol = vec3(0.015, 0.18, 0.30);
+          vec3 windowCol = mix(vec3(0.18, 0.72, 0.84), uSkyColor * 0.88 + uSunColor * 0.30, 0.52);
+          float sparkle = pow(clamp(h0 * 1.2, 0.0, 1.0), 3.0);
+          vec3 uCol = mix(tirCol, windowCol, snellWindow) + vec3(0.24, 0.68, 0.78) * sparkle * 0.28 * snellWindow;
+          gl_FragColor = vec4(uCol, 1.0);
+          return;
+        }
+
+        if (dot(N, V) < 0.0) {
+          N = normalize(N - V * dot(N, V) * 1.01);
+        }
+
+        float NoV = clamp(dot(N, V), 0.001, 1.0);
+        float NoL = clamp(dot(N, L), 0.0, 1.0);
+        float sunElev = clamp(L.y, 0.0, 1.0);
+        float dayFactor = smoothstep(-0.14, 0.16, L.y);
+        float lightScale = 0.24 + 0.76 * dayFactor;
+
+        // 1. Schlick's Fresnel Law
+        float fresnel = 0.02 + 0.98 * pow(1.0 - NoV, 5.0);
+
+        // 2. Sky Reflection
+        vec3 R = reflect(-V, N);
+        R.y = max(R.y, 0.015);
+        vec3 skyReflection = evaluateSkyReflection(R, L, uSkyColor, uSunColor, dayFactor);
+
+        // 3. Theme-Driven Deep Water Absorption & Shallow Coastal Bathymetry Refraction
+        vec3 abyssalColor = uAbyssalColor * (0.45 + 0.65 * sunElev) * lightScale;
+        vec3 shallowScatter = uShallowColor * (0.55 + 0.60 * sunElev) * lightScale;
+        vec3 deepWaterCol = mix(shallowScatter, abyssalColor, pow(1.0 - NoV, 0.65));
+
+        // Beer-Lambert optical transmission through shallow coastal water & island reefs
+        float opticalDepth = max(0.0, waterColumnDepth);
+        float seabedVisibility = exp(-opticalDepth * 0.46);
+        float caustics = computeCaustics(vWorldPos.xz + N.xz * 0.65, uTime) * smoothstep(5.5, 0.2, opticalDepth) * dayFactor;
+        vec3 submergedSand = uSandColor * (0.36 + 0.62 * max(L.y, 0.15)) * lightScale + vec3(1.0, 0.95, 0.80) * caustics * 0.52;
+
+        vec3 waterBodyColor = mix(deepWaterCol, shallowScatter, exp(-opticalDepth * 0.18));
+        waterBodyColor = mix(waterBodyColor, submergedSand, seabedVisibility * 0.82);
+
+        // 4. Subsurface Scattering (SSS) jade-turquoise crest translucency
+        float waveThinness = clamp((vWaveHeight + 0.45) * 0.48, 0.0, 1.0) * pow(1.0 - N.y, 0.35);
+        vec3 sssDir = normalize(L + N * 0.6);
+        float forwardScatter = pow(clamp(dot(V, -sssDir), 0.0, 1.0), 3.5);
+        float ambientCrestScatter = clamp(vWaveHeight * 0.38 + 0.16, 0.0, 1.0) * (1.0 - NoV * 0.5);
+
+        vec3 sssContribution = uSSSTint * (forwardScatter * 1.55 + ambientCrestScatter * 0.62) * waveThinness * uSSSIntensity * lightScale;
+        vec3 refracted = waterBodyColor + sssContribution * (1.0 - seabedVisibility * 0.55);
+        vec3 surfaceColor = mix(refracted, skyReflection, fresnel * 0.54);
+
+        // 5. Solar / Lunar Specular Glitter Path
+        vec3 H = normalize(L + V);
+        float NoH = max(dot(N, H), 0.0);
+        vec3 sunLightCol = mix(
+          vec3(0.62, 0.74, 0.95) * 0.45,
+          mix(vec3(1.0, 0.55, 0.25), vec3(1.0, 0.96, 0.88), sunElev),
+          dayFactor
+        );
+        float specCore = pow(NoH, 720.0) * 6.5;
+        float specSheen = pow(NoH, 48.0) * 0.28;
+        surfaceColor += sunLightCol * (specCore + specSheen) * (0.22 + 0.78 * fresnel) * max(NoL, 0.10);
+
+        // 6. Jacobian Whitecap Foam + Shallow Surf Breakers + Shoreline Swash Lace
+        float foamNoiseA = noise2D(vWorldPos.xz * 1.4 + vec2(uTime * 0.35, -uTime * 0.2));
+        float foamNoiseB = noise2D(vWorldPos.xz * 5.2 - vec2(uTime * 0.5, uTime * 0.4));
+        float bubblePattern = smoothstep(0.24, 0.80, foamNoiseA * 0.60 + foamNoiseB * 0.40);
+
+        float surfZoneBoost = smoothstep(3.2, 0.35, opticalDepth) * 0.30 * max(0.0, vWaveHeight + 0.18);
+        float crestCompression = clamp(((0.58 - vJacobian) * 1.9 + surfZoneBoost) * uFoamIntensity, 0.0, 1.0);
+        float crestFoam = smoothstep(0.22, 0.74, crestCompression) * (0.50 + 0.50 * bubblePattern);
+        float trailFoam = smoothstep(0.08, 0.48, crestCompression) * smoothstep(0.50, 0.84, bubblePattern) * 0.42;
+        float swashEdge = smoothstep(0.42, 0.0, opticalDepth) * (0.50 + 0.50 * sin(opticalDepth * 16.0 - uTime * 3.0)) * bubblePattern;
+
+        float totalFoam = clamp(crestFoam + trailFoam + swashEdge * 0.72, 0.0, 0.92) * detailFade;
+        vec3 foamAlbedo = mix(vec3(0.82, 0.76, 0.72), vec3(0.95, 0.98, 1.0), sunElev) * lightScale;
+        foamAlbedo *= (0.45 + 0.55 * max(NoL, 0.25));
+        surfaceColor = mix(surfaceColor, foamAlbedo, totalFoam);
+
+        // 7. Horizon Atmospheric Fog
+        vec3 fogColor = evaluateSkyReflection(vec3(-V.x, 0.02, -V.z), L, uSkyColor, uSunColor, dayFactor);
+        float fogFactor = 1.0 - exp(-dist * 0.00075);
+        surfaceColor = mix(surfaceColor, fogColor, clamp(fogFactor, 0.0, 0.78));
+
+        // 8. ACES Filmic Tone Mapping & Gamma Correction
+        surfaceColor = (surfaceColor * (2.51 * surfaceColor + 0.03)) / (surfaceColor * (2.43 * surfaceColor + 0.59) + 0.14);
+        surfaceColor = pow(clamp(surfaceColor, 0.0, 1.0), vec3(1.0 / 2.2));
+
+        gl_FragColor = vec4(surfaceColor, 1.0);
       }
     `,
   });
 
-  const oceanMesh = new THREE.Mesh(new THREE.PlaneGeometry(580, 580, 76, 76), oceanMat);
+  const oceanMesh = new THREE.Mesh(
+    new THREE.PlaneGeometry(OCEAN_HEIGHTMAP_BOUNDS.size, OCEAN_HEIGHTMAP_BOUNDS.size, 200, 200),
+    oceanMat
+  );
   oceanMesh.rotation.x = -Math.PI / 2;
-  oceanMesh.position.set(305, WATER_LEVEL + 0.03, 165);
+  oceanMesh.position.set(OCEAN_HEIGHTMAP_BOUNDS.centerX, WATER_LEVEL, OCEAN_HEIGHTMAP_BOUNDS.centerZ);
   group.add(oceanMesh);
 
-  // Seamless Infinite Horizon Ocean extending 7,000m to the horizon across east & south seas!
+  // Seamless Infinite Horizon Ocean sharing the exact OceanLab 3D optical palette, capillary FBM ripples & ACES tone mapping!
   const infiniteOceanMat = new THREE.ShaderMaterial({
     transparent: false,
     uniforms: oceanUniforms,
-    vertexShader: `
+    vertexShader: /* glsl */ `
       varying vec3 vWorldPos;
       void main() {
         vec4 worldPos = modelMatrix * vec4(position, 1.0);
@@ -163,28 +498,130 @@ export function buildRegionsWorld(textures: ProceduralTextureSet): RegionsWorldS
         gl_Position = projectionMatrix * viewMatrix * worldPos;
       }
     `,
-    fragmentShader: `
+    fragmentShader: /* glsl */ `
+      precision highp float;
+
       uniform float uTime;
       uniform vec3 uSkyColor;
       uniform vec3 uSunColor;
       uniform vec3 uSunDir;
+      uniform float uChop;
+      uniform vec2 uHeightMapCenter;
+      uniform float uWorldSize;
+      uniform vec3 uAbyssalColor;
+      uniform vec3 uShallowColor;
+
       varying vec3 vWorldPos;
+
+      float hash21(vec2 p) {
+        p = fract(p * vec2(234.34, 435.345));
+        p += dot(p, p + 34.23);
+        return fract(p.x * p.y);
+      }
+
+      float noise2D(vec2 p) {
+        vec2 i = floor(p);
+        vec2 f = fract(p);
+        vec2 u = f * f * (3.0 - 2.0 * f);
+        float a = hash21(i);
+        float b = hash21(i + vec2(1.0, 0.0));
+        float c = hash21(i + vec2(0.0, 1.0));
+        float d = hash21(i + vec2(1.0, 1.0));
+        return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
+      }
+
+      const mat2 rotMat = mat2(0.80, -0.60, 0.60, 0.80);
+
+      float capillaryFBM(vec2 p, float t) {
+        float val = 0.0;
+        float amp = 0.5;
+        vec2 shift = vec2(t * 0.85, -t * 0.55);
+        for (int i = 0; i < 4; i++) {
+          val += amp * noise2D(p + shift);
+          p = rotMat * p * 2.05;
+          shift = rotMat * shift * 1.3;
+          amp *= 0.48;
+        }
+        return val;
+      }
+
+      vec3 evaluateSkyReflection(vec3 rd, vec3 sunDir, vec3 sceneSky, vec3 sceneSun, float dayFactor) {
+        float sunElevation = clamp(sunDir.y, 0.0, 1.0);
+        float yd = max(rd.y, 0.0);
+        vec3 dayZenith = vec3(0.02, 0.12, 0.34);
+        vec3 sunsetZenith = vec3(0.04, 0.07, 0.20);
+        vec3 zenithCol = mix(sunsetZenith, dayZenith, pow(sunElevation, 0.55));
+        vec3 dayHorizon = vec3(0.18, 0.44, 0.72);
+        vec3 sunsetHorizon = vec3(0.84, 0.40, 0.20);
+        vec3 horizonCol = mix(sunsetHorizon, dayHorizon, pow(sunElevation, 0.45));
+        vec3 linearSceneSky = pow(clamp(sceneSky, 0.001, 1.0), vec3(2.2));
+        vec3 skyDay = mix(mix(horizonCol, zenithCol, pow(yd, 0.48)), linearSceneSky * 0.92, 0.22);
+        vec3 nightSky = mix(linearSceneSky * 0.65 + vec3(0.015, 0.028, 0.065), vec3(0.012, 0.022, 0.055), pow(yd, 0.6));
+        vec3 sky = mix(nightSky, skyDay, dayFactor);
+        float sunDot = max(dot(rd, sunDir), 0.0);
+        vec3 mieColor = mix(pow(clamp(sceneSun, 0.01, 1.0), vec3(2.0)), vec3(1.0, 0.92, 0.80), sunElevation);
+        sky += mieColor * pow(sunDot, 7.0) * (0.14 + 0.28 * dayFactor);
+        sky += mieColor * pow(sunDot, 64.0) * (0.20 + 0.35 * dayFactor);
+        return sky;
+      }
+
       void main() {
-        float w1 = sin(vWorldPos.x * 0.045 + uTime * 0.9) * cos(vWorldPos.z * 0.045 - uTime * 0.7);
-        vec3 normal = normalize(vec3(w1 * 0.05, 1.0, w1 * 0.05));
-        vec3 viewDir = normalize(cameraPosition - vWorldPos);
-        float dist = length(cameraPosition.xz - vWorldPos.xz);
-        float fresnel = pow(1.0 - max(dot(viewDir, normal), 0.0), 2.8);
-        vec3 deepCol = vec3(0.06, 0.24, 0.44);
-        vec3 reflectDir = reflect(-normalize(uSunDir), normal);
-        float spec = pow(max(dot(viewDir, reflectDir), 0.0), 42.0);
-        float horizonBlend = smoothstep(420.0, 2200.0, dist);
-        vec3 col = mix(deepCol, uSkyColor, clamp(fresnel * 0.65 + horizonBlend * 0.92, 0.0, 1.0));
-        col += uSunColor * spec * (1.0 - horizonBlend) * 0.85;
-        gl_FragColor = vec4(col, 1.0);
+        // Avoid overlap z-fighting under the primary Gerstner ocean mesh
+        vec2 rel = abs(vWorldPos.xz - uHeightMapCenter);
+        float halfInner = uWorldSize * 0.5 - 4.0;
+        if (rel.x < halfInner && rel.y < halfInner) {
+          discard;
+        }
+
+        vec3 V = normalize(cameraPosition - vWorldPos);
+        vec3 L = normalize(uSunDir);
+        float dist = length(cameraPosition - vWorldPos);
+        float detailFade = exp(-dist * 0.0018);
+
+        vec2 uv = vWorldPos.xz * 0.24;
+        float eps = 0.14;
+        float h0 = capillaryFBM(uv, uTime);
+        float hx = capillaryFBM(uv + vec2(eps, 0.0), uTime);
+        float hz = capillaryFBM(uv + vec2(0.0, eps), uTime);
+        vec3 N = normalize(vec3(-(hx - h0) / eps * 0.14 * uChop * detailFade, 1.0, -(hz - h0) / eps * 0.14 * uChop * detailFade));
+
+        float NoV = clamp(dot(N, V), 0.001, 1.0);
+        float NoL = clamp(dot(N, L), 0.0, 1.0);
+        float sunElev = clamp(L.y, 0.0, 1.0);
+        float dayFactor = smoothstep(-0.14, 0.16, L.y);
+        float lightScale = 0.24 + 0.76 * dayFactor;
+
+        float fresnel = 0.02 + 0.98 * pow(1.0 - NoV, 5.0);
+        vec3 R = reflect(-V, N);
+        R.y = max(R.y, 0.015);
+        vec3 skyReflection = evaluateSkyReflection(R, L, uSkyColor, uSunColor, dayFactor);
+
+        vec3 abyssalColor = uAbyssalColor * (0.45 + 0.65 * sunElev) * lightScale;
+        vec3 shallowScatter = uShallowColor * (0.55 + 0.60 * sunElev) * lightScale;
+        vec3 deepWaterCol = mix(shallowScatter, abyssalColor, pow(1.0 - NoV, 0.65));
+
+        vec3 surfaceColor = mix(deepWaterCol, skyReflection, fresnel * 0.54);
+
+        vec3 H = normalize(L + V);
+        float NoH = max(dot(N, H), 0.0);
+        vec3 sunLightCol = mix(
+          vec3(0.62, 0.74, 0.95) * 0.45,
+          mix(vec3(1.0, 0.55, 0.25), vec3(1.0, 0.96, 0.88), sunElev),
+          dayFactor
+        );
+        surfaceColor += sunLightCol * (pow(NoH, 420.0) * 4.2 + pow(NoH, 36.0) * 0.28) * (0.25 + 0.75 * fresnel) * max(NoL, 0.1);
+
+        vec3 fogColor = evaluateSkyReflection(vec3(-V.x, 0.01, -V.z), L, uSkyColor, uSunColor, dayFactor);
+        float fogFactor = 1.0 - exp(-dist * 0.00145);
+        surfaceColor = mix(surfaceColor, fogColor, clamp(fogFactor, 0.0, 1.0));
+
+        surfaceColor = (surfaceColor * (2.51 * surfaceColor + 0.03)) / (surfaceColor * (2.43 * surfaceColor + 0.59) + 0.14);
+        surfaceColor = pow(clamp(surfaceColor, 0.0, 1.0), vec3(1.0 / 2.2));
+        gl_FragColor = vec4(surfaceColor, 1.0);
       }
     `,
   });
+
   // East infinite ocean expanse (x: 118..7118, z: -2600..4400)
   const infOceanEast = new THREE.Mesh(new THREE.PlaneGeometry(7000, 7000, 1, 1), infiniteOceanMat);
   infOceanEast.rotation.x = -Math.PI / 2;
@@ -1064,7 +1501,7 @@ export function buildRegionsWorld(textures: ProceduralTextureSet): RegionsWorldS
   );
 
   // =========================================================================
-  // PER-FRAME UPDATE (Ocean waves, Lighthouse beam, Smoke, Waterfall, Campfire)
+  // PER-FRAME UPDATE (OceanLab Gerstner waves, Lighthouse beam, Smoke, Waterfall, Campfire)
   // =========================================================================
   const update = (
     time: number,
@@ -1075,20 +1512,34 @@ export function buildRegionsWorld(textures: ProceduralTextureSet): RegionsWorldS
     lanternStrength: number,
     camping: CampingState,
     playerX = 0,
-    playerZ = 0
+    playerZ = 0,
+    weather: WeatherType = 'clear'
   ) => {
+    const oceanParams = computeOceanWeatherParams(weather, activeOceanTheme);
     oceanUniforms.uTime.value = time;
     oceanUniforms.uSunDir.value.copy(sunDir);
     oceanUniforms.uSkyColor.value.copy(skyColor);
     oceanUniforms.uSunColor.value.copy(sunColor);
+    oceanUniforms.uAmplitude.value = oceanParams.amplitude;
+    oceanUniforms.uSteepness.value = oceanParams.steepness;
+    oceanUniforms.uWavelength.value = oceanParams.wavelength;
+    oceanUniforms.uSpread.value = oceanParams.spread;
+    oceanUniforms.uChop.value = oceanParams.chop;
+    oceanUniforms.uSSSIntensity.value = oceanParams.sssIntensity;
+    oceanUniforms.uFoamIntensity.value = oceanParams.foamIntensity;
 
     lhBeamPivot.rotation.y = time * 0.55;
     beamMat.opacity = 0.08 + lanternStrength * 0.36;
     warmWinMat.emissiveIntensity = 0.25 + lanternStrength * 1.4;
 
     mooredBoats.forEach((b, idx) => {
-      b.position.y = WATER_LEVEL + 0.24 + Math.sin(time * 1.6 + idx * 1.9) * 0.08;
-      b.rotation.z = Math.sin(time * 1.3 + idx) * 0.04;
+      const bx = 118 + idx * 6.5;
+      const bz = 74 + idx * 5.2;
+      const relBedH = groundHeightAt(bx, bz) - WATER_LEVEL;
+      const sample = evaluateGerstnerOceanCPU(bx, bz, time, oceanParams, relBedH);
+      b.position.y = WATER_LEVEL + 0.24 + sample.y * 0.85;
+      b.rotation.z = -sample.nx * 0.45;
+      b.rotation.x = sample.nz * 0.38;
     });
 
     // Gentle Giant Igloo Man breathing, blinking, sparkles & friendly wave toward the Giant Player!
@@ -1181,8 +1632,11 @@ export function buildRegionsWorld(textures: ProceduralTextureSet): RegionsWorldS
     colliders,
     interactables,
     triggerIglooManWave,
+    setOceanTheme: applyOceanThemeUniforms,
+    getOceanTheme: () => activeOceanTheme,
     update,
     dispose: () => {
+      heightDataTexture.dispose();
       group.traverse((obj) => {
         if (obj instanceof THREE.Mesh) {
           obj.geometry.dispose();

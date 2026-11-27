@@ -12,6 +12,7 @@ import type {
   WeatherType,
 } from './game/types';
 import { HOME_CENTER, LOCATIONS, WATER_LEVEL } from './game/terrain';
+import type { TouchMovePadVisual } from './game/locomotion';
 import { createInitialTrainState } from './game/railway';
 import { createIcelandState } from './game/iceland';
 import { createInitialBoats, createInitialBusState } from './game/vehicles';
@@ -55,8 +56,20 @@ import { ExhibitionVehicleModal } from './components/ExhibitionVehicleModal';
 import { HeroArmoryModal } from './components/HeroArmoryModal';
 import { MidnightFrontierOverlay } from './components/MidnightFrontierOverlay';
 import { WeatherEffectsOverlay } from './components/WeatherEffectsOverlay';
+import { SnowmanTaxiModal } from './components/SnowmanTaxiModal';
+import { WildlifeFieldGuideModal } from './components/WildlifeFieldGuideModal';
 import { createInitialHeroRuntimeState } from './game/heroCharacters';
 import { createInitialBatmobileState } from './game/batmobile';
+import { createInitialSnowmanTaxiState } from './game/snowmanTaxi';
+import {
+  createInitialJetSkiState,
+  createInitialSafariJeepState,
+  createInitialVtolAircraftState,
+} from './game/expeditionVehicles';
+import { createInitialDirtBikeState } from './game/dirtBike';
+import { createInitialHoverGliderState } from './game/hoverGlider';
+import { WILDLIFE_SPECIES_CATALOG } from './game/wildlifeEcosystem';
+import type { OceanThemeId } from './game/gerstnerOcean';
 
 const INITIAL_HUD: HudSnapshot = {
   location: LOCATIONS[0],
@@ -98,6 +111,12 @@ const INITIAL_HUD: HudSnapshot = {
     z: SKY_EXPLORER_PAD_POS.z,
     speedKmh: 0,
     altitudeM: 2.2,
+    boostActive: false,
+  },
+  orangeHeli: {
+    name: 'SSJ Orange Rescue Helicopter',
+    speedKmh: 0,
+    altitudeM: 0,
     boostActive: false,
   },
   camping: {
@@ -160,11 +179,57 @@ const INITIAL_HUD: HudSnapshot = {
     inPersonalHome: false,
     hatchUnlocked: false,
     hatchOpenProgress: 0,
+    exitGateOpen: false,
+    exitGateProgress: 0,
     inVault: false,
+    elevatorPhase: 'idle',
+    elevatorProgress: 0,
+    elevatorY: 0,
     activeVaultCarName: null,
     activeVaultCarSpeedKmh: 0,
     activeVaultCarBoost: false,
+    megaChamberDistanceM: 0,
+    inMegaChamber: false,
   },
+  submarine: {
+    active: false,
+    depthM: 0,
+    speedKmh: 0,
+    submerged: false,
+    searchlightOn: true,
+  },
+  snowmanRescue: {
+    phase: 'idle',
+    oceanSwimSeconds: 0,
+    thresholdSeconds: 30,
+    inOceanWater: false,
+    rescuesCompleted: 0,
+  },
+  snowmanTaxi: createInitialSnowmanTaxiState(),
+  cameraPerspective: 'chase',
+  expedition: {
+    jeep: createInitialSafariJeepState(),
+    vtol: createInitialVtolAircraftState(),
+    sportJetSki: createInitialJetSkiState('sport_yellow'),
+    perfJetSki: createInitialJetSkiState('perf_green'),
+    dirtBike: createInitialDirtBikeState(),
+    hoverGlider: createInitialHoverGliderState(),
+  },
+  wildlife: {
+    totalSpecies: WILDLIFE_SPECIES_CATALOG.length,
+    discoveredIds: ['sambar_deer', 'peacock'],
+    photographedIds: [],
+    nearestTarget: null,
+    activeCount: 56,
+  },
+  underwater: {
+    submerged: false,
+    depthM: 0,
+    vignetteAlpha: 0,
+    reefZoneName: null,
+  },
+  trainDriverNotch: 0,
+  trainGradeType: 'surface',
   stationAnnouncement: null,
 };
 
@@ -177,6 +242,8 @@ export default function App() {
   const [androidAppModalOpen, setAndroidAppModalOpen] = useState(false);
   const [scenicOnly, setScenicOnly] = useState(false);
   const [atmosphereOpen, setAtmosphereOpen] = useState(false);
+  const [hudHidden, setHudHidden] = useState(false);
+  const [oceanTheme, setOceanTheme] = useState<OceanThemeId>('bengal');
   const [settings, setSettings] = useState<GameSettings>(() => loadSettings());
   const [hud, setHud] = useState<HudSnapshot>(INITIAL_HUD);
   const [inspectContent, setInspectContent] = useState<InspectContent | null>(null);
@@ -210,6 +277,9 @@ export default function App() {
     engineRef.current?.setMode(next);
   }, []);
 
+  const touchPadRingRef = useRef<HTMLDivElement | null>(null);
+  const touchPadKnobRef = useRef<HTMLDivElement | null>(null);
+
   const callbacksRef = useRef({
     onHudUpdate: (snapshot: HudSnapshot) => setHud(snapshot),
     onInspect: (content: InspectContent) => {
@@ -225,6 +295,21 @@ export default function App() {
     },
     onModeChangeRequest: (next: GameMode) => {
       applyMode(next);
+    },
+    onTouchPadUpdate: (pad: TouchMovePadVisual) => {
+      const ring = touchPadRingRef.current;
+      const knob = touchPadKnobRef.current;
+      if (!ring || !knob) return;
+      if (pad.active) {
+        ring.style.opacity = '1';
+        ring.style.transform = `translate3d(${pad.originX - 52}px, ${pad.originY - 52}px, 0)`;
+        ring.dataset.active = 'true';
+        knob.style.transform = `translate3d(${pad.knobX}px, ${pad.knobY}px, 0)`;
+      } else {
+        ring.style.opacity = '0';
+        ring.dataset.active = 'false';
+        knob.style.transform = 'translate3d(0px, 0px, 0)';
+      }
     },
     onWebglLost: () => setWebglLost(true),
   });
@@ -243,6 +328,7 @@ export default function App() {
       onInspect: (c) => callbacksRef.current.onInspect(c),
       onOpenExhibitionVehicle: (id) => callbacksRef.current.onOpenExhibitionVehicle(id),
       onModeChangeRequest: (m) => callbacksRef.current.onModeChangeRequest(m),
+      onTouchPadUpdate: (p) => callbacksRef.current.onTouchPadUpdate(p),
       onWebglLost: () => callbacksRef.current.onWebglLost(),
     });
     engineRef.current = engine;
@@ -272,7 +358,15 @@ export default function App() {
       if (tag === 'INPUT' || tag === 'SELECT') return;
       if (e.code === 'KeyT') {
         e.preventDefault();
+        setHudHidden(false);
         setAtmosphereOpen((v) => !v);
+      } else if (e.code === 'KeyZ') {
+        e.preventDefault();
+        setHudHidden((prev) => {
+          const next = !prev;
+          if (next) setAtmosphereOpen(false);
+          return next;
+        });
       } else if (e.code === 'Escape' && atmosphereOpen) {
         e.preventDefault();
         e.stopImmediatePropagation();
@@ -379,6 +473,19 @@ export default function App() {
     engineRef.current?.setSeason(season);
   }, []);
 
+  const handleSelectOceanTheme = useCallback((themeId: OceanThemeId) => {
+    setOceanTheme(themeId);
+    engineRef.current?.setOceanTheme(themeId);
+  }, []);
+
+  const handleToggleHudHidden = useCallback(() => {
+    setHudHidden((prev) => {
+      const next = !prev;
+      if (next) setAtmosphereOpen(false);
+      return next;
+    });
+  }, []);
+
   const handleSetSizeMode = useCallback((sizeMode: SizeMode) => {
     engineRef.current?.setSizeMode(sizeMode);
   }, []);
@@ -417,6 +524,28 @@ export default function App() {
         aria-label="DREAMLINE 3D 5-region open-world railway journey"
       />
 
+      {/* Dynamic Floating Full-Screen Touch Movement Pad (appears under finger anywhere on screen) */}
+      <div
+        ref={touchPadRingRef}
+        aria-hidden="true"
+        data-testid="floating-touch-pad"
+        data-active="false"
+        style={{
+          opacity: 0,
+          width: 104,
+          height: 104,
+          transform: 'translate3d(-200px, -200px, 0)',
+        }}
+        className="fixed top-0 left-0 z-30 pointer-events-none select-none rounded-full bg-[#181327]/55 border border-[#F5D6C0]/45 flex items-center justify-center transition-opacity duration-100"
+      >
+        <div className="w-12 h-12 rounded-full border border-[#F5D6C0]/22" />
+        <div
+          ref={touchPadKnobRef}
+          data-testid="floating-touch-pad-knob"
+          className="absolute w-10 h-10 rounded-full bg-[#F4BE98]/90 border border-[#FFF3E8]"
+        />
+      </div>
+
       <WeatherEffectsOverlay
         weather={hud.weather}
         season={hud.season}
@@ -425,6 +554,7 @@ export default function App() {
           webglLost ||
           hud.inUndergroundCave ||
           hud.inUndergroundMetro ||
+          hud.homeVault.inVault ||
           mode === 'hero_armory' ||
           mode === 'midnight_frontier'
         }
@@ -480,12 +610,14 @@ export default function App() {
             hud={hud}
             muted={settings.muted}
             atmosphereOpen={atmosphereOpen}
+            hudHidden={hudHidden}
+            onToggleHudHidden={handleToggleHudHidden}
             onToggleMap={() => applyMode('map')}
             onOpenTransitMap={() => applyMode('transit_map')}
+            onOpenMobilePhone={() => applyMode('mobile_phone')}
             onToggleAtmosphere={() => setAtmosphereOpen((v) => !v)}
             onToggleMute={handleToggleMute}
             onOpenPause={() => applyMode('paused')}
-            onOpenAndroidApp={() => setAndroidAppModalOpen(true)}
             onToggleGiantSmall={() => engineRef.current?.toggleGiantSmall()}
             onToggleIglooMan={() => engineRef.current?.toggleIglooManForm()}
             onOpenRouteSelect={() => engineRef.current?.openRouteSelection()}
@@ -500,13 +632,12 @@ export default function App() {
             onToggleCamperRoof={() => engineRef.current?.toggleCamperRoof()}
             onToggleCamperLights={() => engineRef.current?.toggleCamperLights()}
             onToggleCamperHazards={() => engineRef.current?.toggleCamperHazards()}
-            onJoystickMove={(r, f) => engineRef.current?.setJoystickInput(r, f)}
+            onJoystickMove={(r, f, active) => engineRef.current?.setJoystickInput(r, f, active)}
             onMobileSprintChange={(active) => engineRef.current?.setMobileSprint(active)}
             onJump={() => engineRef.current?.triggerJump()}
             onFireAk47={() => engineRef.current?.fireDinosaurAk47()}
             onToggleSafariCar={() => engineRef.current?.toggleSafariCar()}
             onSpawnDinoWave={() => engineRef.current?.spawnNextDinosaurWave()}
-            onOpenMobilePhone={() => applyMode('mobile_phone')}
             onClearNavigation={() => engineRef.current?.clearNavigationTarget()}
             onCallBusToNavTarget={() => {
               if (hud.navigation) {
@@ -546,10 +677,14 @@ export default function App() {
             onRepairBatmobile={() => engineRef.current?.repairBatmobileNow()}
             onExitBatmobile={() => engineRef.current?.exitBatmobile()}
             onToggleHomeVaultHatch={() => engineRef.current?.toggleHomeSecretVaultHatch()}
+            onToggleVaultExitGate={() => engineRef.current?.toggleVaultExitPassageGate()}
             onEnterHomeVault={() => engineRef.current?.enterHomeSecretVault()}
             onExitHomeVault={() => engineRef.current?.exitHomeSecretVault()}
             onExitVaultCar={() => engineRef.current?.exitVaultCar()}
             onToggleVaultCarLights={() => engineRef.current?.toggleVaultCarLights()}
+            onSetSubmarineDiveHold={(delta) => engineRef.current?.setSubmarineDiveHold(delta)}
+            onToggleSubmarineSearchlight={() => engineRef.current?.toggleSubmarineSearchlight()}
+            onExitSubmarine={() => engineRef.current?.exitSubmarine()}
             onRideUndergroundMetro={(stationId) =>
               engineRef.current?.rideUndergroundMetroTo(stationId)
             }
@@ -557,20 +692,43 @@ export default function App() {
             onExitAirliner={(withParachute) => engineRef.current?.exitAirliner(withParachute)}
             onToggleParachute={() => engineRef.current?.toggleParachute()}
             onToggleLantern={() => engineRef.current?.togglePersonalLantern()}
+            onOpenSnowmanTaxi={() => applyMode('snowman_taxi')}
+            onMorphSnowmanCycleJetSki={() => engineRef.current?.triggerSnowmanCycleJetSkiMorph()}
+            onCancelSnowmanTaxi={() => engineRef.current?.cancelSnowmanTaxi()}
+            onOpenWildlifeGuide={() => applyMode('wildlife_guide')}
+            onPhotographWildlife={() => engineRef.current?.photographWildlifeInViewfinder()}
+            onBoardExpeditionVehicle={(kind) => engineRef.current?.boardExpeditionVehicle(kind)}
+            onExitExpeditionVehicle={() => engineRef.current?.exitExpeditionVehicle()}
+            onToggleSafariJeepLights={() => engineRef.current?.toggleSafariJeepLights()}
+            onToggleVtolHoverMode={() => engineRef.current?.toggleVtolHoverMode()}
+            onDirtBikeRev={(active) => engineRef.current?.setDirtBikeRev(active)}
+            onToggleDirtBikeKickstand={() => engineRef.current?.toggleDirtBikeKickstand()}
+            onVtolVertical={(asc, desc) => engineRef.current?.setVtolVerticalInput(asc, desc)}
+            onSetCameraPerspective={(cam) => engineRef.current?.setCameraPerspective(cam)}
+            onCycleCameraPerspective={() => engineRef.current?.cycleCameraPerspective()}
+            onSelectHeroPowerOption={(idx) => engineRef.current?.selectHeroPowerOption(idx)}
+            onHeroDodge={() => engineRef.current?.triggerHeroDodge()}
+            onToggleSpiderDive={() => engineRef.current?.toggleSpiderDive()}
+            onSetTrainDriverNotch={(notch) => engineRef.current?.setTrainDriverNotch(notch)}
+            onJumpTrainSection={(sec) => engineRef.current?.jumpTrainToSection(sec)}
+            onBoardSubmarine={() => engineRef.current?.boardSubmarine()}
+            onSetSwimDiveHold={(delta) => engineRef.current?.setSwimDiveHold(delta)}
           />
 
           <AtmospherePanel
-            open={atmosphereOpen}
+            open={atmosphereOpen && !hudHidden}
             timeHours={hud.timeHours}
             activePeriod={hud.period}
             weather={hud.weather}
             season={hud.season}
+            oceanTheme={oceanTheme}
             temperatureC={hud.temperatureC}
             manualTemperatureC={hud.manualTemperatureC}
             dayCycleMode={settings.dayCycleMode}
             onSelectTime={(h) => engineRef.current?.setTimeHours(h)}
             onSelectWeather={handleChangeWeather}
             onSelectSeason={handleChangeSeason}
+            onSelectOceanTheme={handleSelectOceanTheme}
             onSelectTemperature={(tempC) => engineRef.current?.setManualTemperatureC(tempC)}
             onChangeDayCycle={handleChangeDayCycle}
             onClose={() => setAtmosphereOpen(false)}
@@ -603,6 +761,10 @@ export default function App() {
           onToggleNightMode={() => engineRef.current?.toggleNightMode()}
           onOpenTransitMap={() => applyMode('transit_map')}
           onBoardBoat={handleBoardBoat}
+          onBoardSubmarine={() => {
+            engineRef.current?.boardSubmarine();
+            applyMode('playing');
+          }}
           onBoardSkyExplorer={handleBoardSkyExplorer}
           onBoardSkyTaxi={handleBoardSkyTaxi}
           onDriveCamper={handleDriveCamper}
@@ -709,6 +871,7 @@ export default function App() {
           onLaunchParachuteTower={() => engineRef.current?.launchFromParachuteTower()}
           onTeleportMidnightFrontier={() => engineRef.current?.teleportToMidnightFrontier(true)}
           onOpenHouseSecretTunnel={() => engineRef.current?.openHomeSecretTunnelFromPhone()}
+          onGoOutsideSuperheroHouse={() => engineRef.current?.goOutsideSuperheroHouse()}
           onEnterHouseSecretVault={() => engineRef.current?.enterHomeSecretVault()}
           onExitHouseSecretVault={() => engineRef.current?.exitHomeSecretVault()}
           onClose={() => applyMode('playing')}
@@ -781,6 +944,33 @@ export default function App() {
         />
       )}
 
+      {mode === 'snowman_taxi' && (
+        <SnowmanTaxiModal
+          hud={hud}
+          onDispatch={(params) => {
+            engineRef.current?.dispatchSnowmanTaxiToExactCoord(params);
+            applyMode('playing');
+          }}
+          onCancelTaxi={() => engineRef.current?.cancelSnowmanTaxi()}
+          onClose={() => applyMode('playing')}
+        />
+      )}
+
+      {mode === 'wildlife_guide' && (
+        <WildlifeFieldGuideModal
+          wildlife={hud.wildlife}
+          onObserveSpecies={(speciesId, x, z) => {
+            engineRef.current?.observeWildlifeSpecies(speciesId, x, z);
+            applyMode('playing');
+          }}
+          onBoardExpeditionVehicle={(kind) => {
+            engineRef.current?.boardExpeditionVehicle(kind);
+            applyMode('playing');
+          }}
+          onClose={() => applyMode('playing')}
+        />
+      )}
+
       {mode === 'inspect' && inspectContent && (
         <InspectModal
           content={inspectContent}
@@ -803,6 +993,7 @@ export default function App() {
           onChangeSeason={handleChangeSeason}
           onSetSizeMode={handleSetSizeMode}
           onToggleGiantSmall={() => engineRef.current?.toggleGiantSmall()}
+          onOpenMobilePhone={() => applyMode('mobile_phone')}
           onOpenAndroidApp={() => setAndroidAppModalOpen(true)}
           onResume={() => applyMode('playing')}
           onSaveJourney={handleSaveJourney}

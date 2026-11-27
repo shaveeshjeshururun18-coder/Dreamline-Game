@@ -663,19 +663,123 @@ export const HERO_CHARACTERS: readonly HeroCharacterSpec[] = [
   },
 ];
 
+export type HeroDodgeKind = 'none' | 'spider_flip' | 'combat_roll' | 'jet_dash' | 'cape_evade';
+
+export interface HeroPowerOption {
+  id: string;
+  label: string;
+  shortLabel: string;
+  description: string;
+  impactRadius: number;
+  impactForce: number;
+  damage: number;
+  cooldownSec: number;
+  mode: 'blast' | 'web_swing' | 'web_zip' | 'web_cyclone' | 'dive_slingshot' | 'slam' | 'grapple' | 'shield_pulse';
+}
+
+export const HERO_POWER_OPTIONS: Record<HeroCharacterId, readonly HeroPowerOption[]> = {
+  spider_man: [
+    {
+      id: 'spider_pendulum_swing',
+      label: 'Web-Swing',
+      shortLabel: 'Swing',
+      description: 'Insomniac pendulum web-swing with bottom-arc boost & 360° release spin',
+      impactRadius: 6.5,
+      impactForce: 20,
+      damage: 48,
+      cooldownSec: 0.35,
+      mode: 'web_swing',
+    },
+    {
+      id: 'spider_web_zip',
+      label: 'Web-Zip Launch',
+      shortLabel: 'Web-Zip',
+      description: 'Point-launch forward zip + mid-air corkscrew spin boost',
+      impactRadius: 7.5,
+      impactForce: 24,
+      damage: 56,
+      cooldownSec: 0.45,
+      mode: 'web_zip',
+    },
+    {
+      id: 'spider_web_cyclone',
+      label: 'Web Cyclone',
+      shortLabel: 'Cyclone',
+      description: '360° spinning web shockwave that blasts nearby props & structures',
+      impactRadius: 10.5,
+      impactForce: 30,
+      damage: 74,
+      cooldownSec: 0.75,
+      mode: 'web_cyclone',
+    },
+    {
+      id: 'spider_dive_slingshot',
+      label: 'Dive Slingshot',
+      shortLabel: 'Dive',
+      description: 'Nose-down sky-dive into ultra-fast pendulum slingshot swing',
+      impactRadius: 8.5,
+      impactForce: 28,
+      damage: 64,
+      cooldownSec: 0.45,
+      mode: 'dive_slingshot',
+    },
+  ],
+  iron_man_classic: [
+    { id: 'im_repulsor', label: 'Twin Repulsor', shortLabel: 'Repulsor', description: 'Precision palm plasma blasts', impactRadius: 8.5, impactForce: 26, damage: 65, cooldownSec: 0.6, mode: 'blast' },
+    { id: 'im_unibeam', label: 'Chest Unibeam', shortLabel: 'Unibeam', description: 'High-energy chest arc beam burst', impactRadius: 11.0, impactForce: 34, damage: 88, cooldownSec: 1.0, mode: 'blast' },
+    { id: 'im_shield_wave', label: 'Pulse Nova', shortLabel: 'Nova', description: '360° arc shockwave + shield surge', impactRadius: 12.0, impactForce: 36, damage: 78, cooldownSec: 1.1, mode: 'shield_pulse' },
+  ],
+  iron_man_advanced: [
+    { id: 'ima_unibeam', label: 'Unibeam Barrage', shortLabel: 'Unibeam', description: 'Overcharged nano chest laser', impactRadius: 11.5, impactForce: 34, damage: 85, cooldownSec: 0.85, mode: 'blast' },
+    { id: 'ima_nano_missiles', label: 'Nano Micro-Salvo', shortLabel: 'Salvo', description: 'Wide-area nanotech shockwave', impactRadius: 13.0, impactForce: 38, damage: 95, cooldownSec: 1.0, mode: 'blast' },
+    { id: 'ima_emp', label: 'Nano Nova', shortLabel: 'Nova', description: 'Radial plasma field pulse', impactRadius: 14.0, impactForce: 40, damage: 88, cooldownSec: 1.15, mode: 'shield_pulse' },
+  ],
+  hulkbuster: [
+    { id: 'hb_seismic', label: 'Seismic Slam', shortLabel: 'Slam', description: 'Ground-shattering hydraulic shockwave', impactRadius: 14.5, impactForce: 45, damage: 115, cooldownSec: 1.25, mode: 'slam' },
+    { id: 'hb_jackhammer', label: 'Jackhammer Punch', shortLabel: 'Punch', description: 'Heavy forward piston strike', impactRadius: 10.0, impactForce: 48, damage: 105, cooldownSec: 0.85, mode: 'blast' },
+    { id: 'hb_fortress_pulse', label: 'Reactor Quake', shortLabel: 'Quake', description: 'Full-armour radial blast', impactRadius: 16.0, impactForce: 50, damage: 125, cooldownSec: 1.5, mode: 'shield_pulse' },
+  ],
+  batman: [
+    { id: 'bat_grapple', label: 'Grapple Zip', shortLabel: 'Grapple', description: 'High-speed rooftop grapple launcher', impactRadius: 6.5, impactForce: 18, damage: 45, cooldownSec: 0.9, mode: 'grapple' },
+    { id: 'bat_batarang', label: 'Sonic Batarang', shortLabel: 'Batarang', description: 'Explosive concussion batarang wave', impactRadius: 9.0, impactForce: 26, damage: 64, cooldownSec: 0.65, mode: 'blast' },
+    { id: 'bat_smoke_slam', label: 'Tactical Slam', shortLabel: 'Slam', description: 'Cape-drop shockwave strike', impactRadius: 8.0, impactForce: 24, damage: 58, cooldownSec: 0.8, mode: 'slam' },
+  ],
+  superman: [
+    { id: 'sup_solar_blast', label: 'Heat Vision', shortLabel: 'Heat Beam', description: 'Focused solar laser blast', impactRadius: 12.0, impactForce: 38, damage: 95, cooldownSec: 0.8, mode: 'blast' },
+    { id: 'sup_sonic_slam', label: 'Krypton Slam', shortLabel: 'Slam', description: 'Supersonic ground crater shockwave', impactRadius: 15.0, impactForce: 46, damage: 118, cooldownSec: 1.15, mode: 'slam' },
+    { id: 'sup_solar_flare', label: 'Solar Flare', shortLabel: 'Flare', description: 'Radiant 360° golden burst', impactRadius: 14.5, impactForce: 42, damage: 106, cooldownSec: 1.2, mode: 'shield_pulse' },
+  ],
+  steve_harrington: [
+    { id: 'steve_bat_smash', label: 'Nail-Bat Smash', shortLabel: 'Bat Smash', description: 'Signature 1980s spiked bat strike', impactRadius: 5.5, impactForce: 16, damage: 45, cooldownSec: 0.65, mode: 'blast' },
+    { id: 'steve_spin_bat', label: '360° Bat Swing', shortLabel: 'Spin Swing', description: 'Whirling crowd-clearing bat arc', impactRadius: 7.2, impactForce: 22, damage: 62, cooldownSec: 0.9, mode: 'slam' },
+  ],
+};
+
+export function getHeroPowerOptions(heroId: HeroCharacterId): readonly HeroPowerOption[] {
+  return HERO_POWER_OPTIONS[heroId] ?? HERO_POWER_OPTIONS.steve_harrington;
+}
+
 export interface ActiveHeroRuntimeState {
   activeHeroId: HeroCharacterId | null;
   activeOutfitId: HeroOutfitId | null;
+  activePowerIndex: number;
   helmetOpen: boolean;
   isFlying: boolean;
   isGliding: boolean;
   isWebSwinging: boolean;
+  isDiving: boolean;
   energyShieldActive: boolean;
   detectiveVisionActive: boolean;
   spiderSenseActive: boolean;
   powerCooldown: number;
   secondaryTimer: number;
   attackAnimTimer: number;
+  dodgeTimer: number;
+  dodgeKind: HeroDodgeKind;
+  airTrickKind: 'none' | 'front_flip' | 'corkscrew_spin' | 'back_tuck' | 'web_cyclone';
+  airTrickTimer: number;
+  airTrickAngle: number;
+  swingComboCount: number;
   flyVelY: number;
   flightSpeedKmh: number;
 }
@@ -684,16 +788,24 @@ export function createInitialHeroRuntimeState(): ActiveHeroRuntimeState {
   return {
     activeHeroId: null,
     activeOutfitId: null,
+    activePowerIndex: 0,
     helmetOpen: false,
     isFlying: false,
     isGliding: false,
     isWebSwinging: false,
+    isDiving: false,
     energyShieldActive: false,
     detectiveVisionActive: false,
     spiderSenseActive: false,
     powerCooldown: 0,
     secondaryTimer: 0,
     attackAnimTimer: 0,
+    dodgeTimer: 0,
+    dodgeKind: 'none',
+    airTrickKind: 'none',
+    airTrickTimer: 0,
+    airTrickAngle: 0,
+    swingComboCount: 0,
     flyVelY: 0,
     flightSpeedKmh: 0,
   };

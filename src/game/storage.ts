@@ -5,7 +5,7 @@ const SAVE_KEY = 'dreamline_save_v1';
 const POSTCARDS_KEY = 'dreamline_postcards_v1';
 
 export const DEFAULT_SETTINGS: GameSettings = {
-  graphicsQuality: 'high',
+  graphicsQuality: 'ultra',
   resolutionScale: 1.0,
   mouseSensitivity: 1.0,
   cameraSensitivity: 1.0,

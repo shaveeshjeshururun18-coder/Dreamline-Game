@@ -1,6 +1,11 @@
 import type { BoatState, BusState, BusStop } from './types';
 import { LAKE_CENTER, LAKE_RX, LAKE_RZ } from './terrain';
-import { DINOSAUR_HEADLAND_CENTER, DINOSAUR_ISLAND_CENTER } from './dinosaurIsland';
+import {
+  DINOSAUR_HEADLAND_CENTER,
+  DINOSAUR_ISLAND_CENTER,
+  DINOSAUR_ISLAND_LAND_RADIUS,
+  DINOSAUR_MARINA_BOAT_BERTH,
+} from './dinosaurIsland';
 import { clampToBusDrivablePoint } from './busHailing';
 import {
   EXHIBITION_BUS_STOP_POS,
@@ -362,6 +367,20 @@ export function createInitialBoats(): BoatState[] {
       exitX: SOVEREIGN_SHORE_BERTH.exitX,
       exitZ: SOVEREIGN_SHORE_BERTH.exitZ,
     },
+    {
+      id: 'ssj_expedition_boat',
+      name: 'SSJ Expedition Cruiser',
+      tamilName: 'SSJ கடல் பயணப் படகு',
+      waterZone: 'ocean',
+      x: DINOSAUR_MARINA_BOAT_BERTH.x,
+      z: DINOSAUR_MARINA_BOAT_BERTH.z,
+      heading: DINOSAUR_MARINA_BOAT_BERTH.heading,
+      speed: 0,
+      dockX: DINOSAUR_MARINA_BOAT_BERTH.x,
+      dockZ: DINOSAUR_MARINA_BOAT_BERTH.z,
+      exitX: DINOSAUR_MARINA_BOAT_BERTH.exitX,
+      exitZ: DINOSAUR_MARINA_BOAT_BERTH.exitZ,
+    },
   ];
 }
 
@@ -371,11 +390,11 @@ export function isNavigableBoatWater(zone: 'lake' | 'ocean', x: number, z: numbe
     const nz = (z - LAKE_CENTER.z) / (LAKE_RZ - 3.5);
     return nx * nx + nz * nz <= 1.0;
   }
-  // Open ocean east/southeast of Kadalkarai shoreline extending far around Dinosaur Island & Ocean Exhibition Complex
-  const inOceanBounds = x >= 113 && x <= 410 && z >= 4 && z <= 365;
+  // Open unified ocean east/southeast of Kadalkarai shoreline wrapping cleanly around all 360° of the 1 KM Dinosaur Island & Ocean Exhibition Complex
+  const inOceanBounds = x >= 113 && x <= 1560 && z >= -420 && z <= 980 && (z >= 4 || x >= 280);
   const clearOfDinosaurIsland =
-    Math.hypot(x - DINOSAUR_ISLAND_CENTER.x, z - DINOSAUR_ISLAND_CENTER.z) >= 31.0 &&
-    Math.hypot(x - DINOSAUR_HEADLAND_CENTER.x, z - DINOSAUR_HEADLAND_CENTER.z) >= 13.5;
+    Math.hypot(x - DINOSAUR_ISLAND_CENTER.x, z - DINOSAUR_ISLAND_CENTER.z) >= DINOSAUR_ISLAND_LAND_RADIUS + 2.5 &&
+    Math.hypot(x - DINOSAUR_HEADLAND_CENTER.x, z - DINOSAUR_HEADLAND_CENTER.z) >= 15.5;
   const clearOfExhibitionIsland =
     !isInsideExhibitionIsland(x, z, 3.2) && !isOnExhibitionMarinaPier(x, z);
   return inOceanBounds && clearOfDinosaurIsland && clearOfExhibitionIsland;
@@ -425,9 +444,9 @@ export function stepBusManualDrive(
 
   const rawNextX = bus.worldX + Math.sin(heading) * speedMps * cdt;
   const rawNextZ = bus.worldZ + Math.cos(heading) * speedMps * cdt;
-  const safe = clampToBusDrivablePoint(rawNextX, rawNextZ);
+  const safe = bus.inVault ? { x: rawNextX, z: rawNextZ } : clampToBusDrivablePoint(rawNextX, rawNextZ);
   // Damp speed gently if clamped at a water/world edge
-  if (Math.hypot(safe.x - rawNextX, safe.z - rawNextZ) > 0.05) {
+  if (!bus.inVault && Math.hypot(safe.x - rawNextX, safe.z - rawNextZ) > 0.05) {
     speedMps *= 0.55;
   }
 
@@ -489,7 +508,14 @@ export function stepBoatState(
   const nextX = x + Math.sin(heading) * speed * cdt;
   const nextZ = z + Math.cos(heading) * speed * cdt;
 
-  if (isNavigableBoatWater(boat.waterZone, nextX, nextZ)) {
+  if (boat.inVault) {
+    x = nextX;
+    z = nextZ;
+  } else if (isNavigableBoatWater(boat.waterZone, nextX, nextZ)) {
+    x = nextX;
+    z = nextZ;
+  } else if (!isNavigableBoatWater(boat.waterZone, x, z) && Math.hypot(nextX, nextZ) < 1550) {
+    // Boat spawned on land: allow hover-gliding smoothly anywhere including into the Secret Tunnel!
     x = nextX;
     z = nextZ;
   } else {

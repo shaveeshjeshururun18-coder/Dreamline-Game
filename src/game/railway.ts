@@ -12,6 +12,8 @@ import { DESERT_TRAIN_STATION_APPROX } from './desertOasis';
 
 export const SNOW_SUMMIT_RAIL_STATION_APPROX = { x: -100.0, z: -128.0 } as const;
 
+export type RailwayGradeType = 'surface' | 'elevated' | 'subway_tunnel';
+
 export interface SplinePoint {
   x: number;
   y: number;
@@ -19,6 +21,8 @@ export interface SplinePoint {
   tx: number; // unit tangent x
   tz: number; // unit tangent z
   angle: number; // heading in radians (atan2(tx, tz))
+  pitch: number; // vertical climb/descent slope angle in radians (+ = climbing up)
+  gradeType: RailwayGradeType;
 }
 
 export const DREAMLINE_TRAIN_NAME = 'Dreamline Scenic Express';
@@ -48,14 +52,14 @@ const CONTROL_POINTS: Array<{ x: number; z: number }> = [
   { x: 146, z: 158.0 },
   { x: 174, z: 198.0 },
   { x: 204, z: 210.0 }, // Universal Exhibition Complex Ocean Station!
-  { x: 242, z: 206.0 },
-  { x: 270, z: 182.0 },
-  { x: 274, z: 144.0 },
-  { x: 280, z: 106.0 }, // SSJ Dinosaur Island Station!
-  { x: 292, z: 82.0 },
-  { x: 266, z: 58.0 },
-  { x: 216, z: 40.0 },
-  { x: 158, z: 22.0 },
+  { x: 246, z: 204.0 },
+  { x: 294, z: 188.0 },
+  { x: 326, z: 158.0 },
+  { x: 344, z: 128.0 }, // Jurassic Park · SSJ Dinosaur Island Station (NW Headland)!
+  { x: 348, z: 92.0 },
+  { x: 304, z: 62.0 },
+  { x: 236, z: 40.0 },
+  { x: 162, z: 22.0 },
   { x: 104, z: 8.5 },
   { x: 64, z: 3.5 },
   { x: 56.5, z: -5.5 },
@@ -153,6 +157,61 @@ export function forwardDeltaT(fromT: number, toT: number): number {
   return d >= 0 ? d : d + 1;
 }
 
+function smooth01(x: number): number {
+  const c = Math.max(0, Math.min(1, x));
+  return c * c * (3 - 2 * c);
+}
+
+// Continuous real-life combined Surface + Elevated Sky Viaduct + Underground Metro Subway Tunnel ranges (computed after STATIONS)
+let ELEVATED_START_T = 0.048;
+let ELEVATED_END_T = 0.118;
+let SUBWAY_START_T = 0.825;
+let SUBWAY_END_T = 0.935;
+
+export function getRailwayGradeProfile(tNormalized: number): {
+  y: number;
+  gradeType: RailwayGradeType;
+} {
+  const t = wrapT(tNormalized);
+  // 1. Real-Life Elevated Sky Viaduct (+7.4m above countryside/coast between Pachai Meadow & Exhibition)
+  if (t >= ELEVATED_START_T && t <= ELEVATED_END_T) {
+    const span = ELEVATED_END_T - ELEVATED_START_T;
+    const u = (t - ELEVATED_START_T) / span;
+    const rampUp = smooth01(u / 0.24);
+    const rampDown = smooth01((1 - u) / 0.24);
+    const factor = Math.min(rampUp, rampDown);
+    const y = 0.14 + factor * 7.26;
+    return { y, gradeType: y > 0.65 ? 'elevated' : 'surface' };
+  }
+
+  // 2. Real-Life Underground Metro Subway Tunnel (-7.2m beneath western corridor between Thar Desert & Iceland Halt)
+  if (t >= SUBWAY_START_T && t <= SUBWAY_END_T) {
+    const span = SUBWAY_END_T - SUBWAY_START_T;
+    const u = (t - SUBWAY_START_T) / span;
+    const rampDown = smooth01(u / 0.22);
+    const rampUp = smooth01((1 - u) / 0.22);
+    const factor = Math.min(rampDown, rampUp);
+    const y = 0.14 - factor * 7.34;
+    return { y, gradeType: y < -0.45 ? 'subway_tunnel' : 'surface' };
+  }
+
+  return { y: 0.14, gradeType: 'surface' };
+}
+
+export function getCombinedRailSectionT(section: 'surface' | 'elevated' | 'subway'): number {
+  if (section === 'elevated') {
+    return wrapT(ELEVATED_START_T + (ELEVATED_END_T - ELEVATED_START_T) * 0.14);
+  }
+  if (section === 'subway') {
+    return wrapT(SUBWAY_START_T + (SUBWAY_END_T - SUBWAY_START_T) * 0.14);
+  }
+  return STATIONS[0]?.splineT ?? 0;
+}
+
+export function getSubwayTunnelPlatformT(): number {
+  return wrapT((SUBWAY_START_T + SUBWAY_END_T) * 0.5);
+}
+
 export function sampleRailway(tNormalized: number): SplinePoint {
   const t = wrapT(tNormalized);
   const targetLen = t * totalLength;
@@ -179,15 +238,23 @@ export function sampleRailway(tNormalized: number): SplinePoint {
   const len = Math.max(1e-6, Math.hypot(dx, dz));
   const tx = dx / len;
   const tz = dz / len;
-  const y = 0.14;
+
+  const grade = getRailwayGradeProfile(t);
+  const dtStep = 0.0018;
+  const yAhead = getRailwayGradeProfile(t + dtStep).y;
+  const yBehind = getRailwayGradeProfile(t - dtStep).y;
+  const ds = Math.max(0.5, 2 * dtStep * totalLength);
+  const pitch = Math.atan2(yAhead - yBehind, ds);
 
   return {
     x,
-    y,
+    y: grade.y,
     z,
     tx,
     tz,
     angle: Math.atan2(tx, tz),
+    pitch,
+    gradeType: grade.gradeType,
   };
 }
 
@@ -325,6 +392,25 @@ export const STATIONS: StationStop[] = [
     true
   ),
 ].sort((a, b) => a.splineT - b.splineT);
+
+// Dynamically anchor Elevated Sky Viaduct (between Pachai Meadow & Exhibition) and Underground Metro Subway Tunnel (between Thar Desert & Iceland Halt)
+// so all 9 stations stay cleanly level at surface platform elevation y = 0.14m!
+(function calibrateCombinedRailGrades() {
+  const pachai = STATIONS.find((s) => s.id === 'pachai_meadow_halt');
+  const exhibition = STATIONS.find((s) => s.id === 'exhibition_complex_station');
+  if (pachai && exhibition && exhibition.splineT > pachai.splineT + 0.05) {
+    const span = exhibition.splineT - pachai.splineT;
+    ELEVATED_START_T = pachai.splineT + span * 0.14;
+    ELEVATED_END_T = pachai.splineT + span * 0.68;
+  }
+  const thar = STATIONS.find((s) => s.id === 'thar_desert_station');
+  const iceland = STATIONS.find((s) => s.id === 'iceland_gateway');
+  if (thar && iceland && iceland.splineT > thar.splineT + 0.06) {
+    const span = iceland.splineT - thar.splineT;
+    SUBWAY_START_T = thar.splineT + span * 0.18;
+    SUBWAY_END_T = thar.splineT + span * 0.84;
+  }
+})();
 
 export const CROSSING_POINT = sampleRailway(findClosestSplineT(-25, 9.4));
 
@@ -716,33 +802,56 @@ export function getDisembarkPosition(train: TrainState): { x: number; z: number;
  * Supports smooth forward throttle (up to ~95 km/h), gentle reverse, emergency brake,
  * automatic nearest-station tracking, and manual door control when stopped!
  */
+export type TrainDriverNotch = -1 | 0 | 1 | 2 | 3;
+
+export const TRAIN_DRIVER_NOTCH_MPS: Record<TrainDriverNotch, number> = {
+  [-1]: -7.5, // Gentle Reverse (~27 km/h)
+  [0]: 0,     // Full Stop
+  [1]: 8.5,   // Slow Scenic (~31 km/h)
+  [2]: 16.5,  // Smooth Cruise (~59 km/h)
+  [3]: 24.5,  // Express (~88 km/h)
+};
+
 export function stepTrainManualDrive(
   state: TrainState,
   throttleInput: number, // -1 (reverse/brake) .. +1 (forward)
   brakePressed: boolean,
   doorsOpenRequested: boolean,
-  dt: number
+  dt: number,
+  cruiseTargetMps: number | null = null
 ): TrainState {
   const cdt = Math.min(Math.max(dt, 0), 0.1);
   let speedMps = state.speed * RAILWAY_TOTAL_LENGTH;
   let doorOpen = state.doorOpen;
 
   if (brakePressed) {
-    // Strong service brake
-    const decel = 14.5 * cdt;
+    // Smooth, confident service brake
+    const decel = 18.0 * cdt;
     if (Math.abs(speedMps) <= decel) speedMps = 0;
     else speedMps -= Math.sign(speedMps) * decel;
   } else if (Math.abs(throttleInput) > 0.04) {
     // Close doors automatically when applying throttle
     if (doorOpen > 0.05) {
-      doorOpen = Math.max(0, doorOpen - cdt * 2.5);
+      doorOpen = Math.max(0, doorOpen - cdt * 3.0);
     }
-    const accelRate = throttleInput > 0 ? 9.2 : 10.5;
+    const accelRate = throttleInput > 0 ? 12.5 : 13.5;
     speedMps += throttleInput * accelRate * cdt;
     speedMps = Math.max(TRAIN_DRIVER_MAX_REVERSE_MPS, Math.min(TRAIN_DRIVER_MAX_MPS, speedMps));
+  } else if (cruiseTargetMps !== null) {
+    // Effortless Driver Cruise-Notch Assist: smoothly glides to the chosen speed notch & holds steady!
+    if (Math.abs(cruiseTargetMps) > 0.2 && doorOpen > 0.05) {
+      doorOpen = Math.max(0, doorOpen - cdt * 3.0);
+    }
+    const diff = cruiseTargetMps - speedMps;
+    const rate = (Math.abs(cruiseTargetMps) < 0.1 ? 14.0 : 9.5) * cdt;
+    if (Math.abs(diff) <= rate) {
+      speedMps = cruiseTargetMps;
+    } else {
+      speedMps += Math.sign(diff) * rate;
+    }
   } else {
-    // Smooth railway rolling coast drag
-    const drag = 1.85 * cdt;
+    // Gentle coast hold so the train doesn't abruptly stall between key taps
+    const drag = 0.65 * cdt;
     if (Math.abs(speedMps) <= drag) speedMps = 0;
     else speedMps -= Math.sign(speedMps) * drag;
   }

@@ -1,0 +1,1837 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>49cc Petrol Powered Dirt Bike - Exact 3D Model & Simulator</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Teko:wght@500;700&family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        * {
+            user-select: none;
+            -webkit-user-select: none;
+            box-sizing: border-box;
+        }
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #18130f;
+            font-family: 'Inter', sans-serif;
+            color: #fff;
+        }
+        .font-racing {
+            font-family: 'Teko', sans-serif;
+            letter-spacing: 0.04em;
+        }
+        #canvas-container {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+        }
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            touch-action: none;
+        }
+        .glass-panel {
+            background: rgba(20, 16, 13, 0.82);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 115, 0, 0.28);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6);
+        }
+        /* Custom Range Sliders */
+        input[type=range] {
+            -webkit-appearance: none;
+            appearance: none;
+            background: rgba(255, 255, 255, 0.12);
+            height: 6px;
+            border-radius: 999px;
+            outline: none;
+        }
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #ff7b00, #ff3c00);
+            cursor: pointer;
+            border: 2px solid #fff;
+            box-shadow: 0 0 10px rgba(255, 102, 0, 0.8);
+        }
+        .ctrl-btn {
+            background: linear-gradient(180deg, rgba(45, 38, 33, 0.9) 0%, rgba(25, 20, 17, 0.95) 100%);
+            border: 1px solid rgba(255, 123, 0, 0.4);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.12);
+            transition: all 0.12s ease;
+        }
+        .ctrl-btn:active, .ctrl-btn.active-btn {
+            background: linear-gradient(180deg, #ff6a00 0%, #c83e00 100%);
+            border-color: #ffae66;
+            transform: translateY(2px) scale(0.97);
+            box-shadow: 0 0 16px rgba(255, 106, 0, 0.6);
+        }
+    </style>
+</head>
+<body>
+
+    <!-- 3D Viewport -->
+    <div id="canvas-container"></div>
+
+    <!-- Top Header Overlay -->
+    <div class="fixed top-0 left-0 right-0 z-10 pointer-events-none p-3 sm:p-4 flex flex-wrap items-start justify-between gap-2">
+        <!-- Brand & Specs Badge -->
+        <div class="glass-panel rounded-2xl px-4 py-2.5 pointer-events-auto flex items-center gap-3">
+            <div class="w-3 h-11 rounded-full bg-gradient-to-b from-orange-400 via-orange-600 to-red-700 shadow-lg shadow-orange-600/40"></div>
+            <div>
+                <div class="flex items-center gap-2">
+                    <h1 class="font-racing text-2xl sm:text-3xl leading-none text-white tracking-wider">49CC PETROL DIRT BIKE</h1>
+                    <span class="text-[10px] font-bold uppercase px-2 py-0.5 rounded-full bg-orange-500/20 text-orange-400 border border-orange-500/40">Orion Mini</span>
+                </div>
+                <p class="text-[11px] text-amber-200/70">Drag to Rotate • Scroll/Pinch to Zoom • Use Controls or WASD / Arrows</p>
+            </div>
+        </div>
+
+        <!-- Quick Camera & Mode Switcher -->
+        <div class="glass-panel rounded-2xl p-1.5 pointer-events-auto flex flex-wrap items-center gap-1.5">
+            <button id="btn-cam-studio" onclick="setCameraPreset('studio')" class="ctrl-btn active-btn text-xs font-semibold px-3 py-1.5 rounded-xl text-white">
+                Studio View
+            </button>
+            <button id="btn-cam-cockpit" onclick="setCameraPreset('cockpit')" class="ctrl-btn text-xs font-semibold px-3 py-1.5 rounded-xl text-white">
+                Handlebar POV
+            </button>
+            <button id="btn-cam-chase" onclick="setCameraPreset('chase')" class="ctrl-btn text-xs font-semibold px-3 py-1.5 rounded-xl text-white">
+                Chase Cam
+            </button>
+            <button id="btn-cam-engine" onclick="setCameraPreset('engine')" class="ctrl-btn text-xs font-semibold px-3 py-1.5 rounded-xl text-white">
+                Engine Detail
+            </button>
+        </div>
+    </div>
+
+    <!-- Right Telemetry & Mechanical Inspector Panel -->
+    <div class="fixed top-20 right-3 sm:right-4 z-10 w-64 sm:w-72 glass-panel rounded-2xl p-3.5 pointer-events-auto hidden md:flex flex-col gap-3">
+        <div class="flex items-center justify-between border-b border-white/10 pb-2">
+            <span class="font-racing text-xl text-orange-400 tracking-wide">MECHANICAL CONTROLS</span>
+            <span id="engine-status-pill" class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">ENGINE RUNNING</span>
+        </div>
+
+        <!-- Live Gauges -->
+        <div class="grid grid-cols-3 gap-2 text-center bg-black/40 p-2 rounded-xl border border-white/5">
+            <div>
+                <div class="text-[10px] text-gray-400 uppercase">Speed</div>
+                <div id="hud-speed" class="font-racing text-2xl text-white leading-tight">0 <span class="text-xs text-orange-400">KM/H</span></div>
+            </div>
+            <div>
+                <div class="text-[10px] text-gray-400 uppercase">RPM</div>
+                <div id="hud-rpm" class="font-racing text-2xl text-orange-400 leading-tight">1850</div>
+            </div>
+            <div>
+                <div class="text-[10px] text-gray-400 uppercase">Steer Angle</div>
+                <div id="hud-steer" class="font-racing text-2xl text-white leading-tight">0°</div>
+            </div>
+        </div>
+
+        <!-- Direct Steering Slider -->
+        <div class="flex flex-col gap-1">
+            <div class="flex justify-between text-xs">
+                <span class="text-gray-300 font-medium">Handlebar Steering</span>
+                <button onclick="resetSteering()" class="text-[11px] text-orange-400 hover:underline">Center</button>
+            </div>
+            <input id="slider-steer" type="range" min="-38" max="38" value="14" step="0.5" class="w-full">
+        </div>
+
+        <!-- Front USD Fork Compression Slider -->
+        <div class="flex flex-col gap-1">
+            <div class="flex justify-between text-xs">
+                <span class="text-gray-300 font-medium">USD Fork & Shock Load</span>
+                <span id="fork-val" class="text-[11px] text-orange-400">0%</span>
+            </div>
+            <input id="slider-suspension" type="range" min="0" max="100" value="0" class="w-full">
+        </div>
+
+        <!-- Interactive Toggles -->
+        <div class="grid grid-cols-2 gap-2 pt-1">
+            <button id="btn-kickstand" onclick="toggleKickstand()" class="ctrl-btn active-btn text-xs font-semibold py-2 px-2.5 rounded-xl flex items-center justify-center gap-1.5">
+                <span>🦵</span> <span id="kickstand-label">Kickstand: DOWN</span>
+            </button>
+            <button id="btn-engine" onclick="toggleEngine()" class="ctrl-btn active-btn text-xs font-semibold py-2 px-2.5 rounded-xl flex items-center justify-center gap-1.5">
+                <span>🔥</span> <span id="engine-label">2-Stroke: ON</span>
+            </button>
+            <button id="btn-sound" onclick="toggleAudio()" class="ctrl-btn text-xs font-semibold py-2 px-2.5 rounded-xl flex items-center justify-center gap-1.5">
+                <span>🔊</span> <span id="sound-label">Engine Audio: OFF</span>
+            </button>
+            <button id="btn-reset-pos" onclick="resetBikePosition()" class="ctrl-btn text-xs font-semibold py-2 px-2.5 rounded-xl flex items-center justify-center gap-1.5">
+                <span>🎯</span> <span>Reset Pose</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- Bottom Driving & Steering Deck (Mobile + Desktop Friendly) -->
+    <div class="fixed bottom-3 left-3 right-3 z-10 pointer-events-none flex flex-col sm:flex-row items-center justify-between gap-3">
+        
+        <!-- Left: Steering Controls -->
+        <div class="glass-panel rounded-2xl p-2.5 pointer-events-auto flex items-center gap-2 w-full sm:w-auto justify-between sm:justify-start">
+            <div class="flex items-center gap-2">
+                <button id="btn-left" class="ctrl-btn w-14 h-12 sm:w-16 sm:h-14 rounded-xl flex flex-col items-center justify-center text-white font-bold">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/></svg>
+                    <span class="text-[10px] text-orange-300">STEER L</span>
+                </button>
+                <button id="btn-right" class="ctrl-btn w-14 h-12 sm:w-16 sm:h-14 rounded-xl flex flex-col items-center justify-center text-white font-bold">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
+                    <span class="text-[10px] text-orange-300">STEER R</span>
+                </button>
+            </div>
+
+            <!-- Mobile quick toggles -->
+            <div class="flex md:hidden items-center gap-1.5">
+                <button onclick="toggleKickstand()" id="btn-kickstand-mob" class="ctrl-btn active-btn px-2.5 py-2 rounded-xl text-[11px] font-semibold">
+                    Stand
+                </button>
+                <button onclick="toggleAudio()" id="btn-sound-mob" class="ctrl-btn px-2.5 py-2 rounded-xl text-[11px] font-semibold">
+                    🔊
+                </button>
+                <button onclick="resetBikePosition()" class="ctrl-btn px-2.5 py-2 rounded-xl text-[11px] font-semibold">
+                    Reset
+                </button>
+            </div>
+        </div>
+
+        <!-- Center Mini Telemetry Bar for Mobile / Quick Info -->
+        <div class="glass-panel rounded-2xl px-4 py-2 pointer-events-auto hidden lg:flex items-center gap-5 text-xs">
+            <div class="flex items-center gap-2">
+                <span class="w-2.5 h-2.5 rounded-full bg-orange-500 animate-pulse"></span>
+                <span class="text-gray-300">Inverted USD Orange Forks</span>
+            </div>
+            <div class="text-gray-600">|</div>
+            <div class="text-gray-300">Wave Disc Rotors + Red Calipers</div>
+            <div class="text-gray-600">|</div>
+            <div class="text-gray-300">49cc 2-Stroke Pull-Start + Expansion Pipe</div>
+        </div>
+
+        <!-- Right: Throttle, Brake & Rev Controls -->
+        <div class="glass-panel rounded-2xl p-2.5 pointer-events-auto flex items-center gap-2 w-full sm:w-auto justify-end">
+            <button id="btn-rev" class="ctrl-btn px-3.5 h-12 sm:h-14 rounded-xl flex flex-col items-center justify-center text-amber-300 font-bold">
+                <span class="text-sm">💨 REV</span>
+                <span class="text-[10px] text-gray-300">Neutral Twist</span>
+            </button>
+            <button id="btn-brake" class="ctrl-btn w-16 h-12 sm:w-20 sm:h-14 rounded-xl flex flex-col items-center justify-center text-red-400 font-bold border-red-500/40">
+                <span class="text-sm">BRAKE</span>
+                <span class="text-[10px] text-gray-300">Disc [Space]</span>
+            </button>
+            <button id="btn-throttle" class="ctrl-btn w-20 h-12 sm:w-24 sm:h-14 rounded-xl flex flex-col items-center justify-center text-orange-400 font-bold border-orange-500/60">
+                <span class="text-sm">THROTTLE</span>
+                <span class="text-[10px] text-gray-200">Ride [W / ↑]</span>
+            </button>
+        </div>
+
+    </div>
+
+    <script>
+        // ============================================================================
+        // 1. PROCEDURAL TEXTURES (MATCHING THE ORION 49CC DIRT BIKE GRAPHICS)
+        // ============================================================================
+        function createOrionDecalTexture(type) {
+            const canvas = document.createElement('canvas');
+            canvas.width = 512;
+            canvas.height = 512;
+            const ctx = canvas.getContext('2d');
+
+            // Base vibrant KTM/Orion orange
+            ctx.fillStyle = '#ff5a00';
+            ctx.fillRect(0, 0, 512, 512);
+
+            // White and black aggressive jagged motocross vector shards
+            ctx.fillStyle = '#ffffff';
+            ctx.beginPath();
+            ctx.moveTo(20, 40);
+            ctx.lineTo(480, 110);
+            ctx.lineTo(390, 290);
+            ctx.lineTo(60, 240);
+            ctx.closePath();
+            ctx.fill();
+
+            // Black sharp slashes
+            ctx.fillStyle = '#111111';
+            ctx.beginPath();
+            ctx.moveTo(0, 0);
+            ctx.lineTo(240, 0);
+            ctx.lineTo(130, 490);
+            ctx.lineTo(0, 420);
+            ctx.closePath();
+            ctx.fill();
+
+            ctx.beginPath();
+            ctx.moveTo(270, 50);
+            ctx.lineTo(512, 180);
+            ctx.lineTo(512, 460);
+            ctx.lineTo(210, 360);
+            ctx.closePath();
+            ctx.fill();
+
+            // Orange dynamic inner spears
+            ctx.fillStyle = '#ff6600';
+            ctx.beginPath();
+            ctx.moveTo(70, 120);
+            ctx.lineTo(450, 210);
+            ctx.lineTo(340, 370);
+            ctx.lineTo(110, 270);
+            ctx.closePath();
+            ctx.fill();
+
+            // White racing stripes
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 12;
+            ctx.beginPath();
+            ctx.moveTo(30, 390);
+            ctx.lineTo(490, 140);
+            ctx.stroke();
+
+            ctx.strokeStyle = '#111111';
+            ctx.lineWidth = 6;
+            ctx.beginPath();
+            ctx.moveTo(30, 410);
+            ctx.lineTo(490, 160);
+            ctx.stroke();
+
+            // Stylized "ORION 49" racing typography
+            ctx.save();
+            ctx.translate(256, 245);
+            ctx.rotate(-0.18);
+            ctx.font = 'italic 900 72px Impact, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.lineWidth = 14;
+            ctx.strokeStyle = '#090909';
+            ctx.strokeText(type === 'plate' ? 'ORION' : 'ORION 49', 0, 0);
+            ctx.fillStyle = '#ff6a00';
+            ctx.fillText(type === 'plate' ? 'ORION' : 'ORION 49', 0, 0);
+
+            ctx.font = 'bold 28px Arial, sans-serif';
+            ctx.fillStyle = '#ffffff';
+            ctx.fillText('MINIXIN RACING', 0, 38);
+            ctx.restore();
+
+            const tex = new THREE.CanvasTexture(canvas);
+            tex.anisotropy = 4;
+            return tex;
+        }
+
+        function createBarPadTexture() {
+            const canvas = document.createElement('canvas');
+            canvas.width = 512;
+            canvas.height = 128;
+            const ctx = canvas.getContext('2d');
+
+            // Crimson / Red pad background as seen on the crossbar in photo
+            ctx.fillStyle = '#cc1122';
+            ctx.fillRect(0, 0, 512, 128);
+
+            // Black racing grid stripes
+            ctx.fillStyle = '#151515';
+            ctx.fillRect(0, 0, 512, 22);
+            ctx.fillRect(0, 106, 512, 22);
+
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 3;
+            for (let x = 20; x < 500; x += 45) {
+                ctx.strokeRect(x, 34, 34, 60);
+            }
+
+            ctx.font = 'italic 900 44px Impact, sans-serif';
+            ctx.fillStyle = '#ffffff';
+            ctx.textAlign = 'center';
+            ctx.fillText('PRO-DIRT 49CC', 256, 80);
+
+            return new THREE.CanvasTexture(canvas);
+        }
+
+        function createStudioFloorTexture() {
+            const canvas = document.createElement('canvas');
+            canvas.width = 1024;
+            canvas.height = 1024;
+            const ctx = canvas.getContext('2d');
+
+            // Warm sandy brown concrete/dirt studio floor matching the reference photo
+            const grad = ctx.createRadialGradient(512, 512, 60, 512, 512, 512);
+            grad.addColorStop(0, '#9c7a54');
+            grad.addColorStop(0.55, '#725638');
+            grad.addColorStop(1, '#362718');
+            ctx.fillStyle = grad;
+            ctx.fillRect(0, 0, 1024, 1024);
+
+            // Subtle expansion joints and tire track dust marks
+            ctx.strokeStyle = 'rgba(30, 18, 8, 0.35)';
+            ctx.lineWidth = 3;
+            for (let i = 128; i < 1024; i += 256) {
+                ctx.beginPath();
+                ctx.moveTo(0, i);
+                ctx.lineTo(1024, i);
+                ctx.stroke();
+
+                ctx.beginPath();
+                ctx.moveTo(i, 0);
+                ctx.lineTo(i, 1024);
+                ctx.stroke();
+            }
+
+            // Knobby tire track imprints
+            ctx.fillStyle = 'rgba(40, 26, 14, 0.25)';
+            for (let x = 80; x < 960; x += 28) {
+                ctx.fillRect(x, 580 + Math.sin(x * 0.01) * 15, 16, 8);
+                ctx.fillRect(x + 10, 594 + Math.sin(x * 0.01) * 15, 16, 8);
+            }
+
+            const tex = new THREE.CanvasTexture(canvas);
+            tex.wrapS = THREE.RepeatWrapping;
+            tex.wrapT = THREE.RepeatWrapping;
+            tex.repeat.set(16, 16);
+            return tex;
+        }
+
+        // ============================================================================
+        // 2. SYNTHESIZED 49CC 2-STROKE ENGINE AUDIO (WEB AUDIO API)
+        // ============================================================================
+        let audioCtx = null;
+        let engineOsc1 = null;
+        let engineOsc2 = null;
+        let engineGain = null;
+        let soundEnabled = false;
+
+        function initAudio() {
+            if (audioCtx) return;
+            const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+            audioCtx = new AudioContextClass();
+
+            engineOsc1 = audioCtx.createOscillator();
+            engineOsc2 = audioCtx.createOscillator();
+            const filter = audioCtx.createBiquadFilter();
+            engineGain = audioCtx.createGain();
+
+            // 2-stroke crisp raspy tone
+            engineOsc1.type = 'sawtooth';
+            engineOsc2.type = 'square';
+            engineOsc1.frequency.value = 58;
+            engineOsc2.frequency.value = 116;
+
+            filter.type = 'bandpass';
+            filter.frequency.value = 420;
+            filter.Q.value = 1.8;
+
+            engineGain.gain.value = 0.0;
+
+            engineOsc1.connect(filter);
+            engineOsc2.connect(filter);
+            filter.connect(engineGain);
+            engineGain.connect(audioCtx.destination);
+
+            engineOsc1.start();
+            engineOsc2.start();
+        }
+
+        function updateEngineSound(rpm, running) {
+            if (!audioCtx || !soundEnabled || !running) {
+                if (engineGain && audioCtx) {
+                    engineGain.gain.setTargetAtTime(0, audioCtx.currentTime, 0.05);
+                }
+                return;
+            }
+            const baseFreq = 38 + (rpm / 9000) * 165;
+            const popJitter = (Math.random() - 0.5) * 4;
+            engineOsc1.frequency.setTargetAtTime(baseFreq + popJitter, audioCtx.currentTime, 0.03);
+            engineOsc2.frequency.setTargetAtTime((baseFreq * 2.02) + popJitter, audioCtx.currentTime, 0.03);
+            const vol = 0.04 + (rpm / 9000) * 0.09;
+            engineGain.gain.setTargetAtTime(vol, audioCtx.currentTime, 0.04);
+        }
+
+        function toggleAudio() {
+            initAudio();
+            if (audioCtx && audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
+            soundEnabled = !soundEnabled;
+            const btn = document.getElementById('btn-sound');
+            const label = document.getElementById('sound-label');
+            const mobBtn = document.getElementById('btn-sound-mob');
+            if (soundEnabled) {
+                btn.classList.add('active-btn');
+                label.textContent = 'Engine Audio: ON';
+                if (mobBtn) mobBtn.classList.add('active-btn');
+            } else {
+                btn.classList.remove('active-btn');
+                label.textContent = 'Engine Audio: OFF';
+                if (mobBtn) mobBtn.classList.remove('active-btn');
+            }
+        }
+
+        // ============================================================================
+        // 3. SCENE, CAMERA, LIGHTING & MATERIALS
+        // ============================================================================
+        let scene, camera, renderer;
+        let bikeRoot, bikeLeanGroup, chassisGroup;
+        let steeringPivotGroup, frontSuspensionLowerGroup, frontWheelSpinGroup, rearWheelSpinGroup;
+        let frontBrakeLeverPivot, rearBrakeLeverPivot, throttleGripGroup;
+        let kickstandPivotGroup, engineBlockGroup, rearSwingarmPivot, tetherCordMesh;
+        let contactShadowMesh;
+        const smokeParticles = [];
+
+        // State Variables
+        const state = {
+            steerAngleDeg: 14,       // Initial slight left turn matching the promo photo!
+            targetSteerDeg: 14,
+            forkCompression: 0,      // 0 to 1
+            kickstandDown: true,
+            engineRunning: true,
+            rpm: 1850,
+            speed: 0,                // m/s
+            bikeX: 0,
+            bikeZ: 0,
+            bikeHeading: 0.25,       // Slight angle matching photo perspective
+            bikeLean: -0.09,         // Resting on left kickstand initially
+            wheelRotationF: 0,
+            wheelRotationR: 0,
+            cameraMode: 'studio',    // 'studio', 'cockpit', 'chase', 'engine'
+            keys: {
+                left: false,
+                right: false,
+                throttle: false,
+                brake: false,
+                rev: false
+            }
+        };
+
+        // Orbit Camera Control Variables
+        const orbit = {
+            isDragging: false,
+            prevX: 0,
+            prevY: 0,
+            theta: -1.18,            // Exact side-3/4 angle from the uploaded image!
+            phi: 1.38,
+            radius: 2.35,
+            target: new THREE.Vector3(0, 0.56, 0)
+        };
+
+        // Shared High-Detail Materials
+        const mats = {};
+
+        function initMaterials() {
+            const decalTex = createOrionDecalTexture('fairing');
+            const plateTex = createOrionDecalTexture('plate');
+            const barPadTex = createBarPadTexture();
+
+            // Anodized Metallic Orange (USD Forks & Alloy Rims)
+            mats.anodizedOrange = new THREE.MeshStandardMaterial({
+                color: 0xff5900,
+                metalness: 0.78,
+                roughness: 0.22
+            });
+
+            // Glossy Orange Plastic (Fenders & Fairings)
+            mats.glossOrange = new THREE.MeshStandardMaterial({
+                color: 0xff5500,
+                metalness: 0.15,
+                roughness: 0.18
+            });
+
+            // Orion Graphic Fairing Material
+            mats.graphicFairing = new THREE.MeshStandardMaterial({
+                map: decalTex,
+                metalness: 0.12,
+                roughness: 0.22
+            });
+
+            mats.numberPlate = new THREE.MeshStandardMaterial({
+                map: plateTex,
+                metalness: 0.1,
+                roughness: 0.25
+            });
+
+            mats.barPad = new THREE.MeshStandardMaterial({
+                map: barPadTex,
+                roughness: 0.4
+            });
+
+            // Deep Matte Rubber for Knobby Tires & Grips
+            mats.tireRubber = new THREE.MeshStandardMaterial({
+                color: 0x161618,
+                metalness: 0.05,
+                roughness: 0.85
+            });
+
+            // Black Powder-Coated Frame & Swingarm
+            mats.blackFrame = new THREE.MeshStandardMaterial({
+                color: 0x141416,
+                metalness: 0.45,
+                roughness: 0.35
+            });
+
+            // Textured Black Vinyl Seat
+            mats.seatVinyl = new THREE.MeshStandardMaterial({
+                color: 0x18181b,
+                metalness: 0.08,
+                roughness: 0.65
+            });
+
+            // Cast Aluminum Engine Cylinder & Caliper Brackets
+            mats.castAluminum = new THREE.MeshStandardMaterial({
+                color: 0xcfd6de,
+                metalness: 0.82,
+                roughness: 0.32
+            });
+
+            // Polished Chrome / Stanchions / Brake Rotor
+            mats.chrome = new THREE.MeshStandardMaterial({
+                color: 0xffffff,
+                metalness: 0.94,
+                roughness: 0.12
+            });
+
+            // Red Brake Caliper & Red Kill-Switch Tether Cord
+            mats.crimsonRed = new THREE.MeshStandardMaterial({
+                color: 0xd91424,
+                metalness: 0.35,
+                roughness: 0.25
+            });
+        }
+
+        // ============================================================================
+        // 4. MINUTE-DETAIL 3D COMPONENT BUILDERS
+        // ============================================================================
+
+        /**
+         * Builds the Knobby Dirt Bike Wheel (Front or Rear)
+         * Includes: Deep off-road tire carcass, 3 rows of chunky tread blocks,
+         * Orange 5-twin-spoke alloy rim, polished lip, wave disc brake rotor, and sprocket.
+         */
+        function buildDirtBikeWheel(radius, tireTubeRadius, isFront) {
+            const wheelGroup = new THREE.Group();
+
+            // 1. Tire Carcass Torus
+            const tireGeo = new THREE.TorusGeometry(radius, tireTubeRadius, 20, 48);
+            const tireMesh = new THREE.Mesh(tireGeo, mats.tireRubber);
+            tireMesh.castShadow = true;
+            tireMesh.receiveShadow = true;
+            wheelGroup.add(tireMesh);
+
+            // 2. Aggressive Knobby Off-Road Tread Blocks (Center + Left/Right Shoulder lugs)
+            const numKnobs = 28;
+            const centerKnobGeo = new THREE.BoxGeometry(0.026, 0.018, tireTubeRadius * 0.95);
+            const sideKnobGeo = new THREE.BoxGeometry(0.022, 0.018, tireTubeRadius * 0.55);
+
+            for (let i = 0; i < numKnobs; i++) {
+                const angle = (i / numKnobs) * Math.PI * 2;
+                const rOuter = radius + tireTubeRadius - 0.003;
+
+                // Center Lug
+                const cLug = new THREE.Mesh(centerKnobGeo, mats.tireRubber);
+                cLug.position.set(Math.cos(angle) * rOuter, Math.sin(angle) * rOuter, 0);
+                cLug.rotation.z = angle + Math.PI / 2;
+                cLug.castShadow = true;
+                wheelGroup.add(cLug);
+
+                // Staggered Left & Right Shoulder Lugs
+                const sideAngle = angle + (Math.PI / numKnobs);
+                const rSide = radius + tireTubeRadius * 0.82;
+
+                const lLug = new THREE.Mesh(sideKnobGeo, mats.tireRubber);
+                lLug.position.set(
+                    Math.cos(sideAngle) * rSide,
+                    Math.sin(sideAngle) * rSide,
+                    tireTubeRadius * 0.65
+                );
+                lLug.rotation.z = sideAngle + Math.PI / 2;
+                lLug.rotation.x = 0.48;
+                wheelGroup.add(lLug);
+
+                const rLug = new THREE.Mesh(sideKnobGeo, mats.tireRubber);
+                rLug.position.set(
+                    Math.cos(sideAngle) * rSide,
+                    Math.sin(sideAngle) * rSide,
+                    -tireTubeRadius * 0.65
+                );
+                rLug.rotation.z = sideAngle + Math.PI / 2;
+                rLug.rotation.x = -0.48;
+                wheelGroup.add(rLug);
+            }
+
+            // 3. Orange Anodized Alloy Rim Barrel & Polished Outer Lip
+            const rimRadius = radius - tireTubeRadius + 0.012;
+            const rimOuterRing = new THREE.Mesh(
+                new THREE.TorusGeometry(rimRadius, 0.013, 14, 40),
+                mats.anodizedOrange
+            );
+            wheelGroup.add(rimOuterRing);
+
+            const silverLipF = new THREE.Mesh(
+                new THREE.TorusGeometry(rimRadius + 0.006, 0.004, 10, 40),
+                mats.chrome
+            );
+            silverLipF.position.z = 0.022;
+            wheelGroup.add(silverLipF);
+
+            const silverLipB = silverLipF.clone();
+            silverLipB.position.z = -0.022;
+            wheelGroup.add(silverLipB);
+
+            // 4. Center Hub
+            const hubMesh = new THREE.Mesh(
+                new THREE.CylinderGeometry(0.036, 0.036, 0.085, 20),
+                mats.anodizedOrange
+            );
+            hubMesh.rotation.x = Math.PI / 2;
+            wheelGroup.add(hubMesh);
+
+            // 5. 5-Twin-Spoke (10 Angled Spokes in V-pairs) matching the photo's orange wheels
+            const spokeLength = rimRadius - 0.032;
+            const spokeGeo = new THREE.CylinderGeometry(0.0055, 0.0075, spokeLength, 10);
+
+            for (let i = 0; i < 5; i++) {
+                const baseAngle = (i / 5) * Math.PI * 2;
+                [-0.17, 0.17].forEach((offset) => {
+                    const spoke = new THREE.Mesh(spokeGeo, mats.anodizedOrange);
+                    const midR = 0.032 + spokeLength * 0.5;
+                    const a = baseAngle + offset;
+                    spoke.position.set(Math.cos(a) * midR, Math.sin(a) * midR, 0);
+                    spoke.rotation.z = a - Math.PI / 2 + offset * 0.45;
+                    spoke.castShadow = true;
+                    wheelGroup.add(spoke);
+                });
+            }
+
+            // 6. Perforated Wave-Style Silver Disc Brake Rotor (Left side = +Z)
+            const rotorRadius = radius * 0.58;
+            const rotorGeo = new THREE.CylinderGeometry(rotorRadius, rotorRadius, 0.005, 28);
+            const rotorMesh = new THREE.Mesh(rotorGeo, mats.chrome);
+            rotorMesh.rotation.x = Math.PI / 2;
+            rotorMesh.position.z = 0.044;
+            wheelGroup.add(rotorMesh);
+
+            // Rotor lightening cutouts / inner carrier ring
+            const carrierMesh = new THREE.Mesh(
+                new THREE.TorusGeometry(rotorRadius * 0.65, 0.006, 8, 24),
+                mats.blackFrame
+            );
+            carrierMesh.position.z = 0.046;
+            wheelGroup.add(carrierMesh);
+
+            // Rear Sprocket & Chain Ring if rear wheel
+            if (!isFront) {
+                const sprocket = new THREE.Mesh(
+                    new THREE.CylinderGeometry(rotorRadius * 0.85, rotorRadius * 0.85, 0.006, 32),
+                    mats.castAluminum
+                );
+                sprocket.rotation.x = Math.PI / 2;
+                sprocket.position.z = 0.052;
+                wheelGroup.add(sprocket);
+            }
+
+            return wheelGroup;
+        }
+
+        /**
+         * Builds the Complete 49cc Petrol Powered Dirt Bike Hierarchy
+         * Note: Front faces -X, Rear faces +X, Up is +Y, Left side (camera side in photo) is +Z
+         */
+        function build49ccDirtBike() {
+            bikeRoot = new THREE.Group();
+            bikeLeanGroup = new THREE.Group();
+            chassisGroup = new THREE.Group();
+
+            bikeRoot.add(bikeLeanGroup);
+            bikeLeanGroup.add(chassisGroup);
+
+            // ========================================================================
+            // A. FRONT STEERING & INVERTED (USD) FORK ASSEMBLY
+            // ========================================================================
+            // Steering head located at (-0.28, 0.69, 0), tilted at 26.5° rake angle
+            const steeringHeadMount = new THREE.Group();
+            steeringHeadMount.position.set(-0.28, 0.69, 0);
+            steeringHeadMount.rotation.z = -0.46; // 26.5 deg rake
+            chassisGroup.add(steeringHeadMount);
+
+            // This inner group rotates around local Y for handlebar steering!
+            steeringPivotGroup = new THREE.Group();
+            steeringHeadMount.add(steeringPivotGroup);
+
+            // 1. Top & Bottom Black Triple Clamps
+            const clampGeo = new THREE.BoxGeometry(0.065, 0.022, 0.21);
+            const topClamp = new THREE.Mesh(clampGeo, mats.blackFrame);
+            topClamp.position.set(-0.025, 0.04, 0);
+            steeringPivotGroup.add(topClamp);
+
+            const bottomClamp = new THREE.Mesh(clampGeo, mats.blackFrame);
+            bottomClamp.position.set(-0.025, -0.10, 0);
+            steeringPivotGroup.add(bottomClamp);
+
+            // 2. Anodized Metallic Orange Upper USD Fork Tubes (Left & Right)
+            const forkZSpacing = 0.082;
+            const upperForkGeo = new THREE.CylinderGeometry(0.021, 0.021, 0.29, 20);
+            [-forkZSpacing, forkZSpacing].forEach((zPos) => {
+                const upperFork = new THREE.Mesh(upperForkGeo, mats.anodizedOrange);
+                upperFork.position.set(-0.03, -0.10, zPos);
+                upperFork.castShadow = true;
+                steeringPivotGroup.add(upperFork);
+
+                // Gold/Silver Fork Cap Bolt on top
+                const cap = new THREE.Mesh(
+                    new THREE.CylinderGeometry(0.017, 0.017, 0.01, 16),
+                    mats.chrome
+                );
+                cap.position.set(-0.03, 0.048, zPos);
+                steeringPivotGroup.add(cap);
+            });
+
+            // 3. Lower Fork Sliders + Front Wheel (Moves up/down with suspension compression!)
+            frontSuspensionLowerGroup = new THREE.Group();
+            steeringPivotGroup.add(frontSuspensionLowerGroup);
+
+            const stanchionGeo = new THREE.CylinderGeometry(0.015, 0.015, 0.24, 16);
+            const lowerGuardGeo = new THREE.CylinderGeometry(0.023, 0.019, 0.23, 18);
+
+            [-forkZSpacing, forkZSpacing].forEach((zPos) => {
+                // Chrome inner tube
+                const stanchion = new THREE.Mesh(stanchionGeo, mats.chrome);
+                stanchion.position.set(-0.03, -0.28, zPos);
+                frontSuspensionLowerGroup.add(stanchion);
+
+                // Black lower fork guard / axle lug
+                const lowerLeg = new THREE.Mesh(lowerGuardGeo, mats.blackFrame);
+                lowerLeg.position.set(-0.03, -0.35, zPos);
+                lowerLeg.castShadow = true;
+                frontSuspensionLowerGroup.add(lowerLeg);
+            });
+
+            // Front Axle Bolt & Silver/Red Brake Caliper on Left Fork (+Z)
+            const frontAxle = new THREE.Mesh(
+                new THREE.CylinderGeometry(0.011, 0.011, 0.21, 16),
+                mats.chrome
+            );
+            frontAxle.rotation.x = Math.PI / 2;
+            frontAxle.position.set(-0.03, -0.45, 0);
+            frontSuspensionLowerGroup.add(frontAxle);
+
+            // Silver Caliper Mounting Bracket + Crimson Red Brake Caliper
+            const caliperBracket = new THREE.Mesh(
+                new THREE.BoxGeometry(0.06, 0.05, 0.02),
+                mats.castAluminum
+            );
+            caliperBracket.position.set(0.005, -0.43, 0.062);
+            frontSuspensionLowerGroup.add(caliperBracket);
+
+            const frontCaliper = new THREE.Mesh(
+                new THREE.BoxGeometry(0.055, 0.068, 0.035),
+                mats.crimsonRed
+            );
+            frontCaliper.position.set(0.028, -0.40, 0.052);
+            frontSuspensionLowerGroup.add(frontCaliper);
+
+            // Front Wheel at (-0.03, -0.45, 0) in steering local space
+            frontWheelSpinGroup = buildDirtBikeWheel(0.185, 0.048, true);
+            frontWheelSpinGroup.position.set(-0.03, -0.45, 0);
+            frontSuspensionLowerGroup.add(frontWheelSpinGroup);
+
+            // 4. Curved High Front Mudguard / Fender (Orange with Graphic Top)
+            const fenderGroup = new THREE.Group();
+            fenderGroup.position.set(-0.05, -0.11, 0);
+            steeringPivotGroup.add(fenderGroup);
+
+            // Swept forward aerodynamic front fender made of curved segments
+            const fenderPoints = [
+                new THREE.Vector3(0.04, -0.02, 0),
+                new THREE.Vector3(-0.08, 0.02, 0),
+                new THREE.Vector3(-0.22, 0.01, 0),
+                new THREE.Vector3(-0.34, -0.05, 0)
+            ];
+            const fenderCurve = new THREE.CatmullRomCurve3(fenderPoints);
+            const fenderTubeGeo = new THREE.TubeGeometry(fenderCurve, 20, 0.045, 12, false);
+            fenderTubeGeo.scale(1, 0.28, 1.35);
+            const frontFenderMesh = new THREE.Mesh(fenderTubeGeo, mats.graphicFairing);
+            frontFenderMesh.castShadow = true;
+            fenderGroup.add(frontFenderMesh);
+
+            // 5. Front Racing Number Plate ("ORION")
+            const plateGeo = new THREE.CylinderGeometry(0.11, 0.13, 0.19, 16, 1, false, -Math.PI * 0.75, Math.PI * 0.5);
+            const numberPlateMesh = new THREE.Mesh(plateGeo, mats.numberPlate);
+            numberPlateMesh.position.set(-0.01, 0.01, 0);
+            numberPlateMesh.rotation.z = 0.08;
+            numberPlateMesh.castShadow = true;
+            steeringPivotGroup.add(numberPlateMesh);
+
+            // 6. Motocross Handlebars, Red Crossbar Pad, Levers, Red Tether Cord & Brake Cables
+            const handlebarGroup = new THREE.Group();
+            handlebarGroup.position.set(-0.02, 0.06, 0);
+            steeringPivotGroup.add(handlebarGroup);
+
+            // Bar Risers
+            [-0.045, 0.045].forEach((zOff) => {
+                const riser = new THREE.Mesh(
+                    new THREE.BoxGeometry(0.025, 0.035, 0.022),
+                    mats.blackFrame
+                );
+                riser.position.set(0, 0.015, zOff);
+                handlebarGroup.add(riser);
+            });
+
+            // Main Tubular Handlebar Curve
+            const barCurve = new THREE.CatmullRomCurve3([
+                new THREE.Vector3(0.05, 0.11, -0.30),
+                new THREE.Vector3(0.02, 0.10, -0.17),
+                new THREE.Vector3(0.0, 0.03, -0.07),
+                new THREE.Vector3(0.0, 0.03, 0.07),
+                new THREE.Vector3(0.02, 0.10, 0.17),
+                new THREE.Vector3(0.05, 0.11, 0.30)
+            ]);
+            const handlebarMesh = new THREE.Mesh(
+                new THREE.TubeGeometry(barCurve, 32, 0.011, 12, false),
+                mats.blackFrame
+            );
+            handlebarMesh.castShadow = true;
+            handlebarGroup.add(handlebarMesh);
+
+            // Distinctive Red Foam Crossbar Pad in Center (Exact match to photo!)
+            const barPadMesh = new THREE.Mesh(
+                new THREE.CylinderGeometry(0.024, 0.024, 0.17, 18),
+                mats.barPad
+            );
+            barPadMesh.rotation.x = Math.PI / 2;
+            barPadMesh.position.set(0.01, 0.095, 0);
+            barPadMesh.castShadow = true;
+            handlebarGroup.add(barPadMesh);
+
+            // Left & Right Black Rubber Handlebar Grips + Flange
+            [-0.25, 0.25].forEach((zGrip, idx) => {
+                const gripContainer = new THREE.Group();
+                gripContainer.position.set(0.038, 0.106, zGrip);
+                gripContainer.rotation.y = zGrip > 0 ? -0.18 : 0.18;
+
+                const gripCyl = new THREE.Mesh(
+                    new THREE.CylinderGeometry(0.016, 0.016, 0.11, 16),
+                    mats.tireRubber
+                );
+                gripCyl.rotation.x = Math.PI / 2;
+                gripContainer.add(gripCyl);
+
+                const flange = new THREE.Mesh(
+                    new THREE.CylinderGeometry(0.026, 0.026, 0.008, 16),
+                    mats.tireRubber
+                );
+                flange.rotation.x = Math.PI / 2;
+                flange.position.z = zGrip > 0 ? -0.052 : 0.052;
+                gripContainer.add(flange);
+
+                if (idx === 0) throttleGripGroup = gripContainer;
+                handlebarGroup.add(gripContainer);
+            });
+
+            // Silver Front & Rear Hand Brake Levers
+            [-0.19, 0.19].forEach((zLever, idx) => {
+                const leverPivot = new THREE.Group();
+                leverPivot.position.set(0.015, 0.102, zLever);
+
+                const perch = new THREE.Mesh(
+                    new THREE.BoxGeometry(0.025, 0.025, 0.022),
+                    mats.blackFrame
+                );
+                leverPivot.add(perch);
+
+                const blade = new THREE.Mesh(
+                    new THREE.BoxGeometry(0.014, 0.008, 0.095),
+                    mats.chrome
+                );
+                blade.position.set(-0.028, 0, zLever > 0 ? 0.045 : -0.045);
+                blade.rotation.y = zLever > 0 ? 0.35 : -0.35;
+                leverPivot.add(blade);
+
+                if (idx === 0) frontBrakeLeverPivot = leverPivot;
+                else rearBrakeLeverPivot = leverPivot;
+
+                handlebarGroup.add(leverPivot);
+            });
+
+            // Red Kill-Switch / Emergency Pull Tether Cord hanging on Left/Right Handlebar (Exact photo detail!)
+            const tetherCurve = new THREE.CatmullRomCurve3([
+                new THREE.Vector3(0.02, 0.11, 0.16),
+                new THREE.Vector3(-0.04, 0.06, 0.21),
+                new THREE.Vector3(-0.02, -0.04, 0.19),
+                new THREE.Vector3(0.03, -0.10, 0.15)
+            ]);
+            tetherCordMesh = new THREE.Mesh(
+                new THREE.TubeGeometry(tetherCurve, 20, 0.0055, 8, false),
+                mats.crimsonRed
+            );
+            handlebarGroup.add(tetherCordMesh);
+
+            // Red Kill Switch Button Housing
+            const killSwitchBox = new THREE.Mesh(
+                new THREE.BoxGeometry(0.024, 0.026, 0.024),
+                mats.crimsonRed
+            );
+            killSwitchBox.position.set(0.02, 0.108, 0.16);
+            handlebarGroup.add(killSwitchBox);
+
+            // Arching Black Front Brake Cable from Handlebar down to Front Caliper
+            const cableCurve = new THREE.CatmullRomCurve3([
+                new THREE.Vector3(0.0, 0.16, 0.17),
+                new THREE.Vector3(-0.11, 0.22, 0.11),
+                new THREE.Vector3(-0.09, 0.02, 0.08),
+                new THREE.Vector3(-0.04, -0.22, 0.075),
+                new THREE.Vector3(0.02, -0.40, 0.06)
+            ]);
+            const brakeCableMesh = new THREE.Mesh(
+                new THREE.TubeGeometry(cableCurve, 24, 0.0038, 8, false),
+                mats.blackFrame
+            );
+            steeringPivotGroup.add(brakeCableMesh);
+
+            // ========================================================================
+            // B. MAIN PERIMETER FRAME, ENGINE, EXHAUST & BODYWORK
+            // ========================================================================
+
+            // 1. Twin-Spar Black Steel Frame
+            [-0.055, 0.055].forEach((zSide) => {
+                const sparCurve = new THREE.CatmullRomCurve3([
+                    new THREE.Vector3(-0.27, 0.66, zSide * 0.6),
+                    new THREE.Vector3(-0.05, 0.56, zSide),
+                    new THREE.Vector3(0.14, 0.37, zSide)
+                ]);
+                const sparMesh = new THREE.Mesh(
+                    new THREE.TubeGeometry(sparCurve, 16, 0.018, 10, false),
+                    mats.blackFrame
+                );
+                sparMesh.castShadow = true;
+                chassisGroup.add(sparMesh);
+            });
+
+            // 2. 49cc 2-Stroke Single-Cylinder Air-Cooled Engine & Pull-Starter
+            engineBlockGroup = new THREE.Group();
+            engineBlockGroup.position.set(-0.08, 0.39, 0);
+            chassisGroup.add(engineBlockGroup);
+
+            // Crankcase & Gearbox
+            const crankcase = new THREE.Mesh(
+                new THREE.BoxGeometry(0.18, 0.14, 0.14),
+                mats.blackFrame
+            );
+            engineBlockGroup.add(crankcase);
+
+            // Finned Aluminum Cylinder Angled Forward (Signature 49cc pocket bike engine look!)
+            const cylinderGroup = new THREE.Group();
+            cylinderGroup.position.set(-0.08, 0.06, 0);
+            cylinderGroup.rotation.z = 0.65;
+            engineBlockGroup.add(cylinderGroup);
+
+            const coreCyl = new THREE.Mesh(
+                new THREE.BoxGeometry(0.11, 0.13, 0.11),
+                mats.castAluminum
+            );
+            cylinderGroup.add(coreCyl);
+
+            // 7 Distinct Cooling Fins
+            for (let f = -0.055; f <= 0.055; f += 0.018) {
+                const fin = new THREE.Mesh(
+                    new THREE.BoxGeometry(0.135, 0.005, 0.135),
+                    mats.castAluminum
+                );
+                fin.position.y = f;
+                cylinderGroup.add(fin);
+            }
+
+            // Spark Plug Boot on Cylinder Head
+            const sparkPlug = new THREE.Mesh(
+                new THREE.CylinderGeometry(0.012, 0.012, 0.05, 10),
+                mats.crimsonRed
+            );
+            sparkPlug.position.set(0, 0.08, 0);
+            cylinderGroup.add(sparkPlug);
+
+            // Left Side (+Z) Black Recoil Pull-Start Housing with Orange Crescent Guard (Exact photo match!)
+            const pullStarterCover = new THREE.Mesh(
+                new THREE.CylinderGeometry(0.078, 0.078, 0.045, 24),
+                mats.blackFrame
+            );
+            pullStarterCover.rotation.x = Math.PI / 2;
+            pullStarterCover.position.set(0.02, -0.01, 0.075);
+            engineBlockGroup.add(pullStarterCover);
+
+            // Signature Orange Curved Crescent Trim on Engine Cover
+            const orangeCrescent = new THREE.Mesh(
+                new THREE.TorusGeometry(0.072, 0.016, 12, 24, Math.PI * 1.15),
+                mats.glossOrange
+            );
+            orangeCrescent.position.set(0.015, -0.005, 0.088);
+            orangeCrescent.rotation.z = 0.55;
+            engineBlockGroup.add(orangeCrescent);
+
+            // 3. Under-Belly Black 2-Stroke Expansion Exhaust Pipe & Rear Silencer
+            const exhaustCurve = new THREE.CatmullRomCurve3([
+                new THREE.Vector3(-0.20, 0.39, 0.02),
+                new THREE.Vector3(-0.21, 0.25, 0.03),
+                new THREE.Vector3(-0.08, 0.22, 0.03),
+                new THREE.Vector3(0.05, 0.32, 0.04),
+                new THREE.Vector3(0.24, 0.54, 0.04),
+                new THREE.Vector3(0.45, 0.62, 0.04)
+            ]);
+            const exhaustPipe = new THREE.Mesh(
+                new THREE.TubeGeometry(exhaustCurve, 32, 0.019, 12, false),
+                mats.blackFrame
+            );
+            exhaustPipe.castShadow = true;
+            chassisGroup.add(exhaustPipe);
+
+            // Rear Exhaust Silencer / Muffler Canister under Tail
+            const mufflerCan = new THREE.Mesh(
+                new THREE.CylinderGeometry(0.032, 0.032, 0.20, 18),
+                mats.castAluminum
+            );
+            mufflerCan.rotation.z = Math.PI / 2 - 0.18;
+            mufflerCan.position.set(0.48, 0.63, 0.04);
+            chassisGroup.add(mufflerCan);
+
+            // 4. Aggressive Angular Radiator Shrouds / Side Fairings (Orange/White/Black "ORION" Graphics)
+            [-1, 1].forEach((sideSign) => {
+                const shroudGroup = new THREE.Group();
+
+                // Main upper tank shroud wing
+                const shroudShape = new THREE.Shape();
+                shroudShape.moveTo(-0.28, 0.62);
+                shroudShape.lineTo(-0.02, 0.72);
+                shroudShape.lineTo(0.14, 0.58);
+                shroudShape.lineTo(-0.14, 0.45);
+                shroudShape.closePath();
+
+                const extrudeSettings = {
+                    depth: 0.022,
+                    bevelEnabled: true,
+                    bevelSegments: 3,
+                    steps: 1,
+                    bevelSize: 0.008,
+                    bevelThickness: 0.008
+                };
+                const shroudGeo = new THREE.ExtrudeGeometry(shroudShape, extrudeSettings);
+                // Normalize UV coordinates for crisp graphic texture mapping
+                const pos = shroudGeo.attributes.position;
+                const uvs = shroudGeo.attributes.uv;
+                for (let i = 0; i < pos.count; i++) {
+                    const vx = pos.getX(i);
+                    const vy = pos.getY(i);
+                    uvs.setXY(i, (vx + 0.3) * 2.1, (vy - 0.44) * 3.2);
+                }
+
+                const shroudMesh = new THREE.Mesh(shroudGeo, mats.graphicFairing);
+                shroudMesh.position.z = sideSign * 0.072;
+                shroudMesh.rotation.x = sideSign * -0.14;
+                shroudMesh.rotation.y = sideSign * 0.12;
+                shroudMesh.castShadow = true;
+                shroudGroup.add(shroudMesh);
+
+                // Rear Side Number Panel & Tail Fairing
+                const tailShape = new THREE.Shape();
+                tailShape.moveTo(0.12, 0.57);
+                tailShape.lineTo(0.36, 0.64);
+                tailShape.lineTo(0.62, 0.69);
+                tailShape.lineTo(0.30, 0.48);
+                tailShape.closePath();
+
+                const tailGeo = new THREE.ExtrudeGeometry(tailShape, extrudeSettings);
+                const tPos = tailGeo.attributes.position;
+                const tUvs = tailGeo.attributes.uv;
+                for (let i = 0; i < tPos.count; i++) {
+                    tUvs.setXY(i, (tPos.getX(i) - 0.1) * 1.8, (tPos.getY(i) - 0.45) * 3.5);
+                }
+
+                const tailSideMesh = new THREE.Mesh(tailGeo, mats.graphicFairing);
+                tailSideMesh.position.z = sideSign * 0.062;
+                tailSideMesh.rotation.x = sideSign * -0.1;
+                tailSideMesh.castShadow = true;
+                shroudGroup.add(tailSideMesh);
+
+                chassisGroup.add(shroudGroup);
+            });
+
+            // 5. Fuel Tank & Gas Cap
+            const fuelTank = new THREE.Mesh(
+                new THREE.BoxGeometry(0.24, 0.14, 0.14),
+                mats.blackFrame
+            );
+            fuelTank.position.set(-0.11, 0.65, 0);
+            chassisGroup.add(fuelTank);
+
+            const gasCap = new THREE.Mesh(
+                new THREE.CylinderGeometry(0.026, 0.028, 0.025, 16),
+                mats.blackFrame
+            );
+            gasCap.position.set(-0.12, 0.73, 0);
+            chassisGroup.add(gasCap);
+
+            // 6. Contoured Black Motocross Seat & Orange Rear Tail Fender
+            const seatCurve = new THREE.CatmullRomCurve3([
+                new THREE.Vector3(-0.05, 0.70, 0),
+                new THREE.Vector3(0.13, 0.62, 0),
+                new THREE.Vector3(0.32, 0.65, 0),
+                new THREE.Vector3(0.46, 0.68, 0)
+            ]);
+            const seatGeo = new THREE.TubeGeometry(seatCurve, 24, 0.062, 14, false);
+            seatGeo.scale(1, 0.55, 1.15);
+            const seatMesh = new THREE.Mesh(seatGeo, mats.seatVinyl);
+            seatMesh.castShadow = true;
+            chassisGroup.add(seatMesh);
+
+            // High Orange Rear Tail Fender
+            const rearFenderCurve = new THREE.CatmullRomCurve3([
+                new THREE.Vector3(0.38, 0.65, 0),
+                new THREE.Vector3(0.54, 0.68, 0),
+                new THREE.Vector3(0.68, 0.69, 0)
+            ]);
+            const rearFenderGeo = new THREE.TubeGeometry(rearFenderCurve, 16, 0.052, 12, false);
+            rearFenderGeo.scale(1, 0.25, 1.25);
+            const rearFenderMesh = new THREE.Mesh(rearFenderGeo, mats.glossOrange);
+            rearFenderMesh.castShadow = true;
+            chassisGroup.add(rearFenderMesh);
+
+            // 7. Rear Mono-Shock Suspension (White/Black Coil Spring + Damper)
+            const shockGroup = new THREE.Group();
+            shockGroup.position.set(0.18, 0.45, 0);
+            shockGroup.rotation.z = -0.35;
+            chassisGroup.add(shockGroup);
+
+            const damperShaft = new THREE.Mesh(
+                new THREE.CylinderGeometry(0.014, 0.014, 0.22, 12),
+                mats.chrome
+            );
+            shockGroup.add(damperShaft);
+
+            // Helical Coil Spring around Damper
+            const springPts = [];
+            const turns = 7;
+            for (let i = 0; i <= 70; i++) {
+                const t = i / 70;
+                const a = t * turns * Math.PI * 2;
+                springPts.push(new THREE.Vector3(Math.cos(a) * 0.025, (t - 0.5) * 0.16, Math.sin(a) * 0.025));
+            }
+            const springCoil = new THREE.Mesh(
+                new THREE.TubeGeometry(new THREE.CatmullRomCurve3(springPts), 64, 0.0055, 8, false),
+                mats.anodizedOrange
+            );
+            shockGroup.add(springCoil);
+
+            // 8. Footpegs & Folding Black Left-Side Kickstand (Exact position & angle in photo!)
+            [-0.12, 0.12].forEach((zPeg) => {
+                const peg = new THREE.Mesh(
+                    new THREE.BoxGeometry(0.04, 0.015, 0.075),
+                    mats.castAluminum
+                );
+                peg.position.set(0.08, 0.30, zPeg);
+                chassisGroup.add(peg);
+            });
+
+            // Kickstand Pivot at (0.11, 0.31, 0.095)
+            kickstandPivotGroup = new THREE.Group();
+            kickstandPivotGroup.position.set(0.11, 0.31, 0.095);
+            chassisGroup.add(kickstandPivotGroup);
+
+            const standCurve = new THREE.CatmullRomCurve3([
+                new THREE.Vector3(0, 0, 0),
+                new THREE.Vector3(0.04, -0.14, 0.04),
+                new THREE.Vector3(0.08, -0.29, 0.075)
+            ]);
+            const standRod = new THREE.Mesh(
+                new THREE.TubeGeometry(standCurve, 12, 0.011, 10, false),
+                mats.blackFrame
+            );
+            standRod.castShadow = true;
+            kickstandPivotGroup.add(standRod);
+
+            const standFootPad = new THREE.Mesh(
+                new THREE.BoxGeometry(0.045, 0.008, 0.035),
+                mats.blackFrame
+            );
+            standFootPad.position.set(0.08, -0.295, 0.075);
+            kickstandPivotGroup.add(standFootPad);
+
+            // ========================================================================
+            // C. REAR SWINGARM, CHAIN GUARD HOUSING & REAR WHEEL
+            // ========================================================================
+            rearSwingarmPivot = new THREE.Group();
+            rearSwingarmPivot.position.set(0.12, 0.34, 0);
+            chassisGroup.add(rearSwingarmPivot);
+
+            // Twin Swingarm Beams leading to Rear Axle at (+0.34, -0.11, 0)
+            [-0.075, 0.075].forEach((zArm) => {
+                const arm = new THREE.Mesh(
+                    new THREE.BoxGeometry(0.36, 0.036, 0.022),
+                    mats.blackFrame
+                );
+                arm.position.set(0.17, -0.055, zArm);
+                arm.rotation.z = -0.31;
+                arm.castShadow = true;
+                rearSwingarmPivot.add(arm);
+            });
+
+            // Heavy Molded Black Chain Guard Housing on Left Side (+Z) - Very prominent in photo!
+            const chainCoverGroup = new THREE.Group();
+            chainCoverGroup.position.set(0.17, -0.055, 0.085);
+            chainCoverGroup.rotation.z = -0.31;
+            rearSwingarmPivot.add(chainCoverGroup);
+
+            const chainHousingMain = new THREE.Mesh(
+                new THREE.BoxGeometry(0.34, 0.095, 0.026),
+                mats.blackFrame
+            );
+            chainHousingMain.castShadow = true;
+            chainCoverGroup.add(chainHousingMain);
+
+            const chainEndFront = new THREE.Mesh(
+                new THREE.CylinderGeometry(0.048, 0.048, 0.026, 18),
+                mats.blackFrame
+            );
+            chainEndFront.rotation.x = Math.PI / 2;
+            chainEndFront.position.x = -0.17;
+            chainCoverGroup.add(chainEndFront);
+
+            const chainEndRear = new THREE.Mesh(
+                new THREE.CylinderGeometry(0.054, 0.054, 0.026, 18),
+                mats.blackFrame
+            );
+            chainEndRear.rotation.x = Math.PI / 2;
+            chainEndRear.position.x = 0.17;
+            chainCoverGroup.add(chainEndRear);
+
+            // Rear Wheel Assembly at (0.34, -0.11, 0) relative to swingarm pivot -> world Y = 0.23
+            rearWheelSpinGroup = buildDirtBikeWheel(0.18, 0.048, false);
+            rearWheelSpinGroup.position.set(0.34, -0.11, 0);
+            rearSwingarmPivot.add(rearWheelSpinGroup);
+
+            // Rear Axle & Rear Disc Brake Caliper
+            const rearAxle = new THREE.Mesh(
+                new THREE.CylinderGeometry(0.011, 0.011, 0.20, 16),
+                mats.chrome
+            );
+            rearAxle.rotation.x = Math.PI / 2;
+            rearAxle.position.set(0.34, -0.11, 0);
+            rearSwingarmPivot.add(rearAxle);
+
+            const rearCaliper = new THREE.Mesh(
+                new THREE.BoxGeometry(0.05, 0.055, 0.035),
+                mats.crimsonRed
+            );
+            rearCaliper.position.set(0.30, -0.05, 0.055);
+            rearSwingarmPivot.add(rearCaliper);
+
+            scene.add(bikeRoot);
+        }
+
+        // ============================================================================
+        // 5. EXHAUST 2-STROKE BLUE-WHITE SMOKE PARTICLES
+        // ============================================================================
+        function spawnExhaustSmoke() {
+            if (!state.engineRunning) return;
+            const geo = new THREE.SphereGeometry(0.018, 8, 8);
+            const mat = new THREE.MeshBasicMaterial({
+                color: 0xdce7f5,
+                transparent: true,
+                opacity: 0.38
+            });
+            const puff = new THREE.Mesh(geo, mat);
+
+            // Calculate world position of exhaust tip (local: 0.58, 0.65, 0.04)
+            const tipLocal = new THREE.Vector3(0.58, 0.65, 0.04);
+            chassisGroup.localToWorld(tipLocal);
+            puff.position.copy(tipLocal);
+
+            puff.userData = {
+                vx: (Math.cos(state.bikeHeading) * 0.025) + (Math.random() - 0.5) * 0.01,
+                vy: 0.008 + Math.random() * 0.008,
+                vz: (-Math.sin(state.bikeHeading) * 0.025) + (Math.random() - 0.5) * 0.01,
+                age: 0
+            };
+
+            scene.add(puff);
+            smokeParticles.push(puff);
+        }
+
+        function updateSmokeParticles() {
+            for (let i = smokeParticles.length - 1; i >= 0; i--) {
+                const p = smokeParticles[i];
+                p.userData.age += 1;
+                p.position.x += p.userData.vx;
+                p.position.y += p.userData.vy;
+                p.position.z += p.userData.vz;
+                const s = 1 + p.userData.age * 0.08;
+                p.scale.set(s, s, s);
+                p.material.opacity = Math.max(0, 0.38 - p.userData.age * 0.012);
+
+                if (p.userData.age > 32) {
+                    scene.remove(p);
+                    p.geometry.dispose();
+                    p.material.dispose();
+                    smokeParticles.splice(i, 1);
+                }
+            }
+        }
+
+        // ============================================================================
+        // 6. INTERACTIVE CONTROLS & UI HANDLERS
+        // ============================================================================
+        function resetSteering() {
+            state.targetSteerDeg = 0;
+            document.getElementById('slider-steer').value = 0;
+        }
+
+        function toggleKickstand() {
+            state.kickstandDown = !state.kickstandDown;
+            const btn = document.getElementById('btn-kickstand');
+            const mobBtn = document.getElementById('btn-kickstand-mob');
+            const label = document.getElementById('kickstand-label');
+            if (state.kickstandDown) {
+                btn.classList.add('active-btn');
+                if (mobBtn) mobBtn.classList.add('active-btn');
+                label.textContent = 'Kickstand: DOWN';
+            } else {
+                btn.classList.remove('active-btn');
+                if (mobBtn) mobBtn.classList.remove('active-btn');
+                label.textContent = 'Kickstand: UP';
+            }
+        }
+
+        function toggleEngine() {
+            state.engineRunning = !state.engineRunning;
+            const btn = document.getElementById('btn-engine');
+            const label = document.getElementById('engine-label');
+            const pill = document.getElementById('engine-status-pill');
+            if (state.engineRunning) {
+                btn.classList.add('active-btn');
+                label.textContent = '2-Stroke: ON';
+                pill.textContent = 'ENGINE RUNNING';
+                pill.className = 'text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40';
+            } else {
+                btn.classList.remove('active-btn');
+                label.textContent = '2-Stroke: OFF';
+                pill.textContent = 'ENGINE OFF';
+                pill.className = 'text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-500/20 text-red-300 border border-red-500/40';
+            }
+        }
+
+        function resetBikePosition() {
+            state.bikeX = 0;
+            state.bikeZ = 0;
+            state.speed = 0;
+            state.bikeHeading = 0.25;
+            state.targetSteerDeg = 14;
+            document.getElementById('slider-steer').value = 14;
+            state.forkCompression = 0;
+            document.getElementById('slider-suspension').value = 0;
+            document.getElementById('fork-val').textContent = '0%';
+            if (!state.kickstandDown) toggleKickstand();
+            setCameraPreset('studio');
+        }
+
+        function setCameraPreset(mode) {
+            state.cameraMode = mode;
+            ['studio', 'cockpit', 'chase', 'engine'].forEach((m) => {
+                const b = document.getElementById('btn-cam-' + m);
+                if (b) {
+                    if (m === mode) b.classList.add('active-btn');
+                    else b.classList.remove('active-btn');
+                }
+            });
+
+            if (mode === 'studio') {
+                orbit.theta = -1.18;
+                orbit.phi = 1.38;
+                orbit.radius = 2.35;
+            } else if (mode === 'engine') {
+                orbit.theta = -1.45;
+                orbit.phi = 1.42;
+                orbit.radius = 1.15;
+            }
+        }
+
+        function setupInputListeners() {
+            // Sliders
+            const steerSlider = document.getElementById('slider-steer');
+            steerSlider.addEventListener('input', (e) => {
+                state.targetSteerDeg = parseFloat(e.target.value);
+            });
+
+            const suspSlider = document.getElementById('slider-suspension');
+            suspSlider.addEventListener('input', (e) => {
+                const val = parseFloat(e.target.value);
+                state.forkCompression = val / 100;
+                document.getElementById('fork-val').textContent = Math.round(val) + '%';
+            });
+
+            // Holdable On-Screen Buttons
+            function bindHoldButton(id, keyName) {
+                const el = document.getElementById(id);
+                if (!el) return;
+                const start = (ev) => {
+                    ev.preventDefault();
+                    state.keys[keyName] = true;
+                    el.classList.add('active-btn');
+                };
+                const end = (ev) => {
+                    ev.preventDefault();
+                    state.keys[keyName] = false;
+                    el.classList.remove('active-btn');
+                };
+                el.addEventListener('mousedown', start);
+                el.addEventListener('mouseup', end);
+                el.addEventListener('mouseleave', end);
+                el.addEventListener('touchstart', start, { passive: false });
+                el.addEventListener('touchend', end, { passive: false });
+            }
+
+            bindHoldButton('btn-left', 'left');
+            bindHoldButton('btn-right', 'right');
+            bindHoldButton('btn-throttle', 'throttle');
+            bindHoldButton('btn-brake', 'brake');
+            bindHoldButton('btn-rev', 'rev');
+
+            // Keyboard Controls
+            window.addEventListener('keydown', (e) => {
+                const k = e.key.toLowerCase();
+                if (k === 'a' || e.key === 'ArrowLeft') state.keys.left = true;
+                if (k === 'd' || e.key === 'ArrowRight') state.keys.right = true;
+                if (k === 'w' || e.key === 'ArrowUp') state.keys.throttle = true;
+                if (k === 's' || e.key === 'ArrowDown' || k === ' ') state.keys.brake = true;
+                if (k === 'r') state.keys.rev = true;
+                if (k === 'k') toggleKickstand();
+                if (k === 'e') toggleEngine();
+            });
+
+            window.addEventListener('keyup', (e) => {
+                const k = e.key.toLowerCase();
+                if (k === 'a' || e.key === 'ArrowLeft') state.keys.left = false;
+                if (k === 'd' || e.key === 'ArrowRight') state.keys.right = false;
+                if (k === 'w' || e.key === 'ArrowUp') state.keys.throttle = false;
+                if (k === 's' || e.key === 'ArrowDown' || k === ' ') state.keys.brake = false;
+                if (k === 'r') state.keys.rev = false;
+            });
+
+            // Orbit Mouse & Touch Dragging on Canvas
+            const dom = renderer.domElement;
+            dom.addEventListener('mousedown', (e) => {
+                orbit.isDragging = true;
+                orbit.prevX = e.clientX;
+                orbit.prevY = e.clientY;
+            });
+
+            window.addEventListener('mousemove', (e) => {
+                if (!orbit.isDragging) return;
+                const dx = e.clientX - orbit.prevX;
+                const dy = e.clientY - orbit.prevY;
+                orbit.prevX = e.clientX;
+                orbit.prevY = e.clientY;
+
+                orbit.theta -= dx * 0.007;
+                orbit.phi = Math.max(0.25, Math.min(Math.PI * 0.485, orbit.phi - dy * 0.006));
+            });
+
+            window.addEventListener('mouseup', () => {
+                orbit.isDragging = false;
+            });
+
+            dom.addEventListener('wheel', (e) => {
+                e.preventDefault();
+                orbit.radius = Math.max(0.95, Math.min(6.0, orbit.radius + e.deltaY * 0.0018));
+            }, { passive: false });
+
+            // Touch Orbit & Pinch Zoom
+            let initialPinchDist = null;
+            dom.addEventListener('touchstart', (e) => {
+                if (e.touches.length === 1) {
+                    orbit.isDragging = true;
+                    orbit.prevX = e.touches[0].clientX;
+                    orbit.prevY = e.touches[0].clientY;
+                } else if (e.touches.length === 2) {
+                    orbit.isDragging = false;
+                    initialPinchDist = Math.hypot(
+                        e.touches[0].clientX - e.touches[1].clientX,
+                        e.touches[0].clientY - e.touches[1].clientY
+                    );
+                }
+            }, { passive: true });
+
+            dom.addEventListener('touchmove', (e) => {
+                if (e.touches.length === 1 && orbit.isDragging) {
+                    const dx = e.touches[0].clientX - orbit.prevX;
+                    const dy = e.touches[0].clientY - orbit.prevY;
+                    orbit.prevX = e.touches[0].clientX;
+                    orbit.prevY = e.touches[0].clientY;
+
+                    orbit.theta -= dx * 0.007;
+                    orbit.phi = Math.max(0.25, Math.min(Math.PI * 0.485, orbit.phi - dy * 0.006));
+                } else if (e.touches.length === 2 && initialPinchDist) {
+                    const dist = Math.hypot(
+                        e.touches[0].clientX - e.touches[1].clientX,
+                        e.touches[0].clientY - e.touches[1].clientY
+                    );
+                    const delta = initialPinchDist - dist;
+                    orbit.radius = Math.max(0.95, Math.min(6.0, orbit.radius + delta * 0.006));
+                    initialPinchDist = dist;
+                }
+            }, { passive: true });
+
+            dom.addEventListener('touchend', () => {
+                orbit.isDragging = false;
+                initialPinchDist = null;
+            });
+        }
+
+        // ============================================================================
+        // 7. PHYSICS, STEERING, SUSPENSION & ANIMATION LOOP
+        // ============================================================================
+        let frameCounter = 0;
+
+        function updateSimulation() {
+            frameCounter++;
+
+            // 1. Steering Input Handling
+            if (state.keys.left) {
+                state.targetSteerDeg = Math.min(38, state.targetSteerDeg + 1.4);
+                document.getElementById('slider-steer').value = state.targetSteerDeg;
+            } else if (state.keys.right) {
+                state.targetSteerDeg = Math.max(-38, state.targetSteerDeg - 1.4);
+                document.getElementById('slider-steer').value = state.targetSteerDeg;
+            } else if (Math.abs(state.speed) > 0.25) {
+                // Self-centering caster effect while riding
+                state.targetSteerDeg *= 0.94;
+                document.getElementById('slider-steer').value = state.targetSteerDeg;
+            }
+
+            // Smooth steering interpolation
+            state.steerAngleDeg += (state.targetSteerDeg - state.steerAngleDeg) * 0.18;
+            const steerRad = THREE.MathUtils.degToRad(state.steerAngleDeg);
+            steeringPivotGroup.rotation.y = steerRad;
+
+            // 2. Throttle, RPM & Riding Dynamics
+            if (state.keys.throttle) {
+                if (!state.engineRunning) toggleEngine();
+                // Auto fold kickstand up when riding away!
+                if (state.kickstandDown) toggleKickstand();
+
+                state.speed = Math.min(11.5, state.speed + 0.085);
+            } else {
+                state.speed *= 0.985;
+                if (Math.abs(state.speed) < 0.01) state.speed = 0;
+            }
+
+            // Braking + Front Fork Dive!
+            let dynamicBrakeDive = 0;
+            if (state.keys.brake) {
+                state.speed *= 0.88;
+                dynamicBrakeDive = Math.min(0.85, state.speed * 0.14 + 0.32);
+                if (frontBrakeLeverPivot) frontBrakeLeverPivot.rotation.y = -0.28;
+                if (rearBrakeLeverPivot) rearBrakeLeverPivot.rotation.y = 0.28;
+            } else {
+                if (frontBrakeLeverPivot) frontBrakeLeverPivot.rotation.y *= 0.8;
+                if (rearBrakeLeverPivot) rearBrakeLeverPivot.rotation.y *= 0.8;
+            }
+
+            // Throttle Grip Twist Animation
+            const isRevving = state.keys.throttle || state.keys.rev;
+            if (throttleGripGroup) {
+                const targetTwist = isRevving ? -0.45 : 0;
+                throttleGripGroup.rotation.z += (targetTwist - throttleGripGroup.rotation.z) * 0.2;
+            }
+
+            // RPM Calculation
+            if (!state.engineRunning) {
+                state.rpm += (0 - state.rpm) * 0.15;
+            } else {
+                const targetRpm = isRevving
+                    ? Math.min(8900, 5200 + state.speed * 320 + Math.random() * 250)
+                    : 1850 + state.speed * 480 + Math.sin(frameCounter * 0.2) * 45;
+                state.rpm += (targetRpm - state.rpm) * 0.16;
+            }
+
+            updateEngineSound(state.rpm, state.engineRunning);
+
+            // 3. Position, Turning & Wheel Spin
+            if (Math.abs(state.speed) > 0.005) {
+                // Turn radius determined by handlebar steer angle
+                const turnRate = steerRad * (state.speed * 0.022);
+                state.bikeHeading += turnRate;
+
+                // Bike faces -X in local space
+                state.bikeX -= Math.cos(state.bikeHeading) * state.speed * 0.016;
+                state.bikeZ += Math.sin(state.bikeHeading) * state.speed * 0.016;
+
+                // Spin front and rear knobby wheels accurately based on rolling radius (0.23m)
+                const angularStep = (state.speed * 0.016) / 0.23;
+                frontWheelSpinGroup.rotation.z += angularStep;
+                rearWheelSpinGroup.rotation.z += angularStep;
+            }
+
+            bikeRoot.position.set(state.bikeX, 0, state.bikeZ);
+            bikeRoot.rotation.y = state.bikeHeading;
+
+            // 4. Kickstand Folding & Realistic Lean Angle
+            const targetStandAngle = state.kickstandDown ? 0 : -1.32;
+            kickstandPivotGroup.rotation.z += (targetStandAngle - kickstandPivotGroup.rotation.z) * 0.15;
+
+            let targetLean = 0;
+            if (state.kickstandDown && state.speed < 0.2) {
+                targetLean = -0.095; // Rests tilted toward left kickstand just like the photo
+            } else {
+                // Dynamic cornering lean into turns
+                targetLean = -steerRad * Math.min(0.65, state.speed * 0.09);
+            }
+            state.bikeLean += (targetLean - state.bikeLean) * 0.12;
+            bikeLeanGroup.rotation.x = state.bikeLean;
+
+            // 5. Front USD Fork & Rear Mono-Shock Compression
+            const totalCompression = Math.min(1.0, state.forkCompression + dynamicBrakeDive);
+            frontSuspensionLowerGroup.position.y = totalCompression * 0.068;
+            chassisGroup.position.y = -totalCompression * 0.032;
+            chassisGroup.rotation.z = dynamicBrakeDive * 0.055; // Pitch forward under front disc braking
+            rearSwingarmPivot.rotation.z = totalCompression * 0.08;
+
+            // 6. 49cc 2-Stroke High-Frequency Engine Vibration & Exhaust Smoke
+            if (state.engineRunning) {
+                const vibAmp = 0.0012 + (state.rpm / 9000) * 0.0025;
+                engineBlockGroup.position.x = -0.08 + (Math.random() - 0.5) * vibAmp;
+                engineBlockGroup.position.y = 0.39 + (Math.random() - 0.5) * vibAmp;
+
+                const smokeInterval = isRevving ? 2 : 7;
+                if (frameCounter % smokeInterval === 0) {
+                    spawnExhaustSmoke();
+                }
+            }
+            updateSmokeParticles();
+
+            // 7. Update HUD Readouts
+            const speedKmh = Math.round(state.speed * 3.6);
+            document.getElementById('hud-speed').innerHTML = `${speedKmh} <span class="text-xs text-orange-400">KM/H</span>`;
+            document.getElementById('hud-rpm').textContent = Math.round(state.rpm);
+            document.getElementById('hud-steer').textContent = `${Math.round(state.steerAngleDeg)}°`;
+
+            // 8. Camera Modes Update
+            updateCamera();
+        }
+
+        function updateCamera() {
+            if (state.cameraMode === 'studio' || state.cameraMode === 'engine') {
+                const focusY = state.cameraMode === 'engine' ? 0.43 : 0.53;
+                orbit.target.set(state.bikeX, focusY, state.bikeZ);
+
+                const cx = orbit.target.x + orbit.radius * Math.sin(orbit.phi) * Math.cos(orbit.theta);
+                const cy = orbit.target.y + orbit.radius * Math.cos(orbit.phi);
+                const cz = orbit.target.z + orbit.radius * Math.sin(orbit.phi) * Math.sin(orbit.theta);
+
+                camera.position.set(cx, Math.max(0.12, cy), cz);
+                camera.lookAt(orbit.target);
+            } else if (state.cameraMode === 'cockpit') {
+                // First-person Rider / Handlebar POV looking over the Red Crossbar Pad!
+                const riderEyeLocal = new THREE.Vector3(0.08, 1.02, 0);
+                const lookAheadLocal = new THREE.Vector3(-1.4, 0.65, -Math.sin(THREE.MathUtils.degToRad(state.steerAngleDeg)) * 0.5);
+                chassisGroup.localToWorld(riderEyeLocal);
+                chassisGroup.localToWorld(lookAheadLocal);
+
+                camera.position.lerp(riderEyeLocal, 0.35);
+                camera.lookAt(lookAheadLocal);
+            } else if (state.cameraMode === 'chase') {
+                // Third-person Motocross Chase Camera behind the dirt bike
+                const chasePosLocal = new THREE.Vector3(1.65, 1.15, 0);
+                const chaseLookLocal = new THREE.Vector3(-0.6, 0.55, 0);
+                bikeRoot.localToWorld(chasePosLocal);
+                bikeRoot.localToWorld(chaseLookLocal);
+
+                camera.position.lerp(chasePosLocal, 0.14);
+                camera.lookAt(chaseLookLocal);
+            }
+        }
+
+        // ============================================================================
+        // 8. INITIALIZATION & WINDOW ONLOAD
+        // ============================================================================
+        function initScene() {
+            const container = document.getElementById('canvas-container');
+
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x2a1e14);
+            scene.fog = new THREE.FogExp2(0x2a1e14, 0.045);
+
+            camera = new THREE.PerspectiveCamera(38, window.innerWidth / window.innerHeight, 0.05, 120);
+
+            renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            renderer.outputEncoding = THREE.sRGBEncoding;
+            container.appendChild(renderer.domElement);
+
+            // Studio & Warm Dirt Showroom Lighting matching the uploaded reference photo
+            const ambientLight = new THREE.AmbientLight(0xffdfba, 0.72);
+            scene.add(ambientLight);
+
+            const hemiLight = new THREE.HemisphereLight(0xffe7c7, 0x3d2a18, 0.65);
+            scene.add(hemiLight);
+
+            // Key Spotlight casting crisp shadows on the studio concrete/dirt floor
+            const keyLight = new THREE.DirectionalLight(0xfff4e0, 1.45);
+            keyLight.position.set(-2.5, 4.5, 3.2);
+            keyLight.castShadow = true;
+            keyLight.shadow.mapSize.width = 2048;
+            keyLight.shadow.mapSize.height = 2048;
+            keyLight.shadow.camera.near = 0.5;
+            keyLight.shadow.camera.far = 15;
+            const d = 2.2;
+            keyLight.shadow.camera.left = -d;
+            keyLight.shadow.camera.right = d;
+            keyLight.shadow.camera.top = d;
+            keyLight.shadow.camera.bottom = -d;
+            keyLight.shadow.bias = -0.0005;
+            scene.add(keyLight);
+
+            // Warm Orange Back Rim Light for metallic highlights on the USD forks & alloy rims
+            const rimLight = new THREE.DirectionalLight(0xff7722, 0.9);
+            rimLight.position.set(3.0, 2.2, -2.8);
+            scene.add(rimLight);
+
+            // Studio Floor with Warm Concrete/Dirt Texture
+            const floorTex = createStudioFloorTexture();
+            const floorGeo = new THREE.PlaneGeometry(80, 80);
+            const floorMat = new THREE.MeshStandardMaterial({
+                map: floorTex,
+                roughness: 0.82,
+                metalness: 0.05
+            });
+            const floorMesh = new THREE.Mesh(floorGeo, floorMat);
+            floorMesh.rotation.x = -Math.PI / 2;
+            floorMesh.receiveShadow = true;
+            scene.add(floorMesh);
+
+            // Build Materials & the 49cc Dirt Bike
+            initMaterials();
+            build49ccDirtBike();
+            setupInputListeners();
+
+            window.addEventListener('resize', () => {
+                camera.aspect = window.innerWidth / window.innerHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(window.innerWidth, window.innerHeight);
+            });
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            updateSimulation();
+            renderer.render(scene, camera);
+        }
+
+        window.onload = function () {
+            initScene();
+            animate();
+        };
+    </script>
+</body>
+</html>

@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 import { BUS_STOPS, SOVEREIGN_SHORE_BERTH, sampleBusRoad } from '../game/vehicles';
+import { DINOSAUR_MARINA_BOAT_BERTH } from '../game/dinosaurIsland';
 import { WATER_LEVEL, groundHeightAt, isOceanAt } from '../game/terrain';
+import { vaultFloorYAt } from '../game/homeUndergroundVault';
 import type { BoatId, BoatState, BusState, InteractableItem } from '../game/types';
 import type { ProceduralTextureSet } from './textures';
 
@@ -211,7 +213,7 @@ export function buildVehiclesWorld(textures: ProceduralTextureSet): VehiclesWorl
   let busWheelAngle = 0;
 
   const syncBus = (bus: BusState, _time: number, lanternStrength: number) => {
-    const by = groundHeightAt(bus.worldX, bus.worldZ) + 0.06;
+    const by = (bus.inVault ? vaultFloorYAt(bus.worldX, bus.worldZ) : groundHeightAt(bus.worldX, bus.worldZ)) + 0.06;
     busGroup.position.set(bus.worldX, by, bus.worldZ);
     busGroup.rotation.y = bus.heading;
 
@@ -978,11 +980,100 @@ export function buildVehiclesWorld(textures: ProceduralTextureSet): VehiclesWorl
     };
   };
 
+  // -------------------------------------------------------------------------
+  // EXTRACTED SSJ EXPEDITION BOAT (sA — White/Teal/Orange-Lifebuoy Cruiser)
+  // -------------------------------------------------------------------------
+  const makeSsjExpeditionBoatMesh = () => {
+    const root = new THREE.Group();
+    const hullWhiteMat = new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.35, metalness: 0.14 });
+    const tealBowMat = new THREE.MeshStandardMaterial({ color: 0x0284c7, roughness: 0.38, metalness: 0.18 });
+    const deckWoodMat = new THREE.MeshStandardMaterial({ color: 0x78350f, roughness: 0.78 });
+    const cabinGlassMat = new THREE.MeshStandardMaterial({
+      color: 0x38bdf8,
+      roughness: 0.12,
+      metalness: 0.35,
+      transparent: true,
+      opacity: 0.65,
+    });
+    const lifebuoyOrangeMat = new THREE.MeshStandardMaterial({
+      color: 0xf97316,
+      emissive: 0xea580c,
+      emissiveIntensity: 0.28,
+      roughness: 0.4,
+    });
+    const steelMat = new THREE.MeshStandardMaterial({ color: 0x334155, roughness: 0.45, metalness: 0.65 });
+
+    // Main white hull (3.4 x 1.1 x 7.6)
+    const hull = new THREE.Mesh(new THREE.BoxGeometry(3.4, 1.1, 7.6), hullWhiteMat);
+    hull.position.set(0, 0.42, 0);
+    hull.castShadow = true;
+    root.add(hull);
+
+    // Tapered deep teal bow cone
+    const bow = new THREE.Mesh(new THREE.ConeGeometry(2.35, 3.2, 4), tealBowMat);
+    bow.rotation.x = Math.PI / 2;
+    bow.rotation.y = Math.PI / 4;
+    bow.scale.set(1.0, 0.56, 1.0);
+    bow.position.set(0, 0.46, 5.25);
+    root.add(bow);
+
+    // Teal waterline stripe
+    const stripe = new THREE.Mesh(new THREE.BoxGeometry(3.48, 0.24, 7.65), tealBowMat);
+    stripe.position.set(0, 0.22, 0);
+    root.add(stripe);
+
+    // Wooden plank deck
+    const deck = new THREE.Mesh(new THREE.BoxGeometry(3.08, 0.12, 7.1), deckWoodMat);
+    deck.position.set(0, 1.0, -0.05);
+    root.add(deck);
+
+    // White wheelhouse cabin + cyan windshield + roof
+    const cabin = new THREE.Mesh(new THREE.BoxGeometry(2.35, 1.65, 2.85), hullWhiteMat);
+    cabin.position.set(0, 1.85, 0.45);
+    cabin.castShadow = true;
+    const windshield = new THREE.Mesh(new THREE.BoxGeometry(2.42, 0.72, 1.85), cabinGlassMat);
+    windshield.position.set(0, 2.05, 0.98);
+    const cabinRoof = new THREE.Mesh(new THREE.BoxGeometry(2.55, 0.14, 3.15), tealBowMat);
+    cabinRoof.position.set(0, 2.72, 0.45);
+    root.add(cabin, windshield, cabinRoof);
+
+    // Radar mast & spinning scanner bar
+    const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.1, 1.4, 8), steelMat);
+    mast.position.set(0, 3.42, 0.25);
+    const radar = new THREE.Mesh(new THREE.BoxGeometry(1.15, 0.12, 0.18), hullWhiteMat);
+    radar.position.set(0, 4.12, 0.25);
+    root.add(mast, radar);
+
+    // Twin Bright Orange Lifebuoys on Port & Starboard
+    const buoyGeo = new THREE.TorusGeometry(0.36, 0.11, 8, 16);
+    for (const side of [-1, 1]) {
+      const buoy = new THREE.Mesh(buoyGeo, lifebuoyOrangeMat);
+      buoy.rotation.y = Math.PI / 2;
+      buoy.position.set(side * 1.78, 0.75, -1.65);
+      root.add(buoy);
+    }
+
+    const wake = makeWakeMesh(-4.4, 2.1);
+    root.add(wake);
+    group.add(root);
+
+    boatVisuals.ssj_expedition_boat = {
+      id: 'ssj_expedition_boat',
+      root,
+      wake,
+      playerLocalPos: new THREE.Vector3(0, 1.48, -1.9),
+      companionLocalPos: new THREE.Vector3(0.75, 1.42, -1.55),
+      fpvLocalPos: new THREE.Vector3(0, 2.45, 0.95),
+      fpvLocalLook: new THREE.Vector3(0, 1.9, 18.0),
+    };
+  };
+
   makeRowboatMesh('lake_boat', 0x355c7d);
   makeRowboatMesh('coastal_boat', 0x2d6e82);
   makeBambooCatamaranMesh();
   makeTribalOutriggerMesh();
   makeSovereignShipMesh();
+  makeSsjExpeditionBoatMesh();
 
   const boatPrompts: Record<BoatId, InteractableItem> = {
     lake_boat: {
@@ -1045,13 +1136,26 @@ export function buildVehiclesWorld(textures: ProceduralTextureSet): VehiclesWorl
       locationId: 'coastal_town',
       metaId: 'sovereign_ship',
     },
+    ssj_expedition_boat: {
+      id: 'board_ssj_expedition_boat',
+      kind: 'boat_board',
+      label: 'Sail SSJ Expedition Cruiser',
+      sublabel: 'SSJ கடல் பயணப் படகு · Cruise the unified ocean around Dinosaur Island',
+      x: DINOSAUR_MARINA_BOAT_BERTH.x,
+      y: WATER_LEVEL + 0.5,
+      z: DINOSAUR_MARINA_BOAT_BERTH.z,
+      radius: 13.5,
+      locationId: 'dinosaur_island',
+      metaId: 'ssj_expedition_boat',
+    },
   };
   interactables.push(
     boatPrompts.lake_boat,
     boatPrompts.coastal_boat,
     boatPrompts.bamboo_catamaran,
     boatPrompts.tribal_outrigger,
-    boatPrompts.sovereign_ship
+    boatPrompts.sovereign_ship,
+    boatPrompts.ssj_expedition_boat
   );
 
   const syncBoats = (boats: BoatState[], time: number) => {
@@ -1067,12 +1171,23 @@ export function buildVehiclesWorld(textures: ProceduralTextureSet): VehiclesWorl
           ? 3.1
           : b.id === 'sovereign_ship'
           ? 5.8
+          : b.id === 'ssj_expedition_boat'
+          ? 2.4
           : 4.6;
       const bobAmp = b.id === 'sovereign_ship' ? 0.095 : 0.065;
       const bob = Math.sin(time * (b.id === 'sovereign_ship' ? 1.4 : 2.1) + phase) * bobAmp;
-      vis.root.position.set(b.x, WATER_LEVEL + 0.06 + bob, b.z);
+      const groundY = b.inVault ? vaultFloorYAt(b.x, b.z) : groundHeightAt(b.x, b.z);
+      const boatBaseY = b.inVault
+        ? groundY + 0.16
+        : groundY > WATER_LEVEL + 0.12
+        ? groundY + 0.1
+        : WATER_LEVEL + 0.06 + bob;
+      vis.root.position.set(b.x, boatBaseY, b.z);
       vis.root.rotation.y = b.heading;
-      vis.root.rotation.z = Math.sin(time * 1.5 + phase) * (b.id === 'sovereign_ship' ? 0.022 : 0.036);
+      vis.root.rotation.z =
+        b.inVault || groundY > WATER_LEVEL + 0.12
+          ? 0
+          : Math.sin(time * 1.5 + phase) * (b.id === 'sovereign_ship' ? 0.022 : 0.036);
       vis.root.rotation.x = -Math.min(0.08, Math.abs(b.speed) * 0.009);
 
       const speedNorm = Math.min(1, Math.abs(b.speed) / 6.5);

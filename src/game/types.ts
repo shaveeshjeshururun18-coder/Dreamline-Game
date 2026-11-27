@@ -3,6 +3,16 @@ import type { BusDispatchState } from './busHailing';
 import type { SkyTaxiState } from './skyTaxi';
 import type { ActiveHeroRuntimeState } from './heroCharacters';
 import type { BatmobileState } from './batmobile';
+import type { SnowmanTaxiState } from './snowmanTaxi';
+import type {
+  CameraPerspectiveMode,
+  JetSkiState,
+  SafariJeepState,
+  VtolAircraftState,
+} from './expeditionVehicles';
+import type { DirtBike49ccState } from './dirtBike';
+import type { HoverGliderState } from './hoverGlider';
+import type { WildlifeDiscoverySnapshot } from './wildlifeEcosystem';
 
 export type GameMode =
   | 'title'
@@ -20,7 +30,9 @@ export type GameMode =
   | 'mobile_phone'
   | 'midnight_frontier'
   | 'exhibition_vehicle'
-  | 'hero_armory';
+  | 'hero_armory'
+  | 'snowman_taxi'
+  | 'wildlife_guide';
 
 export type SeasonType = 'spring' | 'summer' | 'autumn' | 'winter';
 
@@ -49,20 +61,39 @@ export type WeatherType =
   | 'tsunami'
   | 'snow';
 
-export type GraphicsQuality = 'low' | 'medium' | 'high';
+export type GraphicsQuality = 'low' | 'medium' | 'high' | 'ultra';
 
 export type DayCyclePreference = 'dynamic' | 'slow' | 'frozen';
 
 export type TransportMode = 'walk' | 'bicycle' | 'skateboard';
 
-export type VehicleKind = 'none' | 'train' | 'bus' | 'boat' | 'camper' | 'safari_car' | 'sky_explorer' | 'batmobile' | 'airliner' | 'vault_car';
+export type VehicleKind =
+  | 'none'
+  | 'train'
+  | 'bus'
+  | 'boat'
+  | 'camper'
+  | 'safari_car'
+  | 'sky_explorer'
+  | 'batmobile'
+  | 'airliner'
+  | 'vault_car'
+  | 'submarine'
+  | 'safari_jeep'
+  | 'vtol_aircraft'
+  | 'jetski_sport'
+  | 'jetski_perf'
+  | 'dirt_bike_49cc'
+  | 'hover_glider'
+  | 'orange_heli';
 
 export type BoatId =
   | 'lake_boat'
   | 'coastal_boat'
   | 'bamboo_catamaran'
   | 'tribal_outrigger'
-  | 'sovereign_ship';
+  | 'sovereign_ship'
+  | 'ssj_expedition_boat';
 
 export type TrainViewMode = 'window' | 'cabin' | 'driver' | 'exterior';
 
@@ -157,7 +188,22 @@ export type InteractableKind =
   | 'home_vault_enter'
   | 'home_vault_exit'
   | 'vault_hero_pod'
-  | 'vault_car_drive';
+  | 'vault_car_drive'
+  | 'vault_exit_gate'
+  | 'submarine_board'
+  | 'ocean_hero_console'
+  | 'snowman_island_return'
+  | 'safari_jeep_drive'
+  | 'vtol_aircraft_fly'
+  | 'jetski_sport_ride'
+  | 'jetski_perf_ride'
+  | 'dirt_bike_49cc_ride'
+  | 'hover_glider_ride'
+  | 'orange_heli_fly'
+  | 'jurassic_gate_toggle'
+  | 'vehicle_garage_console'
+  | 'airport_aircraft_stand'
+  | 'terrace_aircraft_lever';
 
 export interface InteractableItem {
   id: string;
@@ -301,6 +347,7 @@ export interface BusState {
   worldX: number;
   worldZ: number;
   heading: number;
+  inVault?: boolean;
 }
 
 export interface BoatState {
@@ -316,6 +363,7 @@ export interface BoatState {
   dockZ: number;
   exitX: number;
   exitZ: number;
+  inVault?: boolean;
 }
 
 export interface CamperState {
@@ -334,6 +382,7 @@ export interface CamperState {
   hazardsOn: boolean;
   leftIndicator: boolean;
   rightIndicator: boolean;
+  inVault?: boolean;
 }
 
 export interface SafariCarState {
@@ -344,6 +393,32 @@ export interface SafariCarState {
   speedKmh: number;
   steerAngle: number;
   wheelSpin: number;
+  inVault?: boolean;
+}
+
+export interface DinosaurTriangleTrackPlaceHud {
+  id: string;
+  order: number;
+  name: string;
+  shortName: string;
+  subtitle: string;
+  x: number;
+  z: number;
+  visited: boolean;
+  isCurrent: boolean;
+}
+
+export interface DinosaurTriangleTrackHudState {
+  onTrack: boolean;
+  activePlaceId: string;
+  activePlaceName: string;
+  activePlaceSubtitle: string;
+  activePlaceOrder: number;
+  nextPlaceName: string;
+  distanceToNextM: number;
+  visitedCount: number;
+  totalPlaces: number;
+  places: DinosaurTriangleTrackPlaceHud[];
 }
 
 export interface DinosaurIslandHudState {
@@ -358,6 +433,11 @@ export interface DinosaurIslandHudState {
   wallsIntact: [boolean, boolean, boolean, boolean];
   bannerText: string;
   statusLine: string;
+  roofDoorCloseProgress: number;
+  roofDoorClosed: boolean;
+  nearestGateName: string;
+  nearestGateOpenProgress: number;
+  triangleTrack: DinosaurTriangleTrackHudState;
 }
 
 export interface CampingState {
@@ -528,9 +608,55 @@ export interface HudSnapshot {
     hatchUnlocked: boolean;
     hatchOpenProgress: number;
     inVault: boolean;
+    elevatorPhase: 'idle' | 'descending' | 'ascending';
+    elevatorProgress: number;
+    elevatorY: number;
+    exitGateOpen: boolean;
+    exitGateProgress: number;
     activeVaultCarName: string | null;
     activeVaultCarSpeedKmh: number;
     activeVaultCarBoost: boolean;
+    megaChamberDistanceM: number;
+    inMegaChamber: boolean;
+  };
+  submarine: {
+    active: boolean;
+    depthM: number;
+    speedKmh: number;
+    submerged: boolean;
+    searchlightOn: boolean;
+  };
+  snowmanRescue: {
+    phase: 'idle' | 'approaching' | 'boarding' | 'transporting' | 'arrived';
+    oceanSwimSeconds: number;
+    thresholdSeconds: number;
+    inOceanWater: boolean;
+    rescuesCompleted: number;
+  };
+  snowmanTaxi: SnowmanTaxiState;
+  cameraPerspective: CameraPerspectiveMode;
+  expedition: {
+    jeep: SafariJeepState;
+    vtol: VtolAircraftState;
+    sportJetSki: JetSkiState;
+    perfJetSki: JetSkiState;
+    dirtBike: DirtBike49ccState;
+    hoverGlider: HoverGliderState;
+  };
+  wildlife: WildlifeDiscoverySnapshot;
+  underwater: {
+    submerged: boolean;
+    depthM: number;
+    vignetteAlpha: number;
+    reefZoneName: string | null;
+  };
+  trainDriverNotch: -1 | 0 | 1 | 2 | 3;
+  trainGradeType: 'surface' | 'elevated' | 'subway_tunnel';
+  orangeHeli: {
+    name: string;
+    speedKmh: number;
+    altitudeM: number;
+    boostActive: boolean;
   };
 }
 

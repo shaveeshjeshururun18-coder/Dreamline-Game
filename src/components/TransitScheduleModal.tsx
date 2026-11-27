@@ -160,23 +160,23 @@ export const TransitScheduleModal: React.FC<TransitScheduleModalProps> = ({
                 Long Sea Railway Bridge
               </text>
               <circle
-                cx={toMapX(DINOSAUR_ISLAND_CENTER.x)}
-                cy={toMapY(DINOSAUR_ISLAND_CENTER.z)}
-                r={30 * MAP_SCALE}
-                fill="#445C3E"
-                fillOpacity="0.88"
-                stroke="#E5C891"
-                strokeWidth="2"
+                cx={Math.min(440, toMapX(DINOSAUR_ISLAND_CENTER.x))}
+                cy={Math.min(340, toMapY(DINOSAUR_ISLAND_CENTER.z))}
+                r="24"
+                fill="#2E5F34"
+                fillOpacity="0.92"
+                stroke="#EAB308"
+                strokeWidth="2.2"
               />
               <text
-                x={toMapX(DINOSAUR_ISLAND_CENTER.x)}
-                y={toMapY(DINOSAUR_ISLAND_CENTER.z) + 30}
+                x={Math.min(440, toMapX(DINOSAUR_ISLAND_CENTER.x))}
+                y={Math.min(340, toMapY(DINOSAUR_ISLAND_CENTER.z)) + 34}
                 textAnchor="middle"
                 fill="#FDE047"
                 fontSize="8.2"
                 fontWeight="700"
               >
-                Dinosaur Island
+                1 KM Dinosaur Island
               </text>
               <circle
                 cx={toMapX(ENCHANTED_FOREST_CENTER.x)}

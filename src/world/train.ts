@@ -55,79 +55,97 @@ export function createPassengerTrain(
   const group = new THREE.Group();
   const disposables: Array<{ dispose: () => void }> = [];
 
-  // Shared Train PBR Materials
-  const upperBodyMat = new THREE.MeshStandardMaterial({
-    color: 0xe6cdb2, // warm nostalgic Japanese local cream
-    roughness: 0.42,
+  // Shared High-Fidelity Clearcoat PBR Train Materials
+  const upperBodyMat = new THREE.MeshPhysicalMaterial({
+    color: 0xebd3b8, // warm nostalgic Japanese local cream lacquer
+    roughness: 0.34,
     metalness: 0.18,
+    clearcoat: 0.78,
+    clearcoatRoughness: 0.16,
+    envMapIntensity: 1.28,
   });
-  const lowerBodyMat = new THREE.MeshStandardMaterial({
-    color: 0xb85245, // vintage rural terracotta-vermilion lower band
-    roughness: 0.48,
-    metalness: 0.16,
+  const lowerBodyMat = new THREE.MeshPhysicalMaterial({
+    color: 0xc24f42, // vintage rural terracotta-vermilion clearcoat
+    roughness: 0.36,
+    metalness: 0.18,
+    clearcoat: 0.82,
+    clearcoatRoughness: 0.15,
+    envMapIntensity: 1.28,
   });
-  const stripeMat = new THREE.MeshStandardMaterial({
-    color: 0x2f3b5c, // twilight railway navy stripe
-    roughness: 0.4,
-    metalness: 0.25,
+  const stripeMat = new THREE.MeshPhysicalMaterial({
+    color: 0x2a385b, // twilight railway navy lacquer
+    roughness: 0.32,
+    metalness: 0.28,
+    clearcoat: 0.75,
+    clearcoatRoughness: 0.18,
+    envMapIntensity: 1.3,
   });
   const roofMat = new THREE.MeshStandardMaterial({
-    color: 0x3a3f4f,
-    roughness: 0.62,
-    metalness: 0.35,
+    color: 0x3b4152,
+    roughness: 0.56,
+    metalness: 0.42,
+    envMapIntensity: 1.1,
   });
   const underframeMat = new THREE.MeshStandardMaterial({
-    color: 0x252630,
-    roughness: 0.72,
-    metalness: 0.55,
+    color: 0x22242e,
+    roughness: 0.68,
+    metalness: 0.62,
   });
   const wheelMat = new THREE.MeshStandardMaterial({
-    color: 0x5c616e,
-    roughness: 0.32,
-    metalness: 0.84,
+    color: 0x6f7685,
+    roughness: 0.24,
+    metalness: 0.9,
+    envMapIntensity: 1.35,
   });
   const interiorWallMat = new THREE.MeshStandardMaterial({
     color: 0xf7e7c8,
     emissive: new THREE.Color(0xffb85e),
-    emissiveIntensity: 0.75,
-    roughness: 0.8,
+    emissiveIntensity: 0.78,
+    roughness: 0.76,
   });
   const seatMat = new THREE.MeshStandardMaterial({
-    color: 0x8f3e3b, // plush Japanese retro red-velvet carriage seats
+    color: 0x943f3c, // plush Japanese retro red-velvet carriage seats
     roughness: 0.88,
   });
   const ceilingGlowMat = new THREE.MeshStandardMaterial({
     color: 0xfff5db,
     emissive: new THREE.Color(0xffcc78),
-    emissiveIntensity: 2.2,
-    roughness: 0.2,
+    emissiveIntensity: 2.35,
+    roughness: 0.18,
   });
   const glassMat = new THREE.MeshPhysicalMaterial({
-    color: 0xa7cfdf,
+    color: 0xaed4e6,
     emissive: new THREE.Color(0xffcf88),
     emissiveIntensity: 0.16,
-    roughness: 0.1,
-    metalness: 0.18,
+    roughness: 0.05,
+    metalness: 0.22,
+    clearcoat: 1.0,
+    clearcoatRoughness: 0.04,
+    reflectivity: 0.96,
+    envMapIntensity: 1.45,
     transparent: true,
-    opacity: 0.24,
+    opacity: 0.28,
     depthWrite: false,
   });
   const headlightMat = new THREE.MeshStandardMaterial({
     color: 0xfff8df,
     emissive: new THREE.Color(0xffdd94),
-    emissiveIntensity: 3.0,
-    roughness: 0.1,
+    emissiveIntensity: 3.4,
+    roughness: 0.08,
   });
   const taillightMat = new THREE.MeshStandardMaterial({
     color: 0xff4b4b,
     emissive: new THREE.Color(0xff2828),
-    emissiveIntensity: 2.2,
-    roughness: 0.2,
+    emissiveIntensity: 2.6,
+    roughness: 0.16,
   });
-  const doorMat = new THREE.MeshStandardMaterial({
-    color: 0xdcc0a3,
-    roughness: 0.38,
-    metalness: 0.28,
+  const doorMat = new THREE.MeshPhysicalMaterial({
+    color: 0xe0c4a7,
+    roughness: 0.32,
+    metalness: 0.32,
+    clearcoat: 0.72,
+    clearcoatRoughness: 0.18,
+    envMapIntensity: 1.25,
   });
 
   disposables.push(
@@ -894,11 +912,13 @@ export function createPassengerTrain(
   ) => {
     const sLead = sampleRailway(state.t);
     leadCar.position.set(sLead.x, sLead.y + 0.08, sLead.z);
-    leadCar.rotation.set(0, sLead.angle, 0);
+    leadCar.rotation.order = 'YXZ';
+    leadCar.rotation.set(-sLead.pitch, sLead.angle, 0);
 
     const sRear = sampleRailway(wrapT(state.t - carSpacingT));
     rearCar.position.set(sRear.x, sRear.y + 0.08, sRear.z);
-    rearCar.rotation.set(0, sRear.angle, 0);
+    rearCar.rotation.order = 'YXZ';
+    rearCar.rotation.set(-sRear.pitch, sRear.angle, 0);
 
     const slideDist = state.doorOpen * 0.62;
     for (let i = 0; i < slidingDoors.length; i++) {
@@ -1092,35 +1112,39 @@ export function createPassengerTrain(
       }
     }
 
-    const glow = 0.35 + lanternStrength * 0.95;
-    const nightBoost = Math.max(0, Math.min(1, nightDarkness));
-    interiorWallMat.emissiveIntensity = 0.25 + glow * 0.85 + nightBoost * 0.95;
-    ceilingGlowMat.emissiveIntensity = 1.0 + glow * 2.0 + nightBoost * 2.2;
-    glassMat.emissiveIntensity = 0.1 + lanternStrength * 0.45 + nightBoost * 0.55;
-    headlightMat.emissiveIntensity = 2.6 + lanternStrength * 2.2 + nightBoost * 4.5;
-    taillightMat.emissiveIntensity = 1.8 + lanternStrength * 1.6 + nightBoost * 2.4;
+    // Train brightness & interior/headlight illumination turn ON only at dark dusk/night OR inside Underground Metro Subway Tunnel!
+    const inSubwayTunnel = sLead.gradeType === 'subway_tunnel' || sRear.gradeType === 'subway_tunnel';
+    const nightBoost = Math.max(inSubwayTunnel ? 0.92 : 0, Math.max(0, Math.min(1, nightDarkness)));
+    const duskRamp = Math.max(0, Math.min(1, (lanternStrength - 0.62) / 0.38));
+    const nightTrainLight = Math.max(nightBoost, duskRamp * 0.72);
 
-    // Real 3D train lights shine crisply alongside night streetlamps & player lantern without blowing out highlights
-    trainGlowLight.intensity = 2.0 + lanternStrength * 5.2 + nightBoost * 5.5;
-    rearGlowLight.intensity = lanternStrength * 3.0 + nightBoost * 4.5;
-    trainHeadlightSpot.intensity = lanternStrength * 11.0 + nightBoost * 22.0;
-    trainHeadlightFill.intensity = lanternStrength * 3.2 + nightBoost * 5.8;
+    interiorWallMat.emissiveIntensity = nightTrainLight * 1.15 + nightBoost * 0.55;
+    ceilingGlowMat.emissiveIntensity = nightTrainLight * 2.4 + nightBoost * 1.4;
+    glassMat.emissiveIntensity = nightTrainLight * 0.48 + nightBoost * 0.42;
+    headlightMat.emissiveIntensity = 0.08 + nightTrainLight * 3.8 + nightBoost * 3.2;
+    taillightMat.emissiveIntensity = 0.12 + nightTrainLight * 2.2 + nightBoost * 1.6;
 
-    // Volumetric headlight beams, lens halos & trackside warm window light pools emerge at twilight/night
-    const beamOpacity = Math.max(0, (lanternStrength - 0.35) * 0.15 + nightBoost * 0.22);
+    // Real 3D train lights stay OFF in bright daylight and shine warmly & brightly at night
+    trainGlowLight.intensity = nightTrainLight * 6.5 + nightBoost * 5.0;
+    rearGlowLight.intensity = nightTrainLight * 3.8 + nightBoost * 3.5;
+    trainHeadlightSpot.intensity = nightTrainLight * 14.0 + nightBoost * 24.0;
+    trainHeadlightFill.intensity = nightTrainLight * 4.2 + nightBoost * 6.0;
+
+    // Volumetric headlight beams, lens halos & trackside warm window light pools appear at night
+    const beamOpacity = Math.max(0, nightTrainLight * 0.16 + nightBoost * 0.24);
     headlightBeamUniforms.uOpacity.value = beamOpacity;
     const showBeams = beamOpacity > 0.01;
     for (let i = 0; i < headlightBeams.length; i++) {
       headlightBeams[i].visible = showBeams;
     }
 
-    const haloOpacity = Math.max(0, (lanternStrength - 0.3) * 0.35 + nightBoost * 0.62);
+    const haloOpacity = Math.max(0, nightTrainLight * 0.34 + nightBoost * 0.58);
     lensHaloUniforms.uOpacity.value = haloOpacity;
     for (let i = 0; i < lensHalos.length; i++) {
       lensHalos[i].visible = haloOpacity > 0.01;
     }
 
-    const spillOpacity = nightBoost * 0.28;
+    const spillOpacity = Math.max(nightTrainLight * 0.14, nightBoost * 0.34);
     windowSpillUniforms.uOpacity.value = spillOpacity;
     for (let i = 0; i < windowSpills.length; i++) {
       windowSpills[i].visible = spillOpacity > 0.01;

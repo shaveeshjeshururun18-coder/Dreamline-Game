@@ -87,11 +87,11 @@ export const FORESTED_ZONES: readonly ForestedZone[] = [
   },
   {
     id: 'dinosaur_island_jungle',
-    name: 'SSJ Dinosaur Island Palm Jungle',
+    name: 'Jurassic Park · SSJ Dinosaur Island Jungle & Wildlife Valley',
     cx: DINOSAUR_ISLAND_CENTER.x,
     cz: DINOSAUR_ISLAND_CENTER.z,
-    innerRadius: 17.5,
-    radius: 27.5,
+    innerRadius: 34.0,
+    radius: 108.0,
     weight: 0.08,
   },
 ];
@@ -177,11 +177,11 @@ function isValidFireflyAnchor(x: number, z: number, zone: ForestedZone): boolean
   if (Math.hypot(x - VILLAGE_CENTER.x, z - VILLAGE_CENTER.z) < 10.0) return false;
   // Keep out of Panimalai high-altitude glacier snowfield
   if (x < -56 && z < -36) return false;
-  // Keep Dinosaur Island fireflies strictly in the outer palm jungle ring (not inside concrete arena)
+  // Keep Jurassic Park fireflies outside the Grand Rotunda Visitor Center footprint
   if (zone.id === 'dinosaur_island_jungle') {
     if (
-      Math.abs(x - DINOSAUR_ARENA_CENTER.x) < DINOSAUR_ARENA_HALF_SIZE + 2.2 &&
-      Math.abs(z - DINOSAUR_ARENA_CENTER.z) < DINOSAUR_ARENA_HALF_SIZE + 2.2
+      Math.hypot(x - (DINOSAUR_ARENA_CENTER.x - 4), z - (DINOSAUR_ARENA_CENTER.z - 12)) <
+      Math.min(26, DINOSAUR_ARENA_HALF_SIZE)
     ) {
       return false;
     }
@@ -243,3 +243,79 @@ export function generateFireflySeeds(count = 720, seed = 20261120): FireflySeed[
 
   return seeds;
 }
+
+export interface FireflyKinematics {
+  x: number;
+  y: number;
+  z: number;
+  vx: number;
+  vy: number;
+  vz: number;
+  /** Authentic Photinus flash intensity in [0, 1] (short warm pulse + dark resting interval) */
+  flash: number;
+  /** Rapid insect wingbeat angle in radians */
+  wingAngle: number;
+}
+
+/**
+ * Evaluates a real 3D firefly's organic flight position, velocity tangent (for orienting the
+ * beetle body), wingbeat oscillation, and authentic Photinus bioluminescent flash envelope.
+ */
+export function evaluateFireflyKinematics(
+  seed: FireflySeed,
+  elapsed: number
+): FireflyKinematics {
+  const w = seed.speed;
+  const p = seed.phase;
+  const t = elapsed * w + p;
+
+  const rx = seed.wanderRadiusX;
+  const ry = seed.wanderRadiusY;
+
+  const x =
+    seed.x +
+    Math.sin(t * 1.07 + p * 1.3) * rx +
+    Math.cos(t * 0.43 + p * 0.5) * rx * 0.35;
+  const z =
+    seed.z +
+    Math.cos(t * 0.89 + p * 0.7) * rx +
+    Math.sin(t * 0.51 + p * 1.1) * rx * 0.35;
+  const y =
+    seed.y +
+    Math.sin(t * 1.31 + p * 2.1) * ry +
+    Math.cos(t * 0.62 + p * 0.4) * ry * 0.28;
+
+  // Analytical time derivatives for smooth 3D insect heading & banking
+  const vx =
+    (Math.cos(t * 1.07 + p * 1.3) * 1.07 * rx -
+      Math.sin(t * 0.43 + p * 0.5) * 0.43 * rx * 0.35) *
+    w;
+  const vz =
+    (-Math.sin(t * 0.89 + p * 0.7) * 0.89 * rx +
+      Math.cos(t * 0.51 + p * 1.1) * 0.51 * rx * 0.35) *
+    w;
+  const vy =
+    (Math.cos(t * 1.31 + p * 2.1) * 1.31 * ry -
+      Math.sin(t * 0.62 + p * 0.4) * 0.62 * ry * 0.28) *
+    w;
+
+  // Real Photinus firefly flash: quick organic brighten (~0.65s), brief hold, then quiet dark pause (~2.2s)
+  const cyclePeriod = 2.6 + (1.4 - Math.min(1.3, seed.blinkRate)) * 1.4;
+  const phaseNorm = (((elapsed + p * 3.17) % cyclePeriod) + cyclePeriod) % cyclePeriod / cyclePeriod;
+  let flash = 0.04;
+  if (phaseNorm < 0.09) {
+    const u = phaseNorm / 0.09;
+    flash = 0.04 + 0.96 * (u * u * (3 - 2 * u));
+  } else if (phaseNorm < 0.22) {
+    flash = 0.92 + 0.08 * Math.sin((phaseNorm - 0.09) * 48.0);
+  } else if (phaseNorm < 0.38) {
+    const u = (phaseNorm - 0.22) / 0.16;
+    flash = 0.04 + 0.96 * Math.pow(1 - u, 2.2);
+  }
+
+  // Rapid delicate wingbeat (~16-22 Hz visual flutter)
+  const wingAngle = Math.sin(elapsed * (34.0 + (seed.size - 0.9) * 14.0) + p * 19.0) * 0.72;
+
+  return { x, y, z, vx, vy, vz, flash, wingAngle };
+}
+

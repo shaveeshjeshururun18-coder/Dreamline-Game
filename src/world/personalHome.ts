@@ -198,11 +198,11 @@ export function buildPersonalHome(
   mailboxBox.position.set(2.8, 1.14, 8.8);
   group.add(mailboxPost, mailboxBox);
 
-  // Low Wooden Garden Fence around front/side yard with open front entrance
+  // Low Wooden Garden Fence around front/side yard with open front entrance AND wide west tunnel driveway apron
   const fenceSections: Array<[number, number, number, number]> = [
-    [-7.5, 9.5, 9.2, 0.14], // front-left
+    [-5.0, 9.5, 4.2, 0.14], // front-left (shortened so west driveway to Secret Tunnel Portal is wide open!)
     [7.5, 9.5, 9.2, 0.14], // front-right
-    [-11.8, 1.5, 0.14, 16.0], // west yard fence
+    [-16.2, 1.5, 0.14, 16.0], // west yard fence shifted outside Pad B & Secret Tunnel Portal
     [11.8, 1.5, 0.14, 16.0], // east yard fence
   ];
   for (const [fx, fz, fw, fd] of fenceSections) {
@@ -213,16 +213,16 @@ export function buildPersonalHome(
     group.add(rail, railLow);
   }
 
-  // Small Garden Pond on the left front lawn (lx: -8.2, lz: 6.2)
+  // Small Garden Pond on the right front lawn (lx: +8.2, lz: 6.2 — clear of west Secret Tunnel driveway!)
   const pondRim = new THREE.Mesh(new THREE.TorusGeometry(1.75, 0.22, 8, 18), stoneMat);
   pondRim.rotation.x = Math.PI / 2;
-  pondRim.position.set(-8.2, 0.12, 6.2);
+  pondRim.position.set(8.2, 0.12, 6.2);
   const pondWater = new THREE.Mesh(
     new THREE.CircleGeometry(1.65, 18),
     new THREE.MeshStandardMaterial({ color: 0x3b8ea5, roughness: 0.12, metalness: 0.2 })
   );
   pondWater.rotation.x = -Math.PI / 2;
-  pondWater.position.set(-8.2, 0.1, 6.2);
+  pondWater.position.set(8.2, 0.1, 6.2);
   group.add(pondRim, pondWater);
 
   // Flower Beds along porch front
@@ -264,8 +264,58 @@ export function buildPersonalHome(
 
   // Back wall (-Z)
   addWall(12.4, 3.2, 0.28, 0, 2.05, -5.0, extWoodMat);
-  // West wall (-X)
-  addWall(0.28, 3.2, 10.0, -6.1, 2.05, 0, extWoodMat);
+  // West wall (-X) split around lz: -3.3..-0.9 for the Real Animated Interior Secret Tunnel Wall Door!
+  addWall(0.28, 3.2, 5.9, -6.1, 2.05, 2.05, extWoodMat); // south segment (-0.9..+5.0)
+  addWall(0.28, 3.2, 1.7, -6.1, 2.05, -4.15, extWoodMat); // north segment (-5.0..-3.3)
+  addWall(0.32, 0.82, 2.46, -6.1, 3.25, -2.1, darkTimberMat); // header transom above secret doorway
+
+  // Concealed Sliding Interior Secret Wall Door (flush wood inside Living Room, neon cyan frame when opened!)
+  const interiorSecretDoor = new THREE.Mesh(new THREE.BoxGeometry(0.24, 2.4, 2.38), extWoodMat);
+  interiorSecretDoor.position.set(-6.1, 1.65, -2.1);
+  interiorSecretDoor.castShadow = true;
+  interiorSecretDoor.receiveShadow = true;
+  group.add(interiorSecretDoor);
+
+  const interiorSecretTrimMat = new THREE.MeshStandardMaterial({
+    color: 0x38bdf8,
+    emissive: 0x0ea5e9,
+    emissiveIntensity: 0.2,
+    roughness: 0.25,
+    metalness: 0.5,
+  });
+  const interiorDoorFrameL = new THREE.Mesh(new THREE.BoxGeometry(0.34, 2.42, 0.12), interiorSecretTrimMat);
+  interiorDoorFrameL.position.set(-6.1, 1.65, -3.28);
+  const interiorDoorFrameR = new THREE.Mesh(new THREE.BoxGeometry(0.34, 2.42, 0.12), interiorSecretTrimMat);
+  interiorDoorFrameR.position.set(-6.1, 1.65, -0.92);
+  const interiorDoorFrameT = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.12, 2.48), interiorSecretTrimMat);
+  interiorDoorFrameT.position.set(-6.1, 2.84, -2.1);
+  group.add(interiorDoorFrameL, interiorDoorFrameR, interiorDoorFrameT);
+
+  // Sloped covered threshold corridor bridging Living Room (lx=-6.1, y=0.45) to Secret Tunnel Vestibule (lx=-8.25, y=0.04)
+  const thresholdFloor = new THREE.Mesh(
+    new THREE.BoxGeometry(2.35, 0.12, 2.46),
+    new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.45, metalness: 0.55 })
+  );
+  thresholdFloor.position.set(-7.22, 0.22, -2.1);
+  thresholdFloor.rotation.z = Math.atan2(0.41, 2.25);
+  thresholdFloor.receiveShadow = true;
+  group.add(thresholdFloor);
+  // Covered corridor roof & side walls so stepping through the house wall feels completely enclosed!
+  const thresholdRoof = new THREE.Mesh(
+    new THREE.BoxGeometry(2.35, 0.22, 2.68),
+    new THREE.MeshStandardMaterial({ color: 0x162032, roughness: 0.6, metalness: 0.45 })
+  );
+  thresholdRoof.position.set(-7.22, 2.95, -2.1);
+  group.add(thresholdRoof);
+  for (const tz of [-3.36, -0.84]) {
+    const tSide = new THREE.Mesh(
+      new THREE.BoxGeometry(2.35, 2.95, 0.18),
+      new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.55, metalness: 0.5 })
+    );
+    tSide.position.set(-7.22, 1.48, tz);
+    group.add(tSide);
+  }
+
   // East wall (+X)
   addWall(0.28, 3.2, 10.0, 6.1, 2.05, 0, extWoodMat);
   // Front wall (+Z) left and right of wide open entrance doorway (lx: -1.4..1.4)
@@ -287,7 +337,27 @@ export function buildPersonalHome(
 
   // Ground-floor perimeter colliders (only active when player is downstairs: maxY = 2.6!)
   addLocalCollider('gf_back', -6.3, 6.3, -5.25, -4.75, 0, 2.6);
-  addLocalCollider('gf_west', -6.35, -5.85, -5.2, 5.2, 0, 2.6);
+  addLocalCollider('gf_west_south', -6.35, -5.85, -0.9, 5.2, 0, 2.6);
+  addLocalCollider('gf_west_north', -6.35, -5.85, -5.2, -3.3, 0, 2.6);
+  const interiorSecretDoorCollider: AabbCollider = {
+    id: 'home_gf_secret_door',
+    minX: hx - 6.35,
+    maxX: hx - 5.85,
+    minZ: hz - 3.3,
+    maxZ: hz - 0.9,
+    minY: 0,
+    maxY: 2.6,
+  };
+  const exteriorSecretDoorCollider: AabbCollider = {
+    id: 'home_ext_secret_tunnel_doors',
+    minX: hx - 14.55,
+    maxX: hx - 8.25,
+    minZ: hz + 3.65,
+    maxZ: hz + 4.35,
+    minY: 0,
+    maxY: 5.0,
+  };
+  colliders.push(interiorSecretDoorCollider, exteriorSecretDoorCollider);
   addLocalCollider('gf_east', 5.85, 6.35, -5.2, 5.2, 0, 2.6);
   addLocalCollider('gf_front_l', -6.3, -1.45, 4.75, 5.25, 0, 2.6);
   addLocalCollider('gf_front_r', 1.45, 6.3, 4.75, 5.25, 0, 2.6);
@@ -847,6 +917,170 @@ export function buildPersonalHome(
   }
 
   // =========================================================================
+  // 5B-2. TWIN WEST WING HELIPAD (PAD B, local x = -11.4, y = 10.4m)
+  //       Dedicated circular helipad for the Gold/Wood Ducted-Fan VTOL Aircraft,
+  //       connected directly to Pad A via a walkable steel skybridge!
+  // =========================================================================
+  const padBX = -11.4;
+  // 4 tall steel structural support columns anchoring Pad B cleanly down to ground (y = 0)
+  for (const sx of [-3.4, 3.4]) {
+    for (const sz of [-3.4, 3.4]) {
+      const colB = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.32, heliY - 0.16, 10), heliSteelMat);
+      colB.position.set(padBX + sx, (heliY - 0.16) * 0.5, sz);
+      colB.castShadow = true;
+      colB.receiveShadow = true;
+      group.add(colB);
+    }
+  }
+  // Cross-bracing trusses beneath Pad B for architectural realism
+  const braceB1 = new THREE.Mesh(new THREE.BoxGeometry(6.9, 0.22, 0.22), heliSteelMat);
+  braceB1.position.set(padBX, heliY - 3.6, 0);
+  const braceB2 = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.22, 6.9), heliSteelMat);
+  braceB2.position.set(padBX, heliY - 3.6, 0);
+  group.add(braceB1, braceB2);
+
+  const heliDeckB = new THREE.Mesh(new THREE.CylinderGeometry(5.5, 5.75, 0.32, 22), heliDeckMat);
+  heliDeckB.position.set(padBX, heliY - 0.16, 0);
+  heliDeckB.castShadow = true;
+  heliDeckB.receiveShadow = true;
+  group.add(heliDeckB);
+
+  const heliRimB = new THREE.Mesh(new THREE.TorusGeometry(5.45, 0.12, 8, 28), heliSteelMat);
+  heliRimB.rotation.x = Math.PI / 2;
+  heliRimB.position.set(padBX, heliY + 0.04, 0);
+  group.add(heliRimB);
+
+  const heliCircleB = new THREE.Mesh(new THREE.RingGeometry(3.85, 4.25, 28), heliYellowMat);
+  heliCircleB.rotation.x = -Math.PI / 2;
+  heliCircleB.position.set(padBX, heliY + 0.03, 0);
+  group.add(heliCircleB);
+
+  // Bold yellow "H" on Pad B
+  const hBarLB = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.04, 4.1), heliYellowMat);
+  hBarLB.position.set(padBX - 1.35, heliY + 0.03, 0);
+  const hBarRB = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.04, 4.1), heliYellowMat);
+  hBarRB.position.set(padBX + 1.35, heliY + 0.03, 0);
+  const hCrossB = new THREE.Mesh(new THREE.BoxGeometry(2.9, 0.04, 0.5), heliYellowMat);
+  hCrossB.position.set(padBX, heliY + 0.03, 0);
+  group.add(hBarLB, hBarRB, hCrossB);
+
+  for (let b = 0; b < 4; b++) {
+    const ba = (b / 4) * Math.PI * 2 + Math.PI / 4;
+    const beaconB = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.2, 0.34, 8), heliBeaconMat);
+    beaconB.position.set(padBX + Math.cos(ba) * 5.05, heliY + 0.2, Math.sin(ba) * 5.05);
+    group.add(beaconB);
+  }
+
+  // Walkable Steel Skybridge connecting Pad A (lx = -5.4) and Pad B (lx = -6.0)
+  const twinBridgeDeck = new THREE.Mesh(new THREE.BoxGeometry(3.2, 0.26, 3.6), heliDeckMat);
+  twinBridgeDeck.position.set(-5.7, heliY - 0.13, 0);
+  twinBridgeDeck.castShadow = true;
+  twinBridgeDeck.receiveShadow = true;
+  group.add(twinBridgeDeck);
+  for (const rz of [-1.72, 1.72]) {
+    const rail = new THREE.Mesh(new THREE.BoxGeometry(3.0, 0.12, 0.12), heliSteelMat);
+    rail.position.set(-5.7, heliY + 0.88, rz);
+    group.add(rail);
+    for (const px of [-6.9, -5.7, -4.5]) {
+      const post = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.9, 6), heliSteelMat);
+      post.position.set(px, heliY + 0.44, rz);
+      group.add(post);
+    }
+  }
+
+  // =========================================================================
+  // 5B-3. EXTERNAL EAST WING SKY TERRACE PAD C (local x = +11.4, y = 10.4m)
+  //       Dedicated circular rescue-orange helipad for the SSJ Orange Rescue Helicopter,
+  //       connected to Pad A via a symmetrical East Skybridge — zero yard congestion!
+  // =========================================================================
+  const padCX = 11.4;
+  const heliOrangeRingMat = new THREE.MeshStandardMaterial({
+    color: 0xf97316,
+    emissive: new THREE.Color(0xea580c),
+    emissiveIntensity: 0.65,
+    roughness: 0.3,
+  });
+  const heliOrangeBeaconMat = new THREE.MeshStandardMaterial({
+    color: 0xfb923c,
+    emissive: new THREE.Color(0xea580c),
+    emissiveIntensity: 1.85,
+    roughness: 0.2,
+  });
+  for (const sx of [-3.4, 3.4]) {
+    for (const sz of [-3.4, 3.4]) {
+      const colC = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.32, heliY - 0.16, 10), heliSteelMat);
+      colC.position.set(padCX + sx, (heliY - 0.16) * 0.5, sz);
+      colC.castShadow = true;
+      colC.receiveShadow = true;
+      group.add(colC);
+    }
+  }
+  const braceC1 = new THREE.Mesh(new THREE.BoxGeometry(6.9, 0.22, 0.22), heliSteelMat);
+  braceC1.position.set(padCX, heliY - 3.6, 0);
+  const braceC2 = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.22, 6.9), heliSteelMat);
+  braceC2.position.set(padCX, heliY - 3.6, 0);
+  group.add(braceC1, braceC2);
+
+  const heliDeckC = new THREE.Mesh(new THREE.CylinderGeometry(5.5, 5.75, 0.32, 22), heliDeckMat);
+  heliDeckC.position.set(padCX, heliY - 0.16, 0);
+  heliDeckC.castShadow = true;
+  heliDeckC.receiveShadow = true;
+  group.add(heliDeckC);
+
+  const heliRimC = new THREE.Mesh(new THREE.TorusGeometry(5.45, 0.12, 8, 28), heliSteelMat);
+  heliRimC.rotation.x = Math.PI / 2;
+  heliRimC.position.set(padCX, heliY + 0.04, 0);
+  group.add(heliRimC);
+
+  const heliCircleC = new THREE.Mesh(new THREE.RingGeometry(3.85, 4.25, 28), heliOrangeRingMat);
+  heliCircleC.rotation.x = -Math.PI / 2;
+  heliCircleC.position.set(padCX, heliY + 0.03, 0);
+  group.add(heliCircleC);
+
+  // Bold white/orange "H" on Pad C
+  const hBarLC = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.04, 4.1), heliOrangeRingMat);
+  hBarLC.position.set(padCX - 1.35, heliY + 0.03, 0);
+  const hBarRC = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.04, 4.1), heliOrangeRingMat);
+  hBarRC.position.set(padCX + 1.35, heliY + 0.03, 0);
+  const hCrossC = new THREE.Mesh(new THREE.BoxGeometry(2.9, 0.04, 0.5), heliOrangeRingMat);
+  hCrossC.position.set(padCX, heliY + 0.03, 0);
+  group.add(hBarLC, hBarRC, hCrossC);
+
+  for (let b = 0; b < 4; b++) {
+    const ba = (b / 4) * Math.PI * 2 + Math.PI / 4;
+    const beaconC = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.2, 0.34, 8), heliOrangeBeaconMat);
+    beaconC.position.set(padCX + Math.cos(ba) * 5.05, heliY + 0.2, Math.sin(ba) * 5.05);
+    group.add(beaconC);
+  }
+
+  // Symmetrical Walkable East Steel Skybridge connecting Pad A (lx = +4.4) and Pad C (lx = +7.0)
+  const eastBridgeDeck = new THREE.Mesh(new THREE.BoxGeometry(3.2, 0.26, 3.6), heliDeckMat);
+  eastBridgeDeck.position.set(5.7, heliY - 0.13, 0);
+  eastBridgeDeck.castShadow = true;
+  eastBridgeDeck.receiveShadow = true;
+  group.add(eastBridgeDeck);
+  for (const rz of [-1.72, 1.72]) {
+    const rail = new THREE.Mesh(new THREE.BoxGeometry(3.0, 0.12, 0.12), heliSteelMat);
+    rail.position.set(5.7, heliY + 0.88, rz);
+    group.add(rail);
+    for (const px of [4.5, 5.7, 6.9]) {
+      const post = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.9, 6), heliSteelMat);
+      post.position.set(px, heliY + 0.44, rz);
+      group.add(post);
+    }
+  }
+
+  // External Rooftop Sky-Terrace Launch Lever Pedestal at the top of the staircase (lx = 5.0, lz = -3.0)
+  const leverPedestal = new THREE.Mesh(new THREE.BoxGeometry(0.7, 1.1, 0.55), heliSteelMat);
+  leverPedestal.position.set(5.0, heliY + 0.55, -3.0);
+  const leverArm = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.65, 8), heliOrangeBeaconMat);
+  leverArm.position.set(5.0, heliY + 1.32, -3.0);
+  leverArm.rotation.z = -0.35;
+  const leverKnob = new THREE.Mesh(new THREE.SphereGeometry(0.14, 10, 10), heliBeaconMat);
+  leverKnob.position.set(5.12, heliY + 1.62, -3.0);
+  group.add(leverPedestal, leverArm, leverKnob);
+
+  // =========================================================================
   // 5C. WALKABLE EXTERIOR EAST HELIPAD STAIRCASE & TOP SKYWALK BRIDGE
   //     Connects 2nd-floor east balcony (lx: 6.0..8.0, lz: 6.2, y = 3.65m)
   //     smoothly up to the Rooftop Helipad Deck (y = 10.4m)!
@@ -1190,13 +1424,24 @@ export function buildPersonalHome(
       id: 'home_rooftop_helipad_launch',
       kind: 'sky_explorer_fly',
       label: 'Fly SSJ Sky Explorer from Rooftop Helipad',
-      sublabel: 'என் இல்லம் கூரை ஹெலிபேட் · Take off directly from the pad',
+      sublabel: 'என் இல்லம் கூரை ஹெலிபேட் · Take off directly from Pad A',
       x: hx,
       y: 10.4,
       z: hz,
       radius: 5.5,
       locationId: 'my_home',
       metaId: 'home',
+    },
+    {
+      id: 'home_external_terrace_lever',
+      kind: 'terrace_aircraft_lever',
+      label: 'External Terrace Aircraft Lever — Launch Any of 3 Aircraft',
+      sublabel: 'Pad B VTOL · Pad A Sky Explorer · Pad C Orange Rescue Helicopter',
+      x: hx + 5.0,
+      y: 10.4,
+      z: hz - 3.0,
+      radius: 4.0,
+      locationId: 'my_home',
     },
     {
       id: 'home_hero_hall_switch',
@@ -1271,7 +1516,7 @@ export function buildPersonalHome(
     fairyBulbMat.emissiveIntensity = home.fairyLightsOn ? (0.8 + glow * 1.35) * pulse : 0;
     homeWarmLight.intensity = (1.35 + glow * 1.65) * (home.fairyLightsOn ? 1.15 : 0.9);
 
-    // Animate hidden floor hatch sliding apart smoothly when triggered by the secret button
+    // Animate hidden floor hatch AND Interior Secret Wall Door sliding smoothly when triggered!
     const openT = Math.max(0, Math.min(1, vaultHatchOpenProgress));
     const slideOffset = openT * 1.05;
     hatchLeafLeft.position.x = -0.59 - slideOffset;
@@ -1282,6 +1527,23 @@ export function buildPersonalHome(
     secretBtnMat.emissive.setHex(openT > 0.1 ? 0x10b981 : 0x38bdf8);
     secretBtnMat.emissiveIntensity = (1.2 + Math.sin(time * 3.8) * 0.45) * (openT > 0.1 ? 1.3 : 1.0);
     secretShaftGlowMat.emissiveIntensity = (1.3 + Math.sin(time * 3.0) * 0.35) * openT;
+
+    // Slide the Interior Secret Wall Door open into the wall pocket & unlock its collider!
+    interiorSecretDoor.position.z = -2.1 - openT * 2.28;
+    interiorSecretTrimMat.color.setHex(openT > 0.15 ? 0x22d3ee : 0x334155);
+    interiorSecretTrimMat.emissive.setHex(openT > 0.15 ? 0x06b6d4 : 0x0f172a);
+    interiorSecretTrimMat.emissiveIntensity = openT > 0.1 ? 1.2 + Math.sin(time * 3.4) * 0.3 : 0.1;
+    if (openT >= 0.45) {
+      interiorSecretDoorCollider.minY = -99;
+      interiorSecretDoorCollider.maxY = -98;
+      exteriorSecretDoorCollider.minY = -99;
+      exteriorSecretDoorCollider.maxY = -98;
+    } else {
+      interiorSecretDoorCollider.minY = 0;
+      interiorSecretDoorCollider.maxY = 2.6;
+      exteriorSecretDoorCollider.minY = 0;
+      exteriorSecretDoorCollider.maxY = 5.0;
+    }
 
     for (let i = 0; i < avatarStands.length; i++) {
       const stand = avatarStands[i];

@@ -13,18 +13,22 @@ import {
   MIN_TEMPERATURE_C,
 } from '../game/trainSteam';
 
+import type { OceanThemeId } from '../game/gerstnerOcean';
+
 interface AtmospherePanelProps {
   open: boolean;
   timeHours: number;
   activePeriod: TimePeriod;
   weather: WeatherType;
   season: SeasonType;
+  oceanTheme?: OceanThemeId;
   temperatureC: number;
   manualTemperatureC: number | null;
   dayCycleMode: DayCyclePreference;
   onSelectTime: (hours: number) => void;
   onSelectWeather: (weather: WeatherType) => void;
   onSelectSeason: (season: SeasonType) => void;
+  onSelectOceanTheme?: (theme: OceanThemeId) => void;
   onSelectTemperature: (tempC: number | null) => void;
   onChangeDayCycle: (mode: DayCyclePreference) => void;
   onClose: () => void;
@@ -71,12 +75,14 @@ export const AtmospherePanel: React.FC<AtmospherePanelProps> = ({
   activePeriod,
   weather,
   season,
+  oceanTheme = 'bengal',
   temperatureC,
   manualTemperatureC,
   dayCycleMode,
   onSelectTime,
   onSelectWeather,
   onSelectSeason,
+  onSelectOceanTheme,
   onSelectTemperature,
   onChangeDayCycle,
   onClose,
@@ -334,6 +340,53 @@ export const AtmospherePanel: React.FC<AtmospherePanelProps> = ({
           })}
         </div>
       </div>
+
+      {/* Ocean Basin Optics Switcher (Bay of Bengal / North Atlantic / Pacific Reef) */}
+      {onSelectOceanTheme && (
+        <div className="mt-3 pt-3 border-t border-emerald-300/18">
+          <div className="flex items-center justify-between text-xs text-emerald-200 mb-1.5">
+            <span className="inline-flex items-center gap-1.5 font-medium">
+              <Waves className="w-3.5 h-3.5 text-emerald-300" />
+              <span>Realistic Ocean Optics (Gerstner Wave Physics)</span>
+            </span>
+            <span className="text-[11px] text-[#B7C7E3]">
+              {oceanTheme === 'bengal'
+                ? 'Bay of Bengal Coast'
+                : oceanTheme === 'atlantic'
+                ? 'North Atlantic Swell'
+                : 'Pacific Reef & Shore'}
+            </span>
+          </div>
+          <div className="grid grid-cols-3 gap-1.5">
+            {(
+              [
+                { id: 'bengal', label: 'Bay of Bengal', dot: 'bg-emerald-400' },
+                { id: 'atlantic', label: 'Atlantic Ocean', dot: 'bg-teal-400' },
+                { id: 'pacific', label: 'Pacific Reef', dot: 'bg-cyan-400' },
+              ] as const
+            ).map((opt) => {
+              const active = oceanTheme === opt.id;
+              return (
+                <button
+                  key={opt.id}
+                  type="button"
+                  data-testid={`ocean-theme-${opt.id}-btn`}
+                  aria-pressed={active}
+                  onClick={() => onSelectOceanTheme(opt.id)}
+                  className={`px-2.5 py-1.5 text-xs rounded border transition-colors cursor-pointer flex items-center justify-center gap-1.5 whitespace-nowrap ${
+                    active
+                      ? 'bg-emerald-300 border-emerald-100 text-[#0B1F1C] font-semibold'
+                      : 'bg-[#17282A] border-emerald-300/25 text-emerald-100 hover:bg-[#1E3639]'
+                  }`}
+                >
+                  <span className={`w-2 h-2 rounded-full ${active ? 'bg-[#0B1F1C]' : opt.dot}`} />
+                  <span>{opt.label}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </div>
   );
 };

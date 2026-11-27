@@ -213,42 +213,129 @@ export function createDesertOasisWorld(scene: THREE.Scene): DesertOasisWorldSyst
   };
 
   // =========================================================================
-  // 1. EMERALD OASIS LAGOON WATER & WALKABLE TIMBER JETTY
+  // 1. EMERALD OASIS LAGOON WATER (OCEANLAB OPTICAL SHADER) & TIMBER JETTY
   // =========================================================================
-  const oasisWaterGeo = track(new THREE.CircleGeometry(1, 44));
+  const oasisWaterUniforms = {
+    uTime: { value: 0 },
+    uLanternStrength: { value: 0 },
+  };
+  const oasisWaterGeo = track(new THREE.CircleGeometry(1, 56));
   oasisWaterGeo.rotateX(-Math.PI / 2);
   const oasisWaterMat = track(
-    new THREE.MeshStandardMaterial({
-      color: 0x1ea896,
-      emissive: new THREE.Color(0x0a4d46),
-      emissiveIntensity: 0.22,
-      roughness: 0.14,
-      metalness: 0.35,
+    new THREE.ShaderMaterial({
+      uniforms: oasisWaterUniforms,
       transparent: true,
-      opacity: 0.86,
+      vertexShader: /* glsl */ `
+        uniform float uTime;
+        varying vec3 vWorldPos;
+        varying vec2 vUv;
+        void main() {
+          vUv = uv;
+          vec4 wp = modelMatrix * vec4(position, 1.0);
+          float edge = length(uv - vec2(0.5)) * 2.0;
+          float mask = smoothstep(1.0, 0.25, edge);
+          wp.y += (sin(wp.x * 0.35 + uTime * 1.55) * 0.032 + cos(wp.z * 0.38 - uTime * 1.25) * 0.026) * mask;
+          vWorldPos = wp.xyz;
+          gl_Position = projectionMatrix * viewMatrix * wp;
+        }
+      `,
+      fragmentShader: /* glsl */ `
+        precision highp float;
+        uniform float uTime;
+        uniform float uLanternStrength;
+        varying vec3 vWorldPos;
+        varying vec2 vUv;
+
+        float hash21(vec2 p) {
+          p = fract(p * vec2(234.34, 435.345));
+          p += dot(p, p + 34.23);
+          return fract(p.x * p.y);
+        }
+
+        float noise2D(vec2 p) {
+          vec2 i = floor(p);
+          vec2 f = fract(p);
+          vec2 u = f * f * (3.0 - 2.0 * f);
+          float a = hash21(i);
+          float b = hash21(i + vec2(1.0, 0.0));
+          float c = hash21(i + vec2(0.0, 1.0));
+          float d = hash21(i + vec2(1.0, 1.0));
+          return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
+        }
+
+        const mat2 rotMat = mat2(0.80, -0.60, 0.60, 0.80);
+
+        float capillaryFBM(vec2 p, float t) {
+          float val = 0.0;
+          float amp = 0.5;
+          vec2 shift = vec2(t * 0.65, -t * 0.45);
+          for (int i = 0; i < 4; i++) {
+            val += amp * noise2D(p + shift);
+            p = rotMat * p * 2.1;
+            shift = rotMat * shift * 1.3;
+            amp *= 0.48;
+          }
+          return val;
+        }
+
+        float computeCaustics(vec2 p, float t) {
+          vec2 uv1 = p * 0.95 + vec2(t * 0.35, -t * 0.28);
+          vec2 uv2 = rotMat * p * 1.25 - vec2(t * 0.30, t * 0.38);
+          float n1 = abs(noise2D(uv1) - 0.5);
+          float n2 = abs(noise2D(uv2) - 0.5);
+          return pow(1.0 - clamp((n1 + n2) * 2.2, 0.0, 1.0), 3.3);
+        }
+
+        void main() {
+          vec3 V = normalize(cameraPosition - vWorldPos);
+          vec3 L = normalize(vec3(0.45, 0.58, -0.45));
+          float dayFactor = clamp(1.0 - uLanternStrength * 0.78, 0.24, 1.0);
+
+          vec2 uv = vWorldPos.xz * 0.46;
+          float eps = 0.08;
+          float h0 = capillaryFBM(uv, uTime);
+          float hx = capillaryFBM(uv + vec2(eps, 0.0), uTime);
+          float hz = capillaryFBM(uv + vec2(0.0, eps), uTime);
+          vec3 N = normalize(vec3(-(hx - h0) / eps * 0.14, 1.0, -(hz - h0) / eps * 0.14));
+
+          float NoV = clamp(dot(N, V), 0.001, 1.0);
+          float fresnel = 0.02 + 0.98 * pow(1.0 - NoV, 5.0);
+
+          float edge = length(vUv - vec2(0.5)) * 2.0;
+          float opticalDepth = max(0.06, (1.0 - edge) * 4.5);
+
+          vec3 abyssal = vec3(0.008, 0.082, 0.095) * dayFactor;
+          vec3 shallow = vec3(0.032, 0.380, 0.335) * dayFactor;
+          vec3 deepWater = mix(shallow, abyssal, pow(1.0 - NoV, 0.65));
+
+          float seabedVis = exp(-opticalDepth * 0.55);
+          float caustics = computeCaustics(vWorldPos.xz + N.xz * 0.5, uTime) * smoothstep(3.8, 0.15, opticalDepth) * dayFactor;
+          vec3 sandBed = vec3(0.88, 0.74, 0.50) * (0.45 * dayFactor) + vec3(1.0, 0.96, 0.80) * caustics * 0.52;
+          vec3 waterBody = mix(mix(deepWater, shallow, exp(-opticalDepth * 0.24)), sandBed, seabedVis * 0.78);
+
+          vec3 skyRefl = mix(vec3(0.04, 0.06, 0.14), vec3(0.45, 0.68, 0.86), dayFactor);
+          vec3 col = mix(waterBody, skyRefl, clamp(fresnel * 0.88 + 0.06, 0.0, 0.94));
+
+          vec3 H = normalize(L + V);
+          float NoH = max(dot(N, H), 0.0);
+          col += vec3(1.0, 0.93, 0.78) * (pow(NoH, 520.0) * 4.6 + pow(NoH, 38.0) * 0.28) * dayFactor;
+
+          float bubble = smoothstep(0.24, 0.78, noise2D(vWorldPos.xz * 2.4 + vec2(uTime * 0.3, -uTime * 0.25)));
+          float swash = smoothstep(0.72, 0.95, edge) * (0.5 + 0.5 * sin(edge * 20.0 - uTime * 2.5)) * bubble;
+          col = mix(col, vec3(0.94, 0.97, 0.98) * dayFactor, clamp(swash * 0.62, 0.0, 0.72));
+
+          col = (col * (2.51 * col + 0.03)) / (col * (2.43 * col + 0.59) + 0.14);
+          col = pow(clamp(col, 0.0, 1.0), vec3(1.0 / 2.2));
+          float alpha = smoothstep(1.0, 0.86, edge) * 0.95;
+          gl_FragColor = vec4(col, alpha);
+        }
+      `,
     })
   );
   const oasisWaterMesh = new THREE.Mesh(oasisWaterGeo, oasisWaterMat);
   oasisWaterMesh.scale.set(DESERT_OASIS_RX * 1.04, 1, DESERT_OASIS_RZ * 1.04);
   oasisWaterMesh.position.set(DESERT_OASIS_CENTER.x, WATER_LEVEL + 0.04, DESERT_OASIS_CENTER.z);
-  oasisWaterMesh.receiveShadow = true;
   group.add(oasisWaterMesh);
-
-  // Shimmering turquoise shallow inner ripple ring
-  const oasisRingGeo = track(new THREE.RingGeometry(0.62, 0.96, 40));
-  oasisRingGeo.rotateX(-Math.PI / 2);
-  const oasisRingMat = track(
-    new THREE.MeshBasicMaterial({
-      color: 0x7ef3e0,
-      transparent: true,
-      opacity: 0.22,
-      depthWrite: false,
-    })
-  );
-  const oasisRingMesh = new THREE.Mesh(oasisRingGeo, oasisRingMat);
-  oasisRingMesh.scale.set(DESERT_OASIS_RX, 1, DESERT_OASIS_RZ);
-  oasisRingMesh.position.set(DESERT_OASIS_CENTER.x, WATER_LEVEL + 0.06, DESERT_OASIS_CENTER.z);
-  group.add(oasisRingMesh);
 
   // Walkable Oasis Timber Jetty extending from eastern sandy shore into the turquoise water
   const jMinX = DESERT_OASIS_JETTY_BOUNDS.minX;
@@ -994,9 +1081,9 @@ export function createDesertOasisWorld(scene: THREE.Scene): DesertOasisWorldSyst
       // Warm lantern glow strength scales cleanly with twilight/night
       lanternGlowMat.emissiveIntensity = 0.75 + lanternStrength * 1.45;
 
-      // Subtle shimmer on Emerald Oasis water
-      oasisRingMesh.rotation.y = elapsed * 0.05;
-      oasisRingMat.opacity = 0.16 + 0.08 * Math.sin(elapsed * 1.8);
+      // Animate realistic OceanLab Emerald Oasis lagoon shader
+      oasisWaterUniforms.uTime.value = elapsed;
+      oasisWaterUniforms.uLanternStrength.value = lanternStrength;
 
       // Drift golden desert sand shimmer particles only when player is reasonably close to western desert
       const nearDesert = playerX < -105 && playerZ > 15;

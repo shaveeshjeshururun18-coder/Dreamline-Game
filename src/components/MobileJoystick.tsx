@@ -2,7 +2,7 @@ import React, { useRef, useState } from 'react';
 import { normalizeJoystickInput } from '../game/locomotion';
 
 interface MobileJoystickProps {
-  onMove: (right: number, forward: number) => void;
+  onMove: (right: number, forward: number, active?: boolean) => void;
 }
 
 const OUTER_RADIUS = 54;
@@ -30,13 +30,13 @@ export const MobileJoystick: React.FC<MobileJoystickProps> = ({ onMove }) => {
     const cy = rect.top + rect.height / 2;
     const sample = normalizeJoystickInput(clientX - cx, clientY - cy, MAX_TRAVEL);
     setKnob({ x: sample.knobX, y: sample.knobY, active: true });
-    onMove(sample.right, sample.forward);
+    onMove(sample.right, sample.forward, true);
   };
 
   const resetStick = () => {
     activePointerId.current = null;
     setKnob({ x: 0, y: 0, active: false });
-    onMove(0, 0);
+    onMove(0, 0, false);
   };
 
   const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {

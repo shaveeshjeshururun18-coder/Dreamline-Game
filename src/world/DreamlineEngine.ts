@@ -1,5 +1,65 @@
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import {
+  computeDynamicBloomStrength,
+  resolveGraphicsProfile,
+} from '../game/graphicsQuality';
+import {
+  cancelSnowmanTaxi as cancelSnowmanTaxiLogic,
+  createInitialSnowmanTaxiState,
+  dispatchSnowmanTaxi as dispatchSnowmanTaxiLogic,
+  stepSnowmanTaxi,
+  triggerInstantCycleJetSkiMorph as triggerInstantCycleJetSkiMorphLogic,
+  type DispatchSnowmanTaxiParams,
+  type SnowmanTaxiState,
+} from '../game/snowmanTaxi';
+import { buildSnowmanTaxiWorld3D, type SnowmanTaxiWorld3D } from './snowmanTaxiWorld';
+import {
+  createInitialJetSkiState,
+  createInitialSafariJeepState,
+  createInitialVtolAircraftState,
+  cycleCameraPerspective as cycleCameraPerspectiveLogic,
+  stepJetSki,
+  stepSafariJeep,
+  stepVtolAircraft,
+  type CameraPerspectiveMode,
+  type JetSkiState,
+  type SafariJeepState,
+  type VtolAircraftState,
+} from '../game/expeditionVehicles';
+import {
+  createExpeditionVehiclesWorld,
+  type ExpeditionVehiclesWorld,
+} from './expeditionVehicles3D';
+import {
+  createInitialDirtBikeState,
+  stepDirtBike,
+  type DirtBike49ccState,
+} from '../game/dirtBike';
+import {
+  computeLookToFlyVerticalRate,
+  createInitialHoverGliderState,
+  stepHoverGlider,
+  type HoverGliderState,
+} from '../game/hoverGlider';
+import {
+  createInitialWildlifeEcosystem,
+  findWildlifeInViewfinder,
+  getWildlifeSpeciesById,
+  stepWildlifeEcosystem,
+  WILDLIFE_SPECIES_CATALOG,
+  type WildlifeActorState,
+  type WildlifeSpeciesId,
+  type WildlifeViewfinderTarget,
+} from '../game/wildlifeEcosystem';
+import {
+  createWildlifeEcosystemWorld,
+  type WildlifeEcosystemWorld,
+} from './wildlifeEcosystem3D';
 import type {
   BoatId,
   BoatState,
@@ -33,7 +93,9 @@ import {
   ENCHANTED_FOREST_CENTER,
   getLocationAt,
   getRegionAt,
+  groundHeightAt,
   HOME_CENTER,
+  isOceanAt,
   isSwimmableWaterAt,
   isWaterAt,
   LAKE_CENTER,
@@ -47,16 +109,33 @@ import {
   type AabbCollider,
 } from '../game/terrain';
 import {
+  computeUnderwaterAtmosphere,
+  createMarineLifeActors,
+  OCEAN_REEF_ZONES,
+  stepMarineLifeActors,
+  type MarineCreatureActor,
+  type UnderwaterAtmosphere,
+} from '../game/underwaterOcean';
+import {
+  buildUnderwaterOceanWorld3D,
+  type UnderwaterOceanWorld3D,
+} from './underwaterOcean3D';
+import {
   applyTrainRoutePlan,
   canBoardTrain,
   createInitialTrainState,
   createTrainRoutePlan,
   CROSSING_POINT,
   findNearbyStationIndex,
+  getCombinedRailSectionT,
   getDisembarkPosition,
+  RAILWAY_TOTAL_LENGTH,
+  sampleRailway,
   STATIONS,
   stepTrainManualDrive,
   stepTrainState,
+  TRAIN_DRIVER_NOTCH_MPS,
+  type TrainDriverNotch,
 } from '../game/railway';
 import {
   computeStationCrowdProfile,
@@ -150,12 +229,19 @@ import {
 } from '../game/extremeWeather';
 import {
   combineMovementInput,
+  beginScreenPointer,
   createInitialJumpState,
+  createInitialScreenTouchState,
+  endScreenPointer,
+  getTouchMovePadVisual,
+  moveScreenPointer,
   requestJump,
   stepJumpState,
   toggleNightModeHours,
   TRANSPORT_SPECS,
   type JumpState,
+  type ScreenTouchState,
+  type TouchMovePadVisual,
 } from '../game/locomotion';
 import { createProceduralTextures } from './textures';
 import { createSkyAndWater } from './skyAndWater';
@@ -176,9 +262,11 @@ import {
   fireDinosaurIslandAk47,
   getActiveArenaWallColliders,
   isOnDinosaurIsland,
+  snapJurassicRoofDoorsForTime,
   spawnNextDinoWave,
   stepDinosaurIslandState,
   stepSafariCarState,
+  toggleJurassicGate,
   type DinosaurIslandState,
 } from '../game/dinosaurIsland';
 import { computeNavigationState, type NavigationTarget } from '../game/navigation';
@@ -227,6 +315,7 @@ import {
 import { buildEnchantedForestWorld } from './enchantedForest';
 import { buildDinosaurIslandWorld } from './dinosaurIslandWorld';
 import { buildFirefliesWorld } from './firefliesWorld';
+import type { OceanThemeId } from '../game/gerstnerOcean';
 import { buildWildlifeWorld } from './wildlifeWorld';
 import { buildBirdFlockingWorld } from './birdFlockingWorld';
 import { buildWorldPeople } from './people';
@@ -244,15 +333,24 @@ import {
 } from '../game/desertOasis';
 import {
   AVS_HELIPAD_POS,
+  createInitialOrangeHeliState,
   createInitialSkyExplorerState,
+  createOrangeHeliAtPad,
   createSkyExplorerAtHelipad,
+  getOrangeHeliExitPosition,
   getSkyExplorerExitPosition,
   HOME_HELIPAD_POS,
+  stepOrangeHeliState,
   stepSkyExplorerState,
+  VEHICLE_GARAGE_CENTER,
+  type OrangeHeliPadId,
+  type OrangeHeliState,
   type SkyExplorerPadId,
   type SkyExplorerState,
 } from '../game/skyExplorer';
 import { buildSkyExplorerWorld } from './skyExplorerWorld';
+import { buildOrangeHeliWorld, type OrangeHeliWorldSystem } from './orangeHeliWorld';
+import { buildVehicleGarageWorld, type VehicleGarageWorldHandle } from './vehicleGarageWorld';
 import { DreamlineAudio } from './audio';
 import {
   computeHeroMovementMultipliers,
@@ -260,6 +358,7 @@ import {
   cycleHeroOutfit,
   getHeroById,
   getHeroOutfitById,
+  getHeroPowerOptions,
   type ActiveHeroRuntimeState,
   type HeroCharacterId,
   type HeroOutfitId,
@@ -274,6 +373,7 @@ import {
 import {
   createInitialWebSwingState,
   findBestWebOrGrappleAnchor,
+  releaseWebSwingWithSpin,
   startWebSwing,
   stepWebSwingPhysics,
   type MetroDestructionState,
@@ -284,19 +384,50 @@ import { buildBatmobileWorld } from './batmobileWorld';
 import { createHeroVfxSystem3D, type HeroVfxRenderInput } from './heroVfx3D';
 import {
   VAULT_CEILING_Y,
+  VAULT_ELEVATOR_POS,
   VAULT_FLOOR_Y,
   VAULT_HATCH_WORLD,
+  VAULT_HEIGHT,
+  VAULT_HOME_OUTSIDE_STAND_POS,
   VAULT_SPAWN_POS,
+  VAULT_SURFACE_DRIVE_EXIT,
   clampVaultPosition,
   createInitialHomeVaultState,
   getVaultCarSpec,
+  getVaultMegaChamberDistanceM,
+  isApproachingHouseTunnelExterior,
+  isEnteringHouseSecretTunnelFromSurface,
+  isExitingHouseSecretTunnelToSurface,
+  isInsideMegaChamber,
+  isNearSurfaceTunnelMouth,
   isPlayerInsidePersonalHome,
+  startVaultElevatorAscent,
+  startVaultElevatorDescent,
+  stepGenericVehicleVaultTunnel,
   stepSecretHatchAnimation,
   stepVaultCarState,
+  stepVaultElevator,
   toggleSecretVaultHatch,
+  toggleVaultExitGate,
+  vaultFloorYAt,
   type HomeVaultState,
   type VaultCarId,
 } from '../game/homeUndergroundVault';
+import {
+  OCEAN_RESCUE_THRESHOLD_SECONDS,
+  SUBMARINE_DOCK_POS,
+  SUBMARINE_EXIT_POS,
+  createInitialSnowmanRescueState,
+  createInitialSubmarineState,
+  stepOceanSnowmanRescue,
+  stepSubmarineState,
+  type SnowmanRescueState,
+  type SubmarineState,
+} from '../game/oceanWorldSystems';
+import {
+  buildOceanServicesWorld3D,
+  type OceanServicesWorld3D,
+} from './oceanServicesWorld';
 import {
   buildHomeUndergroundVault3D,
   type HomeUndergroundVault3D,
@@ -313,6 +444,7 @@ import {
   getAirlinerExitPosition,
   getMetroStationById,
   getUndergroundMetroFloorY,
+  isInsideAirport,
   stepAirlinerState,
   stepParachuteGlide,
   stepSubwayTrainState,
@@ -328,6 +460,7 @@ export interface EngineCallbacks {
   onInspect: (content: InspectContent) => void;
   onOpenExhibitionVehicle?: (vehicleId: ExhibitionVehicleId) => void;
   onModeChangeRequest: (mode: GameMode) => void;
+  onTouchPadUpdate?: (pad: TouchMovePadVisual) => void;
   onWebglLost?: () => void;
 }
 
@@ -369,8 +502,15 @@ export class DreamlineEngine {
   private resizeObserver: ResizeObserver;
 
   private sunLight: THREE.DirectionalLight;
+  private rimLight: THREE.DirectionalLight;
   private hemiLight: THREE.HemisphereLight;
   private fog: THREE.FogExp2;
+  private composer: EffectComposer | null = null;
+  private bloomPass: UnrealBloomPass | null = null;
+  private composerRenderTarget: THREE.WebGLRenderTarget | null = null;
+  private postProcessingEnabled = false;
+  private targetShadowRefreshInterval = 1;
+  private smoothCameraFov = 50;
 
   private textures: ReturnType<typeof createProceduralTextures>;
   private skyWater: ReturnType<typeof createSkyAndWater>;
@@ -396,6 +536,8 @@ export class DreamlineEngine {
   private avsSnowHouse: ReturnType<typeof buildAvsSnowHouse>;
   private frozenKingdom: ReturnType<typeof buildFrozenKingdomWorld>;
   private skyExplorerWorld: ReturnType<typeof buildSkyExplorerWorld>;
+  private orangeHeliWorld: OrangeHeliWorldSystem;
+  private vehicleGarageWorld: VehicleGarageWorldHandle;
   private skyTaxiWorld: ReturnType<typeof buildSkyExplorerWorld>;
   private exhibitionComplexWorld: ReturnType<typeof buildExhibitionComplexWorld>;
   private desertOasisWorld: ReturnType<typeof createDesertOasisWorld>;
@@ -404,13 +546,49 @@ export class DreamlineEngine {
   private heroVfxWorld: ReturnType<typeof createHeroVfxSystem3D>;
   private homeVaultWorld: HomeUndergroundVault3D;
   private airportMetroWorld: ReturnType<typeof buildAirportMetroWorld>;
+  private oceanServicesWorld: OceanServicesWorld3D;
+  private snowmanTaxiWorld: SnowmanTaxiWorld3D;
+  private expeditionVehiclesWorld: ExpeditionVehiclesWorld;
+  private wildlifeEcosystemWorld: WildlifeEcosystemWorld;
   private desertCampfireLit = true;
   public audio: DreamlineAudio;
 
-  // 3D Heroes, Armoured Batmobile & Secret Underground Superhero Vault + Car Garage State
+  // Expedition Flagship Vehicles (Safari Jeep, Gold/Wood VTOL, Sport Yellow Jet Ski, High-Perf Green Jet Ski),
+  // 8-Perspective Camera System & 22-Species Living Wildlife Ecosystem
+  private safariJeepState: SafariJeepState = createInitialSafariJeepState();
+  private vtolState: VtolAircraftState = createInitialVtolAircraftState();
+  private sportJetSkiState: JetSkiState = createInitialJetSkiState('sport_yellow');
+  private perfJetSkiState: JetSkiState = createInitialJetSkiState('perf_green');
+  private dirtBikeState: DirtBike49ccState = createInitialDirtBikeState();
+  private dirtBikeManualRev = false;
+  private hoverGliderState: HoverGliderState = createInitialHoverGliderState();
+  private cameraPerspective: CameraPerspectiveMode = 'chase';
+  private wildlifeActors: WildlifeActorState[] = createInitialWildlifeEcosystem();
+  private wildlifeDiscoveredIds = new Set<WildlifeSpeciesId>(['sambar_deer', 'peacock']);
+  private wildlifePhotographedIds = new Set<WildlifeSpeciesId>();
+  private wildlifeViewfinderTarget: WildlifeViewfinderTarget | null = null;
+  private vtolVerticalAscend = false;
+  private vtolVerticalDescend = false;
+
+  // 3D Heroes, Armoured Batmobile, Secret Underground Vault, Submarine, Snowman Rescue & Snowman Multi-Transport Taxi
   private heroState: ActiveHeroRuntimeState = createInitialHeroRuntimeState();
   private batmobileState: BatmobileState = createInitialBatmobileState();
   private homeVaultState: HomeVaultState = createInitialHomeVaultState();
+  private submarineState: SubmarineState = createInitialSubmarineState();
+  private submarineDiveHold = 0; // -1 rise, 0 hold, +1 dive
+  private snowmanTaxiState: SnowmanTaxiState = createInitialSnowmanTaxiState();
+  private snowmanRescueState: SnowmanRescueState = createInitialSnowmanRescueState(
+    (() => {
+      try {
+        const q = new URLSearchParams(window.location.search).get('oceanRescueSec');
+        const parsed = q ? Number(q) : NaN;
+        if (Number.isFinite(parsed) && parsed >= 1 && parsed <= 120) return parsed;
+      } catch {
+        // ignore non-browser env
+      }
+      return OCEAN_RESCUE_THRESHOLD_SECONDS;
+    })()
+  );
   private readonly emptyWebAnchorState: MetroDestructionState = {
     buildings: [],
     props: [],
@@ -497,6 +675,7 @@ export class DreamlineEngine {
   private camperState: CamperState = createInitialCamperState();
   private dinosaurIslandState: DinosaurIslandState = createInitialDinosaurIslandState();
   private skyExplorerState: SkyExplorerState = createInitialSkyExplorerState();
+  private orangeHeliState: OrangeHeliState = createInitialOrangeHeliState();
   private skyAscendHeld = false;
   private skyDescendHeld = false;
   private boatFpvMode = false;
@@ -527,6 +706,13 @@ export class DreamlineEngine {
   private playerHeading = Math.PI * 0.88;
   private isSitting = false;
   private isSwimming = false;
+  private swimDiveDepth = 0;
+  private swimDiveHold: -1 | 0 | 1 = 0;
+  private underwaterOceanWorld!: UnderwaterOceanWorld3D;
+  private marineLifeActors: MarineCreatureActor[] = createMarineLifeActors();
+  private underwaterAtmo: UnderwaterAtmosphere = computeUnderwaterAtmosphere(2, false, 0);
+  private trainDriverNotch: TrainDriverNotch = 0;
+  private trainCruiseActive = false;
   private jumpState: JumpState = createInitialJumpState();
   private sittingSpot: InteractableItem | null = null;
   private activeVehicle: VehicleKind = 'none';
@@ -560,20 +746,22 @@ export class DreamlineEngine {
   private lastIsSprinting = false;
   private filteredDt = 1 / 60;
   private photoFov = 48;
-  private isDragging = false;
-  private activeCameraPointerId: number | null = null;
-  private lastPointerX = 0;
-  private lastPointerY = 0;
+  private screenTouch: ScreenTouchState = createInitialScreenTouchState();
+
+  private get isDragging(): boolean {
+    return this.screenTouch.cameraPointerId !== null;
+  }
 
   // Discovery & notices
   private discoveredSpots = new Set<string>(['spot_sakuragawa']);
   private recentNotice: string | null = null;
   private noticeTimer = 0;
 
-  // Input state (keyboard + virtual mobile joystick)
+  // Input state (keyboard + corner mobile joystick + full-screen touch movement)
   private keysHeld = new Set<string>();
   private joyRight = 0;
   private joyForward = 0;
+  private fixedJoystickActive = false;
   private mobileSprint = false;
 
   // Loop & timing + adaptive anti-lag performance guard
@@ -628,40 +816,60 @@ export class DreamlineEngine {
     const pmrem = new THREE.PMREMGenerator(this.renderer);
     const envTex = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
     this.scene.environment = envTex;
-    this.scene.environmentIntensity = 0.45;
+    this.scene.environmentIntensity = 0.25;
     pmrem.dispose();
 
-    // Camera (far = 1280 > 950m camera-centered sky dome; tighter far plane improves depth precision & frustum culling)
-    this.camera = new THREE.PerspectiveCamera(50, width / height, 0.25, 1280);
+    // Camera (far = 2600 so the entire 1 KM Dinosaur Island, 360° perimeter wall & sky roof doors render cleanly!)
+    this.camera = new THREE.PerspectiveCamera(50, width / height, 0.25, 2600);
     this.camera.position.set(11.8, 3.0, 12.6);
     this.camera.lookAt(-4.0, 2.2, 10.0);
     _camCurrentLook.set(-4.0, 2.2, 10.0);
 
     // Warm Key Sun Light + Cool/Warm Sky-Ground Hemisphere Light
-    this.hemiLight = new THREE.HemisphereLight(0xb684b5, 0x52414f, 0.85);
+    this.hemiLight = new THREE.HemisphereLight(0xb684b5, 0x52414f, 0.50);
     this.scene.add(this.hemiLight);
 
-    this.sunLight = new THREE.DirectionalLight(0xff9966, 1.65);
+    this.sunLight = new THREE.DirectionalLight(0xff9966, 1.15);
     this.sunLight.position.set(-60, 24, -75);
     this.sunLight.castShadow = !this.isSoftwareGl;
-    this.sunLight.shadow.mapSize.set(1024, 1024);
+    this.sunLight.shadow.mapSize.set(2048, 2048);
     this.sunLight.shadow.camera.near = 10;
-    this.sunLight.shadow.camera.far = 160;
-    const d = 44;
+    this.sunLight.shadow.camera.far = 210;
+    const d = 58;
     this.sunLight.shadow.camera.left = -d;
     this.sunLight.shadow.camera.right = d;
     this.sunLight.shadow.camera.top = d;
     this.sunLight.shadow.camera.bottom = -d;
-    this.sunLight.shadow.bias = -0.0005;
-    this.sunLight.shadow.normalBias = 0.025;
+    this.sunLight.shadow.bias = -0.0004;
+    this.sunLight.shadow.normalBias = 0.02;
     this.scene.add(this.sunLight);
     this.scene.add(this.sunLight.target);
+
+    // Subtle cool counter-directional Rim Light (kept soft so day & night never look overbright)
+    this.rimLight = new THREE.DirectionalLight(0x93c5fd, 0.08);
+    this.rimLight.position.set(55, 28, 65);
+    this.scene.add(this.rimLight);
+
+    // Optional GPU MSAA 4x EffectComposer + Selective UnrealBloomPass for High/Ultra graphics!
+    if (!this.isSoftwareGl) {
+      const rt = new THREE.WebGLRenderTarget(width, height, {
+        type: THREE.HalfFloatType,
+        samples: 4,
+      });
+      this.composerRenderTarget = rt;
+      this.composer = new EffectComposer(this.renderer, rt);
+      this.composer.addPass(new RenderPass(this.scene, this.camera));
+      this.bloomPass = new UnrealBloomPass(new THREE.Vector2(width, height), 0.24, 0.42, 0.88);
+      this.composer.addPass(this.bloomPass);
+      this.composer.addPass(new OutputPass());
+    }
+    this.applyQualitySettings();
 
     // Build Procedural Assets & World Modules
     this.textures = createProceduralTextures(this.renderer);
     this.skyWater = createSkyAndWater(this.scene);
     this.architecture = createWorldArchitecture(this.scene, this.textures, this.isSoftwareGl);
-    this.nature = createWorldNature(this.scene, this.isSoftwareGl);
+    this.nature = createWorldNature(this.scene, this.isSoftwareGl, this.textures);
     this.applySeasonFoliage();
     this.extremeWeather3D = createExtremeWeather3D(this.scene, this.isSoftwareGl);
     this.trainRig = createPassengerTrain(this.scene, this.isSoftwareGl);
@@ -719,6 +927,13 @@ export class DreamlineEngine {
 
     this.skyExplorerWorld = buildSkyExplorerWorld(this.skyExplorerState);
     this.scene.add(this.skyExplorerWorld.group);
+
+    this.orangeHeliWorld = buildOrangeHeliWorld(this.isSoftwareGl);
+    this.orangeHeliWorld.sync(this.orangeHeliState, 0, false);
+    this.scene.add(this.orangeHeliWorld.group);
+
+    this.vehicleGarageWorld = buildVehicleGarageWorld(this.isSoftwareGl);
+    this.scene.add(this.vehicleGarageWorld.group);
 
     // Dedicated SSJ Tropical Sky Explorer Air Taxi (scheduled aerial route + on-demand mobile pickup!)
     const initialTaxiCraft: SkyExplorerState = {
@@ -788,6 +1003,7 @@ export class DreamlineEngine {
 
     this.homeVaultWorld = buildHomeUndergroundVault3D(this.isSoftwareGl);
     this.scene.add(this.homeVaultWorld.chamberGroup);
+    this.scene.add(this.homeVaultWorld.surfacePortalGroup);
     this.scene.add(this.homeVaultWorld.carsGroup);
 
     this.airportMetroWorld = buildAirportMetroWorld(this.isSoftwareGl);
@@ -796,6 +1012,35 @@ export class DreamlineEngine {
     this.scene.add(this.airportMetroWorld.airlinerGroup);
     this.scene.add(this.airportMetroWorld.parachuteGroup);
 
+    this.oceanServicesWorld = buildOceanServicesWorld3D(this.isSoftwareGl);
+    this.scene.add(this.oceanServicesWorld.rootGroup);
+
+    this.snowmanTaxiWorld = buildSnowmanTaxiWorld3D();
+    this.scene.add(this.snowmanTaxiWorld.group);
+
+    this.expeditionVehiclesWorld = createExpeditionVehiclesWorld(!this.isSoftwareGl);
+    this.scene.add(this.expeditionVehiclesWorld.root);
+    this.expeditionVehiclesWorld.update({
+      dt: 0.016,
+      elapsed: 0,
+      jeep: this.safariJeepState,
+      vtol: this.vtolState,
+      sportJetSki: this.sportJetSkiState,
+      perfJetSki: this.perfJetSkiState,
+      dirtBike: this.dirtBikeState,
+      dirtBikeOccupied: false,
+      dirtBikeHideRider: false,
+      hoverGlider: this.hoverGliderState,
+      hoverGliderOccupied: false,
+      hoverGliderHideRider: false,
+    });
+
+    this.wildlifeEcosystemWorld = createWildlifeEcosystemWorld(this.wildlifeActors, !this.isSoftwareGl);
+    this.scene.add(this.wildlifeEcosystemWorld.root);
+
+    this.underwaterOceanWorld = buildUnderwaterOceanWorld3D();
+    this.scene.add(this.underwaterOceanWorld.root);
+
     this.playerLanternRig = createPlayerLanternRig(this.scene, this.isSoftwareGl);
 
     this.container.dataset.activeHero = 'none';
@@ -803,7 +1048,14 @@ export class DreamlineEngine {
     this.container.dataset.lanternOn = 'false';
     this.container.dataset.inHomeVault = 'false';
     this.container.dataset.vaultHatchOpen = 'false';
+    this.container.dataset.vaultHeight = String(VAULT_HEIGHT);
+    this.container.dataset.vaultGateOpen = 'false';
     this.container.dataset.activeVaultCar = 'none';
+    this.container.dataset.submarineActive = 'false';
+    this.container.dataset.submarineDepth = '0';
+    this.container.dataset.oceanSwimSeconds = '0';
+    this.container.dataset.snowmanRescuePhase = 'idle';
+    this.container.dataset.snowmanTaxiPhase = 'idle';
 
     this.staticColliders = [
       ...this.architecture.colliders,
@@ -813,6 +1065,8 @@ export class DreamlineEngine {
       ...this.exhibitionComplexWorld.colliders,
       ...this.desertOasisWorld.colliders,
       ...this.airportMetroWorld.colliders,
+      ...this.oceanServicesWorld.colliders,
+      ...this.vehicleGarageWorld.colliders,
     ];
     this.prevMidnightOpen = isMidnightFrontierOpen(this.timeHours);
     this.refreshDynamicColliders();
@@ -826,7 +1080,11 @@ export class DreamlineEngine {
       ...this.exhibitionComplexWorld.interactables,
       ...this.desertOasisWorld.interactables,
       ...this.airportMetroWorld.surfaceInteractables,
+      ...this.oceanServicesWorld.interactables,
       this.skyExplorerWorld.interactable,
+      this.orangeHeliWorld.interactable,
+      this.vehicleGarageWorld.interactable,
+      this.dinosaurIslandWorld.gateInteractable,
     ];
 
     this.audio = new DreamlineAudio();
@@ -944,32 +1202,32 @@ export class DreamlineEngine {
   }
 
   private applyQualitySettings(): void {
-    const maxDpr =
-      this.settings.graphicsQuality === 'low'
-        ? 0.78
-        : this.settings.graphicsQuality === 'medium'
-        ? 0.96
-        : 1.15;
-    const qScale =
-      this.settings.graphicsQuality === 'low'
-        ? 0.72
-        : this.settings.graphicsQuality === 'medium'
-        ? 0.86
-        : 0.96;
-    const targetDpr = this.isSoftwareGl
-      ? 0.85
-      : Math.min(window.devicePixelRatio || 1, maxDpr) *
-        this.settings.resolutionScale *
-        qScale *
-        this.dynamicDprScale;
-    this.renderer.setPixelRatio(Math.max(0.55, targetDpr));
-    this.renderer.shadowMap.enabled =
-      !this.isSoftwareGl && this.settings.graphicsQuality !== 'low';
-    this.renderer.shadowMap.type = THREE.PCFShadowMap;
+    const nativeDpr = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1;
+    const profile = resolveGraphicsProfile({
+      quality: this.settings.graphicsQuality,
+      isSoftwareGl: this.isSoftwareGl,
+      devicePixelRatio: nativeDpr,
+      resolutionScale: this.settings.resolutionScale,
+      dynamicDprScale: this.dynamicDprScale,
+    });
+    const clampedDpr = Math.max(0.6, profile.pixelRatio);
+    this.renderer.setPixelRatio(clampedDpr);
+    this.renderer.shadowMap.enabled = profile.shadowsEnabled;
+    this.renderer.shadowMap.type = profile.softShadows
+      ? THREE.PCFSoftShadowMap
+      : THREE.PCFShadowMap;
     this.renderer.shadowMap.autoUpdate = false;
     this.renderer.shadowMap.needsUpdate = true;
+    this.targetShadowRefreshInterval = profile.shadowUpdateInterval;
+
+    if (this.scene) {
+      this.scene.environmentIntensity = profile.envIntensityBoost;
+    }
+    if (this.rimLight) {
+      this.rimLight.intensity = profile.rimLightIntensity;
+    }
     if (this.sunLight) {
-      const targetShadowSize = this.settings.graphicsQuality === 'high' ? 768 : 512;
+      const targetShadowSize = profile.shadowMapSize;
       if (this.sunLight.shadow.mapSize.x !== targetShadowSize) {
         this.sunLight.shadow.mapSize.set(targetShadowSize, targetShadowSize);
         if (this.sunLight.shadow.map) {
@@ -977,8 +1235,44 @@ export class DreamlineEngine {
           this.sunLight.shadow.map = null;
         }
       }
+      const d = profile.shadowFrustumHalf;
+      this.sunLight.shadow.camera.left = -d;
+      this.sunLight.shadow.camera.right = d;
+      this.sunLight.shadow.camera.top = d;
+      this.sunLight.shadow.camera.bottom = -d;
+      this.sunLight.shadow.camera.updateProjectionMatrix();
     }
-    this.renderer.toneMappingExposure = 1.05 * this.settings.brightness;
+
+    this.postProcessingEnabled = Boolean(this.composer && profile.bloomEnabled);
+    if (this.composer && this.bloomPass) {
+      this.composer.setPixelRatio(clampedDpr);
+      this.bloomPass.strength = profile.bloomBaseStrength;
+      this.bloomPass.radius = profile.bloomRadius;
+      this.bloomPass.threshold = profile.bloomThreshold;
+    }
+    this.renderer.toneMappingExposure = profile.toneMappingExposureBase * this.settings.brightness;
+  }
+
+  private renderSceneFrame(): void {
+    if (this.postProcessingEnabled && this.composer && this.bloomPass) {
+      const nativeDpr = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1;
+      const profile = resolveGraphicsProfile({
+        quality: this.settings.graphicsQuality,
+        isSoftwareGl: this.isSoftwareGl,
+        devicePixelRatio: nativeDpr,
+        resolutionScale: this.settings.resolutionScale,
+        dynamicDprScale: this.dynamicDprScale,
+      });
+      const nightDarkness = this.timeHours < 6.2 || this.timeHours > 18.8 ? 1 : 0;
+      this.bloomPass.strength = computeDynamicBloomStrength(
+        profile,
+        nightDarkness,
+        this.homeVaultState.inVault || this.inUndergroundMetro || this.inUndergroundCave
+      );
+      this.composer.render();
+    } else {
+      this.renderer.render(this.scene, this.camera);
+    }
   }
 
   private handleResize(): void {
@@ -988,13 +1282,16 @@ export class DreamlineEngine {
     this.camera.aspect = width / height;
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(width, height, false);
-    this.renderer.render(this.scene, this.camera);
+    if (this.composer) {
+      this.composer.setSize(width, height);
+    }
+    this.renderSceneFrame();
   }
 
   private renderImmediate(): void {
     if (this.disposed) return;
     this.updateSimulation(0.001);
-    this.renderer.render(this.scene, this.camera);
+    this.renderSceneFrame();
   }
 
   private speakCompanion(
@@ -1139,7 +1436,16 @@ export class DreamlineEngine {
 
     if (code === 'KeyC' && (this.mode === 'playing' || this.mode === 'camera')) {
       e.preventDefault();
-      if (this.mode === 'playing' && this.activeVehicle === 'none' && this.heroState.activeHeroId) {
+      const isExpeditionRide =
+        this.activeVehicle === 'safari_jeep' ||
+        this.activeVehicle === 'vtol_aircraft' ||
+        this.activeVehicle === 'jetski_sport' ||
+        this.activeVehicle === 'jetski_perf' ||
+        this.activeVehicle === 'dirt_bike_49cc' ||
+        this.activeVehicle === 'hover_glider';
+      if (this.mode === 'playing' && isExpeditionRide) {
+        this.cycleCameraPerspective();
+      } else if (this.mode === 'playing' && this.activeVehicle === 'none' && this.heroState.activeHeroId) {
         this.cycleActiveHeroOutfit();
       } else {
         this.callbacks.onModeChangeRequest(this.mode === 'camera' ? 'playing' : 'camera');
@@ -1195,17 +1501,33 @@ export class DreamlineEngine {
       if (code === 'Space' && this.activeVehicle === 'none') {
         e.preventDefault();
         if (!e.repeat) {
-          if (this.heroState.isWebSwinging) {
-            // Release web swing with upward acrobatic launch!
+          if (this.heroState.isWebSwinging && this.webSwingState.active) {
+            // Insomniac Apex Web Release + 360° Acrobatic Mid-Air Spin/Flip!
+            const rel = releaseWebSwingWithSpin(this.webSwingState, this.playerHeading);
             this.heroState.isWebSwinging = false;
             this.webSwingState.active = false;
+            this.playerVx = rel.vx;
+            this.playerVz = rel.vz;
             this.jumpState.isAirborne = true;
-            this.jumpState.velocityY = 12.0;
-            this.audio.playJump(1.18);
+            this.jumpState.velocityY = rel.vy;
+            this.heroState.airTrickKind = rel.trickKind;
+            this.heroState.airTrickTimer = 0.85;
+            this.heroState.airTrickAngle = 0;
+            this.audio.playJump(rel.apexBonus ? 1.32 : 1.16);
+            this.showNotice(
+              rel.apexBonus
+                ? `Apex Launch! ${rel.trickKind.replace('_', ' ').toUpperCase()}!`
+                : `Web Spin Release · ${rel.trickKind.replace('_', ' ').toUpperCase()}!`
+            );
           } else if (!this.heroState.isFlying) {
             this.triggerJump();
           }
         }
+        return;
+      }
+      if (code === 'KeyX' && this.activeVehicle === 'none' && this.heroState.activeHeroId) {
+        e.preventDefault();
+        this.triggerHeroDodge();
         return;
       }
       if (code === 'KeyE') {
@@ -1250,6 +1572,26 @@ export class DreamlineEngine {
           return;
         }
       }
+      if (code === 'KeyC') {
+        e.preventDefault();
+        this.cycleCameraPerspective();
+        return;
+      }
+      if (code === 'KeyF' && this.activeVehicle !== 'vtol_aircraft') {
+        e.preventDefault();
+        this.photographWildlifeInViewfinder();
+        return;
+      }
+      if (code === 'KeyL' && this.activeVehicle === 'safari_jeep') {
+        e.preventDefault();
+        this.toggleSafariJeepLights();
+        return;
+      }
+      if (code === 'KeyH' && this.activeVehicle === 'vtol_aircraft') {
+        e.preventDefault();
+        this.toggleVtolHoverMode();
+        return;
+      }
       if (code === 'KeyL' && this.activeVehicle === 'camper') {
         e.preventDefault();
         this.toggleCamperLights();
@@ -1263,6 +1605,11 @@ export class DreamlineEngine {
       if (code === 'KeyL' && this.activeVehicle === 'vault_car') {
         e.preventDefault();
         this.toggleVaultCarLights();
+        return;
+      }
+      if (code === 'KeyL' && this.activeVehicle === 'submarine') {
+        e.preventDefault();
+        this.toggleSubmarineSearchlight();
         return;
       }
       if (code === 'KeyL') {
@@ -1372,30 +1719,59 @@ export class DreamlineEngine {
     this.audio.unlock();
     if (this.mode !== 'playing' && this.mode !== 'camera' && this.mode !== 'exhibition_vehicle') return;
     if (e.pointerType === 'mouse' && e.button !== 0 && e.button !== 2) return;
-    if (this.activeCameraPointerId !== null) return;
-    this.activeCameraPointerId = e.pointerId;
-    this.isDragging = true;
-    this.lastPointerX = e.clientX;
-    this.lastPointerY = e.clientY;
+    const res = beginScreenPointer(this.screenTouch, {
+      pointerId: e.pointerId,
+      pointerType: e.pointerType,
+      clientX: e.clientX,
+      clientY: e.clientY,
+      allowTouchMove: this.mode === 'playing',
+      fixedJoystickActive: this.fixedJoystickActive,
+    });
+    this.screenTouch = res.state;
+    if (res.role === 'move') {
+      this.callbacks.onTouchPadUpdate?.(getTouchMovePadVisual(this.screenTouch));
+    }
   };
 
   private onPointerMove = (e: PointerEvent) => {
-    if (!this.isDragging || e.pointerId !== this.activeCameraPointerId) return;
     if (this.mode !== 'playing' && this.mode !== 'camera' && this.mode !== 'exhibition_vehicle') return;
-    const dx = e.clientX - this.lastPointerX;
-    const dy = e.clientY - this.lastPointerY;
-    this.lastPointerX = e.clientX;
-    this.lastPointerY = e.clientY;
-
-    const sens = 0.0052 * this.settings.mouseSensitivity * this.settings.cameraSensitivity;
-    // Feed decoupled orbit targets + subtle release inertia so screen panning is critically damped & silky smooth
-    applyScreenOrbitInput(this.smoothCam, dx, dy, sens, -0.18, 1.05);
+    if (e.pointerId !== this.screenTouch.movePointerId && e.pointerId !== this.screenTouch.cameraPointerId) {
+      return;
+    }
+    const res = moveScreenPointer(this.screenTouch, {
+      pointerId: e.pointerId,
+      clientX: e.clientX,
+      clientY: e.clientY,
+    });
+    this.screenTouch = res.state;
+    if (res.role === 'move') {
+      this.callbacks.onTouchPadUpdate?.(getTouchMovePadVisual(this.screenTouch));
+    } else if (res.role === 'camera') {
+      const sens = 0.0052 * this.settings.mouseSensitivity * this.settings.cameraSensitivity;
+      // Feed decoupled orbit targets + subtle release inertia so screen panning is critically damped & silky smooth
+      const minPitch = this.isLookToFlyActive() ? -0.78 : -0.18;
+      applyScreenOrbitInput(this.smoothCam, res.camDx, res.camDy, sens, minPitch, 1.05);
+    }
   };
 
+  private isLookToFlyActive(): boolean {
+    return (
+      (this.activeVehicle === 'none' && this.heroState.isFlying) ||
+      this.activeVehicle === 'hover_glider' ||
+      this.activeVehicle === 'vtol_aircraft' ||
+      this.activeVehicle === 'orange_heli' ||
+      this.activeVehicle === 'sky_explorer' ||
+      this.activeVehicle === 'airliner'
+    );
+  }
+
   private onPointerUp = (e: PointerEvent) => {
-    if (e.pointerId !== this.activeCameraPointerId) return;
-    this.isDragging = false;
-    this.activeCameraPointerId = null;
+    const wasMove = e.pointerId === this.screenTouch.movePointerId;
+    if (!wasMove && e.pointerId !== this.screenTouch.cameraPointerId) return;
+    this.screenTouch = endScreenPointer(this.screenTouch, e.pointerId);
+    if (wasMove) {
+      this.callbacks.onTouchPadUpdate?.(getTouchMovePadVisual(this.screenTouch));
+    }
   };
 
   private onWheel = (e: WheelEvent) => {
@@ -1410,9 +1786,13 @@ export class DreamlineEngine {
     this.keysHeld.clear();
     this.joyRight = 0;
     this.joyForward = 0;
+    this.fixedJoystickActive = false;
     this.mobileSprint = false;
-    this.isDragging = false;
-    this.activeCameraPointerId = null;
+    const hadTouchPad = this.screenTouch.active;
+    this.screenTouch = createInitialScreenTouchState();
+    if (hadTouchPad) {
+      this.callbacks.onTouchPadUpdate?.(getTouchMovePadVisual(this.screenTouch));
+    }
   };
 
   private onContextLost = (e: Event) => {
@@ -1439,9 +1819,13 @@ export class DreamlineEngine {
     this.keysHeld.clear();
     this.joyRight = 0;
     this.joyForward = 0;
+    this.fixedJoystickActive = false;
     this.mobileSprint = false;
-    this.isDragging = false;
-    this.activeCameraPointerId = null;
+    const hadTouchPad = this.screenTouch.active;
+    this.screenTouch = createInitialScreenTouchState();
+    if (hadTouchPad) {
+      this.callbacks.onTouchPadUpdate?.(getTouchMovePadVisual(this.screenTouch));
+    }
     this.audio.setPaused(mode === 'paused');
 
     if (prev === 'title' && mode === 'playing') {
@@ -1471,6 +1855,40 @@ export class DreamlineEngine {
   }
 
   private snapThirdPersonCamera(): void {
+    if (this.activeVehicle === 'submarine') {
+      const sub = this.submarineState;
+      const dist = 13.5;
+      _camTargetLook.set(
+        sub.x + Math.sin(sub.heading) * 3.5,
+        sub.y + 0.8,
+        sub.z + Math.cos(sub.heading) * 3.5
+      );
+      _camTargetPos.set(
+        sub.x + Math.sin(this.camYaw) * Math.cos(this.camPitch) * dist,
+        sub.y + Math.sin(this.camPitch) * dist + 3.6,
+        sub.z + Math.cos(this.camYaw) * Math.cos(this.camPitch) * dist
+      );
+      this.camera.position.copy(_camTargetPos);
+      _camCurrentLook.copy(_camTargetLook);
+      this.camera.lookAt(_camCurrentLook);
+      syncSmoothCameraImmediate(this.smoothCam, {
+        yaw: this.camYaw,
+        pitch: this.camPitch,
+        distance: dist,
+        posX: _camTargetPos.x,
+        posY: _camTargetPos.y,
+        posZ: _camTargetPos.z,
+        lookX: _camTargetLook.x,
+        lookY: _camTargetLook.y,
+        lookZ: _camTargetLook.z,
+        anchorX: sub.x,
+        anchorY: sub.y,
+        anchorZ: sub.z,
+        fov: this.camera.fov,
+      });
+      return;
+    }
+
     const metrics = getScaleGameplayMetrics(
       this.icelandState.playerScale,
       this.isSitting,
@@ -1542,6 +1960,7 @@ export class DreamlineEngine {
 
   public setTimeHours(hours: number): void {
     this.timeHours = normalizeHours(hours);
+    this.dinosaurIslandState = snapJurassicRoofDoorsForTime(this.dinosaurIslandState, this.timeHours);
     this.firefliesWorld.snapVisibility(this.timeHours, this.weather);
     this.renderImmediate();
     this.emitHudSnapshot();
@@ -1551,12 +1970,16 @@ export class DreamlineEngine {
     this.audio.unlock();
     const res = toggleNightModeHours(this.timeHours);
     this.timeHours = res.hours;
-    this.playerLanternState = setPlayerLanternOverride(this.playerLanternState, null);
+    this.dinosaurIslandState = snapJurassicRoofDoorsForTime(this.dinosaurIslandState, this.timeHours);
+    // Preserve player's explicit manual lantern OFF/ON choice; only auto-light if player hasn't manually toggled
+    if (this.playerLanternState.manualOverride === null) {
+      this.playerLanternState = setPlayerLanternOverride(this.playerLanternState, null);
+    }
     this.firefliesWorld.snapVisibility(this.timeHours, this.weather);
     this.showNotice(
       res.isNight
-        ? 'Night Mode · Starry Countryside (22:15) · Lantern Lit'
-        : 'Sunset Mode · Golden Dusk (17:43)'
+        ? 'Night Mode · Starry Night (22:15) · Jurassic Sky Roof Doors CLOSING · Press L for Lantern'
+        : 'Morning / Sunset Light (17:43) · Jurassic Sky Roof Doors OPENING'
     );
     if (res.isNight) this.speakCompanion('night');
     this.renderImmediate();
@@ -1597,10 +2020,11 @@ export class DreamlineEngine {
     this.showNotice('Chirin-chirin! ♪');
   }
 
-  public setJoystickInput(right: number, forward: number): void {
+  public setJoystickInput(right: number, forward: number, active?: boolean): void {
     this.audio.unlock();
     this.joyRight = THREE.MathUtils.clamp(right, -1, 1);
     this.joyForward = THREE.MathUtils.clamp(forward, -1, 1);
+    this.fixedJoystickActive = active ?? Math.hypot(right, forward) > 0.01;
   }
 
   public setMobileSprint(active: boolean): void {
@@ -1615,6 +2039,10 @@ export class DreamlineEngine {
       this.sittingSpot = null;
     }
     this.jumpState = requestJump(this.jumpState);
+  }
+
+  public setOceanTheme(themeId: OceanThemeId): void {
+    this.regionsWorld.setOceanTheme(themeId);
   }
 
   public setWeather(weather: WeatherType): void {
@@ -2100,12 +2528,16 @@ export class DreamlineEngine {
       this.exitUndergroundCave();
     }
     const entry = getCatalogueVehicleById(vehicleId);
+    const inVaultNow = this.homeVaultState.inVault;
     const spawn = computeCatalogueSpawnPoint(
       vehicleId,
       this.playerX,
       this.playerZ,
       this.playerHeading
     );
+    const exactFloorY = inVaultNow
+      ? vaultFloorYAt(spawn.x, spawn.z)
+      : walkableHeightWithFloor(spawn.x, spawn.z, this.playerY);
 
     if (vehicleId === 'commuter_bicycle' || vehicleId === 'cruiser_skateboard') {
       if (this.activeVehicle !== 'none') {
@@ -2124,12 +2556,12 @@ export class DreamlineEngine {
       this.batmobileState = {
         ...this.batmobileState,
         x: spawn.x,
-        y: this.homeVaultState.inVault ? VAULT_FLOOR_Y : walkableHeightAt(spawn.x, spawn.z),
+        y: exactFloorY,
         z: spawn.z,
         heading: spawn.heading,
         speed: 0,
         speedKmh: 0,
-        inVault: this.homeVaultState.inVault,
+        inVault: inVaultNow,
       };
       this.batmobileWorld.group.visible = true;
       if (boardNow) {
@@ -2137,6 +2569,237 @@ export class DreamlineEngine {
       } else {
         this.audio.playStationChime();
         this.showNotice('Armoured Batmobile summoned ahead! Press E beside it to drive');
+        this.renderImmediate();
+        this.emitHudSnapshot();
+      }
+      return;
+    }
+
+    if (vehicleId === 'dirt_bike_49cc') {
+      this.dirtBikeState = {
+        ...this.dirtBikeState,
+        x: spawn.x,
+        y: exactFloorY,
+        z: spawn.z,
+        heading: spawn.heading,
+        speed: 0,
+        speedKmh: 0,
+        kickstandDown: !boardNow,
+        engineRunning: true,
+        rpm: 1850,
+        inVault: inVaultNow,
+      };
+      this.expeditionVehiclesWorld.root.visible = true;
+      this.expeditionVehiclesWorld.update({
+        dt: 0.016,
+        elapsed: this.elapsed,
+        jeep: this.safariJeepState,
+        vtol: this.vtolState,
+        sportJetSki: this.sportJetSkiState,
+        perfJetSki: this.perfJetSkiState,
+        dirtBike: this.dirtBikeState,
+        dirtBikeOccupied: boardNow,
+        dirtBikeHideRider: false,
+      });
+      if (boardNow) {
+        this.boardExpeditionVehicle('dirt_bike_49cc');
+      } else {
+        this.audio.playStationChime();
+        this.showNotice(`Spawned ${entry.name} right at your exact location! Press E to ride`);
+        this.renderImmediate();
+        this.emitHudSnapshot();
+      }
+      return;
+    }
+
+    if (vehicleId === 'hover_glider') {
+      this.hoverGliderState = {
+        ...this.hoverGliderState,
+        x: spawn.x,
+        y: exactFloorY + 0.65,
+        z: spawn.z,
+        heading: spawn.heading,
+        vx: 0,
+        vy: 0,
+        vz: 0,
+        speed: 0,
+        speedKmh: 0,
+        pitch: 0,
+        roll: 0,
+        skidProgress: boardNow ? 0.25 : 1,
+        onGround: !boardNow,
+        inVault: inVaultNow,
+      };
+      this.expeditionVehiclesWorld.root.visible = true;
+      this.expeditionVehiclesWorld.update({
+        dt: 0.016,
+        elapsed: this.elapsed,
+        jeep: this.safariJeepState,
+        vtol: this.vtolState,
+        sportJetSki: this.sportJetSkiState,
+        perfJetSki: this.perfJetSkiState,
+        dirtBike: this.dirtBikeState,
+        dirtBikeOccupied: this.activeVehicle === 'dirt_bike_49cc',
+        dirtBikeHideRider: false,
+        hoverGlider: this.hoverGliderState,
+        hoverGliderOccupied: boardNow,
+        hoverGliderHideRider: false,
+      });
+      if (boardNow) {
+        this.boardExpeditionVehicle('hover_glider');
+      } else {
+        this.audio.playStationChime();
+        this.showNotice(`Spawned ${entry.name} right at your exact location! Press E to fly`);
+        this.renderImmediate();
+        this.emitHudSnapshot();
+      }
+      return;
+    }
+
+    if (vehicleId === 'safari_jeep') {
+      this.safariJeepState = {
+        ...this.safariJeepState,
+        x: spawn.x,
+        y: exactFloorY,
+        z: spawn.z,
+        heading: spawn.heading,
+        speed: 0,
+        speedKmh: 0,
+        inVault: inVaultNow,
+      };
+      this.expeditionVehiclesWorld.root.visible = true;
+      this.expeditionVehiclesWorld.update({
+        dt: 0.016,
+        elapsed: this.elapsed,
+        jeep: this.safariJeepState,
+        vtol: this.vtolState,
+        sportJetSki: this.sportJetSkiState,
+        perfJetSki: this.perfJetSkiState,
+        dirtBike: this.dirtBikeState,
+        dirtBikeOccupied: this.activeVehicle === 'dirt_bike_49cc',
+        dirtBikeHideRider: false,
+      });
+      if (boardNow) {
+        this.boardExpeditionVehicle('safari_jeep');
+      } else {
+        this.audio.playStationChime();
+        this.showNotice(`Spawned ${entry.name} right ahead of you! Press E to drive`);
+        this.renderImmediate();
+        this.emitHudSnapshot();
+      }
+      return;
+    }
+
+    if (vehicleId === 'vtol_aircraft') {
+      this.vtolState = {
+        ...this.vtolState,
+        x: spawn.x,
+        y: exactFloorY,
+        z: spawn.z,
+        vx: 0,
+        vy: 0,
+        vz: 0,
+        heading: spawn.heading,
+        speedKmh: 0,
+        aglM: 0,
+        pitch: 0,
+        roll: 0,
+        onGround: true,
+        inVault: inVaultNow,
+      };
+      this.expeditionVehiclesWorld.root.visible = true;
+      this.expeditionVehiclesWorld.update({
+        dt: 0.016,
+        elapsed: this.elapsed,
+        jeep: this.safariJeepState,
+        vtol: this.vtolState,
+        sportJetSki: this.sportJetSkiState,
+        perfJetSki: this.perfJetSkiState,
+        dirtBike: this.dirtBikeState,
+        dirtBikeOccupied: this.activeVehicle === 'dirt_bike_49cc',
+        dirtBikeHideRider: false,
+      });
+      if (boardNow) {
+        this.boardExpeditionVehicle('vtol_aircraft');
+      } else {
+        this.audio.playStationChime();
+        this.showNotice(`Spawned ${entry.name} right beside you! Press E to fly`);
+        this.renderImmediate();
+        this.emitHudSnapshot();
+      }
+      return;
+    }
+
+    if (vehicleId === 'jetski_sport' || vehicleId === 'jetski_perf') {
+      const surfaceY = inVaultNow ? exactFloorY + 0.14 : Math.max(WATER_LEVEL, exactFloorY);
+      if (vehicleId === 'jetski_sport') {
+        this.sportJetSkiState = {
+          ...this.sportJetSkiState,
+          x: spawn.x,
+          y: surfaceY,
+          z: spawn.z,
+          heading: spawn.heading,
+          speed: 0,
+          speedKmh: 0,
+          leanRoll: 0,
+          inVault: inVaultNow,
+        };
+      } else {
+        this.perfJetSkiState = {
+          ...this.perfJetSkiState,
+          x: spawn.x,
+          y: surfaceY,
+          z: spawn.z,
+          heading: spawn.heading,
+          speed: 0,
+          speedKmh: 0,
+          leanRoll: 0,
+          inVault: inVaultNow,
+        };
+      }
+      this.expeditionVehiclesWorld.root.visible = true;
+      this.expeditionVehiclesWorld.update({
+        dt: 0.016,
+        elapsed: this.elapsed,
+        jeep: this.safariJeepState,
+        vtol: this.vtolState,
+        sportJetSki: this.sportJetSkiState,
+        perfJetSki: this.perfJetSkiState,
+        dirtBike: this.dirtBikeState,
+        dirtBikeOccupied: this.activeVehicle === 'dirt_bike_49cc',
+        dirtBikeHideRider: false,
+      });
+      if (boardNow) {
+        this.boardExpeditionVehicle(vehicleId);
+      } else {
+        this.audio.playStationChime();
+        this.showNotice(`Spawned ${entry.name} right at your exact location! Press E to ride`);
+        this.renderImmediate();
+        this.emitHudSnapshot();
+      }
+      return;
+    }
+
+    if (vehicleId === 'kadalkarai_submarine') {
+      const inWaterNow = !inVaultNow && isWaterAt(spawn.x, spawn.z);
+      const startDepth = boardNow && inWaterNow ? 3.5 : 0.0;
+      const surfaceY = inWaterNow ? WATER_LEVEL - startDepth : exactFloorY;
+      this.submarineState = {
+        ...this.submarineState,
+        x: spawn.x,
+        y: surfaceY,
+        z: spawn.z,
+        heading: spawn.heading,
+        speed: 0,
+        speedKmh: 0,
+        depth: startDepth,
+        submerged: boardNow && inWaterNow,
+      };
+      if (boardNow) {
+        this.boardSubmarine();
+      } else {
+        this.audio.playStationChime();
+        this.showNotice(`Spawned ${entry.name} right at your exact location! Press E to board`);
         this.renderImmediate();
         this.emitHudSnapshot();
       }
@@ -2151,12 +2814,16 @@ export class DreamlineEngine {
         heading: spawn.heading,
         speed: 0,
         speedKmh: 0,
+        inVault: inVaultNow,
       };
+      this.enchantedForest.group.visible = true;
+      this.enchantedForest.setCamperOnlyVisible(inVaultNow);
+      this.enchantedForest.update(this.camperState, this.elapsed, 0.016, this.playerX, this.playerZ, 0.5);
       if (boardNow) {
         this.boardCamperVan();
       } else {
         this.audio.playStationChime();
-        this.showNotice(`Spawned ${entry.name} right beside you! Walk over & press E to drive`);
+        this.showNotice(`Spawned ${entry.name} right at your exact location! Press E to drive`);
         this.renderImmediate();
         this.emitHudSnapshot();
       }
@@ -2173,8 +2840,12 @@ export class DreamlineEngine {
           heading: spawn.heading,
           speed: 0,
           speedKmh: 0,
+          inVault: inVaultNow,
         },
       };
+      this.dinosaurIslandWorld.group.visible = true;
+      this.dinosaurIslandWorld.setSafariCarOnlyVisible(inVaultNow);
+      this.dinosaurIslandWorld.update(this.dinosaurIslandState, this.elapsed, 0.016, 0.5);
       if (boardNow) {
         this.activeVehicle = 'safari_car';
         this.activeBoatId = null;
@@ -2182,15 +2853,46 @@ export class DreamlineEngine {
         this.isSwimming = false;
         this.playerX = spawn.x;
         this.playerZ = spawn.z;
-        this.playerY = walkableHeightAt(spawn.x, spawn.z) + 0.65;
+        this.playerY = exactFloorY + 0.65;
         this.playerHeading = spawn.heading;
         this.audio.playStationChime();
-        this.showNotice(`Driving ${entry.name}! WASD / Joystick to drive · E to exit`);
+        this.showNotice(`Driving ${entry.name}! WASD / Touch to drive · E to exit`);
         this.renderImmediate();
         this.emitHudSnapshot();
       } else {
         this.audio.playStationChime();
-        this.showNotice(`Spawned ${entry.name} right ahead of you! Press E beside it to drive`);
+        this.showNotice(`Spawned ${entry.name} right at your exact location! Press E to drive`);
+        this.renderImmediate();
+        this.emitHudSnapshot();
+      }
+      return;
+    }
+
+    if (vehicleId === 'orange_heli') {
+      const groundY = inVaultNow ? exactFloorY : Math.max(exactFloorY, WATER_LEVEL);
+      this.orangeHeliState = {
+        ...this.orangeHeliState,
+        x: spawn.x,
+        y: groundY + 0.05,
+        z: spawn.z,
+        heading: spawn.heading,
+        forwardSpeed: 0,
+        verticalSpeed: 0,
+        yawRate: 0,
+        roll: 0,
+        pitch: 0,
+        speedKmh: 0,
+        altitudeM: 0,
+        boostActive: false,
+        inVault: inVaultNow,
+      };
+      this.orangeHeliWorld.group.visible = true;
+      this.orangeHeliWorld.sync(this.orangeHeliState, this.elapsed, boardNow);
+      if (boardNow) {
+        this.boardOrangeHeli();
+      } else {
+        this.audio.playStationChime();
+        this.showNotice(`Spawned ${entry.name} right at your exact location! Press E to fly`);
         this.renderImmediate();
         this.emitHudSnapshot();
       }
@@ -2208,7 +2910,9 @@ export class DreamlineEngine {
         speedKmh: 0,
         phase: 'stopped',
         doorOpen: 1,
+        inVault: inVaultNow,
       };
+      this.vehiclesWorld.group.visible = true;
       this.vehiclesWorld.syncBus(this.busState, this.elapsed, 0.5);
       if (boardNow) {
         this.activeVehicle = 'bus';
@@ -2219,7 +2923,7 @@ export class DreamlineEngine {
         this.isSwimming = false;
         this.playerX = spawn.x;
         this.playerZ = spawn.z;
-        this.playerY = walkableHeightAt(spawn.x, spawn.z) + 1.4;
+        this.playerY = exactFloorY + 1.4;
         this.playerHeading = spawn.heading;
         this.audio.playStationChime();
         this.showNotice(`Driving ${entry.name}! WASD to drive · Space brake · E to exit`);
@@ -2227,7 +2931,7 @@ export class DreamlineEngine {
         this.emitHudSnapshot();
       } else {
         this.audio.playStationChime();
-        this.showNotice(`Spawned ${entry.name} right beside you! Press E to board`);
+        this.showNotice(`Spawned ${entry.name} right at your exact location! Press E to board`);
         this.renderImmediate();
         this.emitHudSnapshot();
       }
@@ -2235,11 +2939,10 @@ export class DreamlineEngine {
     }
 
     if (vehicleId === 'sky_explorer') {
-      const groundY = walkableHeightWithFloor(spawn.x, spawn.z, this.playerY);
       this.skyExplorerState = {
         ...this.skyExplorerState,
         x: spawn.x,
-        y: groundY + 1.4,
+        y: exactFloorY + 1.4,
         z: spawn.z,
         heading: spawn.heading,
         forwardSpeed: 0,
@@ -2250,7 +2953,9 @@ export class DreamlineEngine {
         speedKmh: 0,
         altitudeM: 1.4,
         boostActive: false,
+        inVault: inVaultNow,
       };
+      this.skyExplorerWorld.group.visible = true;
       this.skyExplorerWorld.sync(this.skyExplorerState, this.elapsed, boardNow);
       if (boardNow) {
         this.activeVehicle = 'sky_explorer';
@@ -2258,7 +2963,7 @@ export class DreamlineEngine {
         this.isSitting = false;
         this.isSwimming = false;
         this.playerX = spawn.x;
-        this.playerY = groundY + 1.4;
+        this.playerY = exactFloorY + 1.4;
         this.playerZ = spawn.z;
         this.playerHeading = spawn.heading;
         this.camYaw = spawn.heading + Math.PI;
@@ -2269,7 +2974,7 @@ export class DreamlineEngine {
         this.emitHudSnapshot();
       } else {
         this.audio.playStationChime();
-        this.showNotice(`Spawned ${entry.name} right beside you! Press E to take off`);
+        this.showNotice(`Spawned ${entry.name} right at your exact location! Press E to take off`);
         this.renderImmediate();
         this.emitHudSnapshot();
       }
@@ -2282,9 +2987,9 @@ export class DreamlineEngine {
       this.trainState = {
         ...this.trainState,
         t: st.splineT,
-        worldX: st.worldX,
-        worldZ: st.worldZ,
-        heading: st.tangentAngle,
+        worldX: spawn.x,
+        worldZ: spawn.z,
+        heading: spawn.heading,
         speed: 0,
         speedKmh: 0,
         phase: 'stopped',
@@ -2299,26 +3004,28 @@ export class DreamlineEngine {
         this.trainViewMode = 'driver';
         this.isSitting = false;
         this.isSwimming = false;
-        this.playerX = st.worldX;
-        this.playerZ = st.worldZ;
-        this.playerY = walkableHeightAt(st.worldX, st.worldZ) + 1.5;
-        this.playerHeading = st.tangentAngle;
+        this.playerX = spawn.x;
+        this.playerZ = spawn.z;
+        this.playerY = exactFloorY + 1.5;
+        this.playerHeading = spawn.heading;
         this.trainRig.getDriverCabTransform(_seatPos, _seatLook);
         this.camera.position.copy(_seatPos);
         _camCurrentLook.copy(_seatLook);
         this.camera.lookAt(_camCurrentLook);
         this.triggerStationAnnouncement(nearestIdx, 'arrived');
-        this.showNotice(`Driving ${entry.name} from ${st.name}! W/S Throttle · Space Brake · E Exit`);
+        this.showNotice(`Driving ${entry.name}! W/S Throttle · Space Brake · E Exit`);
         this.renderImmediate();
         this.emitHudSnapshot();
       } else {
-        this.teleportTo(st.platformX, st.platformZ, `${st.name} · Train Ready on Platform`);
-        this.triggerStationAnnouncement(nearestIdx, 'arrived');
+        this.audio.playStationChime();
+        this.showNotice(`Spawned ${entry.name} right at your exact location! Press E to board`);
+        this.renderImmediate();
+        this.emitHudSnapshot();
       }
       return;
     }
 
-    // All 5 Ships & Boats (Sovereign of the Tides, Catamaran, Outrigger, Coastal Boat, Lake Rowboat)
+    // All Ships & Boats (including SSJ Expedition Cruiser) — spawn at exact player location!
     if (entry.boatId) {
       const bIdx = this.boats.findIndex((b) => b.id === entry.boatId);
       if (bIdx >= 0) {
@@ -2328,15 +3035,18 @@ export class DreamlineEngine {
           z: spawn.z,
           heading: spawn.heading,
           speed: 0,
+          inVault: inVaultNow,
         };
+        this.vehiclesWorld.group.visible = true;
         this.vehiclesWorld.syncBoats(this.boats, this.elapsed);
       }
       if (boardNow) {
         this.boardBoatById(entry.boatId);
       } else {
-        const pierX = entry.boatId === 'lake_boat' ? 31.5 : 118.5;
-        const pierZ = entry.boatId === 'lake_boat' ? -11.5 : 48.6;
-        this.teleportTo(pierX, pierZ, `${entry.name} Moored Right Beside the Pier! Press E to Sail`);
+        this.audio.playStationChime();
+        this.showNotice(`Spawned ${entry.name} right at your exact location! Press E to sail`);
+        this.renderImmediate();
+        this.emitHudSnapshot();
       }
     }
   }
@@ -2367,10 +3077,16 @@ export class DreamlineEngine {
     if (enabled) {
       this.trainViewMode = 'driver';
       this.trainState = { ...this.trainState, dwellHold: false };
+      // Start smoothly in Slow or Cruise notch if train was already moving so driving feels effortless!
+      const currentMps = this.trainState.speed * RAILWAY_TOTAL_LENGTH;
+      this.trainDriverNotch = currentMps > 12 ? 2 : currentMps > 3 ? 1 : 0;
+      this.trainCruiseActive = true;
       this.audio.playDistantTrainHorn(0.85);
-      this.showNotice('Train Driver Mode ON · W/S or Joystick Throttle · Space Brake · Horn [H] · Doors [O]');
+      this.showNotice('Easy Train Driver Mode ON · Tap Slow / Cruise / Fast or use W/S · Space Brake');
     } else {
       this.trainManualDoors = false;
+      this.trainCruiseActive = false;
+      this.trainDriverNotch = 0;
       if (this.trainViewMode === 'driver') {
         this.trainViewMode = 'window';
       }
@@ -2378,6 +3094,88 @@ export class DreamlineEngine {
     }
     this.renderImmediate();
     this.emitHudSnapshot();
+  }
+
+  public setTrainDriverNotch(notch: TrainDriverNotch): void {
+    this.audio.unlock();
+    if (this.activeVehicle !== 'train') return;
+    if (!this.trainDriverMode) {
+      this.trainDriverMode = true;
+      this.trainViewMode = 'driver';
+    }
+    this.trainDriverNotch = notch;
+    this.trainCruiseActive = true;
+    this.trainManualBrake = notch === 0;
+    if (notch !== 0) {
+      this.trainManualDoors = false;
+    }
+    const labels: Record<TrainDriverNotch, string> = {
+      [-1]: 'Reverse (27 km/h)',
+      [0]: 'Stop / Braking',
+      [1]: 'Slow Scenic (31 km/h)',
+      [2]: 'Smooth Cruise (59 km/h)',
+      [3]: 'Express Fast (88 km/h)',
+    };
+    this.showNotice(`Train Throttle: ${labels[notch]}`);
+    this.emitHudSnapshot();
+  }
+
+  public jumpTrainToSection(section: 'surface' | 'elevated' | 'subway'): void {
+    this.audio.unlock();
+    if (this.homeVaultState.inVault || this.inUndergroundCave || this.inUndergroundMetro) {
+      this.homeVaultState = { ...this.homeVaultState, inVault: false, elevatorPhase: 'idle' };
+      this.inUndergroundCave = false;
+      this.inUndergroundMetro = false;
+      this.setSurfaceGroupsVisible(true);
+    }
+    const targetT = getCombinedRailSectionT(section);
+    const sample = sampleRailway(targetT);
+    const cruiseMps = section === 'subway' ? 14.5 : 16.5;
+    this.trainState = {
+      ...this.trainState,
+      t: targetT,
+      speed: cruiseMps / RAILWAY_TOTAL_LENGTH,
+      speedKmh: Math.round(cruiseMps * 3.6),
+      phase: 'cruising',
+      boardingStatus: 'in_transit',
+      doorOpen: 0,
+      worldX: sample.x,
+      worldZ: sample.z,
+      heading: sample.angle,
+    };
+    this.activeVehicle = 'train';
+    this.activeBoatId = null;
+    this.isSitting = false;
+    this.isSwimming = false;
+    this.trainDriverMode = true;
+    this.trainDriverNotch = 2;
+    this.trainCruiseActive = true;
+    this.trainManualBrake = false;
+    if (this.trainViewMode !== 'driver' && this.trainViewMode !== 'exterior') {
+      this.trainViewMode = 'driver';
+    }
+    this.playerX = sample.x;
+    this.playerY = sample.y + 1.5;
+    this.playerZ = sample.z;
+    this.playerHeading = sample.angle;
+    this.trainRig.update(this.trainState, 0.016, section === 'subway' ? 1.0 : 0.25);
+    this.trainRig.getDriverCabTransform(_seatPos, _seatLook);
+    this.camera.position.copy(_seatPos);
+    _camCurrentLook.copy(_seatLook);
+    this.camera.lookAt(_camCurrentLook);
+    this.audio.playDistantTrainHorn(0.8);
+    const sectionNames = {
+      surface: 'Surface Countryside Mainline',
+      elevated: 'Elevated Sky Viaduct (+7.4m Above Ground)',
+      subway: 'Underground Metro Subway Tunnel (-7.2m Below Ground)',
+    };
+    this.showNotice(`Combined Train on ${sectionNames[section]} · Cruise Engaged!`);
+    this.renderImmediate();
+    this.emitHudSnapshot();
+  }
+
+  public setSwimDiveHold(delta: -1 | 0 | 1): void {
+    this.swimDiveHold = delta;
   }
 
   public toggleTrainManualDoors(): void {
@@ -2480,6 +3278,8 @@ export class DreamlineEngine {
     this.avsSnowHouse.group.visible = false;
     this.frozenKingdom.surfaceGroup.visible = false;
     this.skyExplorerWorld.group.visible = false;
+    this.orangeHeliWorld.group.visible = false;
+    this.vehicleGarageWorld.group.visible = false;
     this.skyTaxiWorld.group.visible = false;
     this.exhibitionComplexWorld.group.visible = false;
     this.desertOasisWorld.group.visible = false;
@@ -2533,6 +3333,20 @@ export class DreamlineEngine {
   }
 
   private setSurfaceGroupsVisible(visible: boolean): void {
+    const inVault = this.homeVaultState.inVault;
+    const hasExpeditionInVault =
+      inVault &&
+      (Boolean(this.dirtBikeState.inVault) ||
+        Boolean(this.hoverGliderState.inVault) ||
+        Boolean(this.safariJeepState.inVault) ||
+        Boolean(this.vtolState.inVault) ||
+        Boolean(this.sportJetSkiState.inVault) ||
+        Boolean(this.perfJetSkiState.inVault));
+    const hasCamperInVault = inVault && Boolean(this.camperState.inVault);
+    const hasSafariCarInVault = inVault && Boolean(this.dinosaurIslandState.safariCar.inVault);
+    const hasBusOrBoatInVault =
+      inVault && (Boolean(this.busState.inVault) || this.boats.some((b) => b.inVault));
+
     this.skyWater.group.visible = visible;
     this.nature.group.visible = visible;
     this.architecture.group.visible = visible;
@@ -2540,75 +3354,539 @@ export class DreamlineEngine {
     this.regionsWorld.group.visible = visible;
     this.avsSnowHouse.group.visible = visible;
     this.frozenKingdom.surfaceGroup.visible = visible;
-    this.skyExplorerWorld.group.visible = visible;
+    this.skyExplorerWorld.group.visible = visible || (inVault && Boolean(this.skyExplorerState.inVault));
+    this.orangeHeliWorld.group.visible = visible || (inVault && Boolean(this.orangeHeliState.inVault));
+    this.vehicleGarageWorld.group.visible = visible;
     this.skyTaxiWorld.group.visible = visible;
     this.exhibitionComplexWorld.group.visible = visible;
     this.desertOasisWorld.group.visible = visible;
     this.wildlifeWorld.group.visible = visible;
     this.birdFlockingWorld.group.visible = visible;
     this.batmobileWorld.group.visible =
-      visible ? !this.batmobileState.inVault : this.homeVaultState.inVault && Boolean(this.batmobileState.inVault);
-    this.homeVaultWorld.carsGroup.visible = visible || this.homeVaultState.inVault;
+      visible ? !this.batmobileState.inVault : inVault && Boolean(this.batmobileState.inVault);
+    this.homeVaultWorld.carsGroup.visible = visible || inVault;
+    this.homeVaultWorld.surfacePortalGroup.visible = visible;
     this.airportMetroWorld.surfaceGroup.visible = visible;
     this.airportMetroWorld.airlinerGroup.visible = visible;
+    this.oceanServicesWorld.rootGroup.visible = visible;
+    this.snowmanTaxiWorld.group.visible = visible && this.snowmanTaxiState.phase !== 'idle';
+    this.expeditionVehiclesWorld.root.visible = visible || hasExpeditionInVault;
+    this.vehiclesWorld.group.visible = visible || hasBusOrBoatInVault;
+    this.enchantedForest.setCamperOnlyVisible(!visible && hasCamperInVault);
+    this.enchantedForest.group.visible = visible || hasCamperInVault;
+    this.dinosaurIslandWorld.setSafariCarOnlyVisible(!visible && hasSafariCarInVault);
+    this.dinosaurIslandWorld.group.visible = visible || hasSafariCarInVault;
+    this.wildlifeEcosystemWorld.root.visible = visible;
+    this.underwaterOceanWorld.root.visible = visible;
+  }
+
+  private applyVehicleVaultTransition(
+    label: string,
+    vehicleY: number,
+    enteredVault: boolean,
+    exitedToSurface: boolean
+  ): void {
+    if (this.homeVaultState.inVault) {
+      const nearSurface = vehicleY > -9.5;
+      this.setSurfaceGroupsVisible(nearSurface);
+      this.scene.background = nearSurface ? null : new THREE.Color(0x0b1220);
+    }
+    if (exitedToSurface && this.homeVaultState.inVault) {
+      this.homeVaultState = { ...this.homeVaultState, inVault: false };
+      this.setSurfaceGroupsVisible(true);
+      this.scene.background = null;
+      this.container.dataset.inHomeVault = 'false';
+      this.audio.playStationChime();
+      this.showNotice(`Drove ${label} straight out of the Secret Tunnel into daylight!`);
+      this.emitHudSnapshot();
+    } else if (enteredVault && !this.homeVaultState.inVault) {
+      this.homeVaultState = {
+        ...this.homeVaultState,
+        inVault: true,
+        exitGateOpen: true,
+        exitGateProgress: Math.max(this.homeVaultState.exitGateProgress, 1),
+      };
+      this.homeVaultWorld.chamberGroup.visible = true;
+      this.container.dataset.inHomeVault = 'true';
+      this.audio.playDoorChime();
+      this.showNotice(`Drove ${label} straight down into the Secret Underground Tunnel!`);
+      this.emitHudSnapshot();
+    }
+  }
+
+  public boardExpeditionVehicle(
+    kind:
+      | 'safari_jeep'
+      | 'vtol_aircraft'
+      | 'jetski_sport'
+      | 'jetski_perf'
+      | 'dirt_bike_49cc'
+      | 'hover_glider'
+  ): void {
+    this.audio.unlock();
+    if (this.inUndergroundCave || this.inUndergroundMetro) {
+      this.inUndergroundCave = false;
+      this.inUndergroundMetro = false;
+      if (!this.homeVaultState.inVault) {
+        this.setSurfaceGroupsVisible(true);
+      }
+    }
+    this.isSitting = false;
+    this.isSwimming = false;
+    this.activeVehicle = kind;
+
+    const inVaultNow = this.homeVaultState.inVault;
+    const exactGroundY = inVaultNow
+      ? vaultFloorYAt(this.playerX, this.playerZ)
+      : walkableHeightWithFloor(this.playerX, this.playerZ, this.playerY);
+    const exactWaterOrGroundY = inVaultNow
+      ? exactGroundY + 0.14
+      : isWaterAt(this.playerX, this.playerZ)
+      ? WATER_LEVEL + 0.14
+      : exactGroundY + 0.14;
+
+    if (kind === 'hover_glider') {
+      const distToGlider = Math.hypot(
+        this.playerX - this.hoverGliderState.x,
+        this.playerZ - this.hoverGliderState.z
+      );
+      if (distToGlider > 8.0 || Boolean(this.hoverGliderState.inVault) !== inVaultNow) {
+        this.hoverGliderState = {
+          ...this.hoverGliderState,
+          x: this.playerX,
+          y: Math.max(exactGroundY, inVaultNow ? exactGroundY : WATER_LEVEL + 0.25) + 0.72,
+          z: this.playerZ,
+          heading: this.playerHeading,
+          vx: 0,
+          vy: 0,
+          vz: 0,
+          speed: 0,
+          speedKmh: 0,
+          pitch: 0,
+          roll: 0,
+          inVault: inVaultNow,
+        };
+      }
+      this.playerX = this.hoverGliderState.x;
+      this.playerY = this.hoverGliderState.y + 0.9;
+      this.playerZ = this.hoverGliderState.z;
+      this.playerHeading = this.hoverGliderState.heading;
+      this.showNotice(
+        'Flying Aero-Ti Hoverboard Glider · Look Up/Down + W to Climb & Dive (no buttons needed!) · Shift Twin-Jet Boost · C Camera'
+      );
+    } else if (kind === 'dirt_bike_49cc') {
+      const distToBike = Math.hypot(
+        this.playerX - this.dirtBikeState.x,
+        this.playerZ - this.dirtBikeState.z
+      );
+      if (distToBike > 8.0 || Boolean(this.dirtBikeState.inVault) !== inVaultNow) {
+        this.dirtBikeState = {
+          ...this.dirtBikeState,
+          x: this.playerX,
+          y: exactGroundY,
+          z: this.playerZ,
+          heading: this.playerHeading,
+          speed: 0,
+          speedKmh: 0,
+          steerAngle: 0,
+          steerDeg: 0,
+          inVault: inVaultNow,
+        };
+      }
+      this.dirtBikeState.engineRunning = true;
+      this.dirtBikeState.kickstandDown = false;
+      this.playerX = this.dirtBikeState.x;
+      this.playerY = this.dirtBikeState.y + 0.9;
+      this.playerZ = this.dirtBikeState.z;
+      this.playerHeading = this.dirtBikeState.heading;
+      this.showNotice('Riding 49cc Petrol Dirt Bike (Orion Mini) · WASD Ride · Shift Powerband · Space Disc Brake · R Rev · C Handlebar POV');
+    } else if (kind === 'safari_jeep') {
+      const distToJeep = Math.hypot(
+        this.playerX - this.safariJeepState.x,
+        this.playerZ - this.safariJeepState.z
+      );
+      if (distToJeep > 8.0 || Boolean(this.safariJeepState.inVault) !== inVaultNow) {
+        this.safariJeepState = {
+          ...this.safariJeepState,
+          x: this.playerX,
+          y: exactGroundY,
+          z: this.playerZ,
+          heading: this.playerHeading,
+          speed: 0,
+          speedKmh: 0,
+          steerAngle: 0,
+          inVault: inVaultNow,
+        };
+      }
+      this.playerX = this.safariJeepState.x;
+      this.playerY = this.safariJeepState.y + 1.1;
+      this.playerZ = this.safariJeepState.z;
+      this.playerHeading = this.safariJeepState.heading;
+      this.showNotice('Driving 4×4 Safari Jeep · WASD Drive · L Lights · C Camera');
+    } else if (kind === 'vtol_aircraft') {
+      const distToVtol = Math.hypot(
+        this.playerX - this.vtolState.x,
+        this.playerZ - this.vtolState.z
+      );
+      if (distToVtol > 8.0 || Boolean(this.vtolState.inVault) !== inVaultNow) {
+        this.vtolState = {
+          ...this.vtolState,
+          x: this.playerX,
+          y: exactGroundY + 0.4,
+          z: this.playerZ,
+          heading: this.playerHeading,
+          vx: 0,
+          vy: 0,
+          vz: 0,
+          speedKmh: 0,
+          hoverMode: true,
+          inVault: inVaultNow,
+        };
+      }
+      this.playerX = this.vtolState.x;
+      this.playerY = this.vtolState.y + 1.2;
+      this.playerZ = this.vtolState.z;
+      this.playerHeading = this.vtolState.heading;
+      this.showNotice('Piloting Gold/Wood VTOL · Space Lift · Ctrl Descend · H Hover/Cruise · C Camera');
+    } else if (kind === 'jetski_sport') {
+      const distToSki = Math.hypot(
+        this.playerX - this.sportJetSkiState.x,
+        this.playerZ - this.sportJetSkiState.z
+      );
+      if (distToSki > 8.0 || Boolean(this.sportJetSkiState.inVault) !== inVaultNow) {
+        this.sportJetSkiState = {
+          ...this.sportJetSkiState,
+          x: this.playerX,
+          y: exactWaterOrGroundY,
+          z: this.playerZ,
+          heading: this.playerHeading,
+          speed: 0,
+          speedKmh: 0,
+          inVault: inVaultNow,
+        };
+      }
+      this.playerX = this.sportJetSkiState.x;
+      this.playerY = this.sportJetSkiState.y + 0.6;
+      this.playerZ = this.sportJetSkiState.z;
+      this.playerHeading = this.sportJetSkiState.heading;
+      this.showNotice('Riding Sport Jet Ski 310X (Yellow) · WASD Carve Waves · Shift Turbo · C Camera');
+    } else {
+      const distToPro = Math.hypot(
+        this.playerX - this.perfJetSkiState.x,
+        this.playerZ - this.perfJetSkiState.z
+      );
+      if (distToPro > 8.0 || Boolean(this.perfJetSkiState.inVault) !== inVaultNow) {
+        this.perfJetSkiState = {
+          ...this.perfJetSkiState,
+          x: this.playerX,
+          y: exactWaterOrGroundY,
+          z: this.playerZ,
+          heading: this.playerHeading,
+          speed: 0,
+          speedKmh: 0,
+          inVault: inVaultNow,
+        };
+      }
+      this.playerX = this.perfJetSkiState.x;
+      this.playerY = this.perfJetSkiState.y + 0.6;
+      this.playerZ = this.perfJetSkiState.z;
+      this.playerHeading = this.perfJetSkiState.heading;
+      this.showNotice('Riding Apex-K Pro Jet Ski (Green) · WASD Carve Waves · Shift Turbo · C Camera');
+    }
+    this.expeditionVehiclesWorld.root.visible = true;
+    this.camYaw = this.playerHeading + Math.PI;
+    this.camPitch = kind === 'dirt_bike_49cc' || kind === 'hover_glider' ? 0.16 : 0.22;
+    this.audio.playDoorChime();
+    this.updateSimulation(0.016);
+    this.updateCamera(0.016, true);
+    this.renderSceneFrame();
+    this.emitHudSnapshot();
+  }
+
+  public setDirtBikeRev(active: boolean): void {
+    this.dirtBikeManualRev = active;
+    if (active) {
+      this.dirtBikeState.engineRunning = true;
+    }
+  }
+
+  public toggleDirtBikeKickstand(): void {
+    this.dirtBikeState.kickstandDown = !this.dirtBikeState.kickstandDown;
+    if (this.dirtBikeState.kickstandDown) {
+      this.dirtBikeState.speed = 0;
+      this.dirtBikeState.speedKmh = 0;
+    }
+    this.showNotice(
+      this.dirtBikeState.kickstandDown
+        ? '49cc Dirt Bike Kickstand: DOWN'
+        : '49cc Dirt Bike Kickstand: UP — Ready to Rip!'
+    );
+    this.emitHudSnapshot();
+  }
+
+  public exitExpeditionVehicle(): void {
+    const v = this.activeVehicle;
+    if (
+      v !== 'safari_jeep' &&
+      v !== 'vtol_aircraft' &&
+      v !== 'jetski_sport' &&
+      v !== 'jetski_perf' &&
+      v !== 'dirt_bike_49cc' &&
+      v !== 'hover_glider'
+    ) {
+      return;
+    }
+    this.activeVehicle = 'none';
+    this.dirtBikeManualRev = false;
+    const exitFloor = (ex: number, ez: number) =>
+      this.homeVaultState.inVault ? vaultFloorYAt(ex, ez) : walkableHeightAt(ex, ez);
+    if (v === 'hover_glider') {
+      this.hoverGliderState.vx = 0;
+      this.hoverGliderState.vy = 0;
+      this.hoverGliderState.vz = 0;
+      this.hoverGliderState.speed = 0;
+      this.hoverGliderState.speedKmh = 0;
+      this.playerX = this.hoverGliderState.x + Math.cos(this.hoverGliderState.heading) * 1.5;
+      this.playerZ = this.hoverGliderState.z - Math.sin(this.hoverGliderState.heading) * 1.5;
+      this.playerY = this.homeVaultState.inVault
+        ? vaultFloorYAt(this.playerX, this.playerZ)
+        : Math.max(WATER_LEVEL + 0.1, walkableHeightAt(this.playerX, this.playerZ));
+      this.isSwimming = !this.homeVaultState.inVault && isWaterAt(this.playerX, this.playerZ);
+    } else if (v === 'dirt_bike_49cc') {
+      this.dirtBikeState.kickstandDown = true;
+      this.dirtBikeState.speed = 0;
+      this.dirtBikeState.speedKmh = 0;
+      this.playerX = this.dirtBikeState.x + Math.cos(this.dirtBikeState.heading) * 1.45;
+      this.playerZ = this.dirtBikeState.z - Math.sin(this.dirtBikeState.heading) * 1.45;
+      this.playerY = exitFloor(this.playerX, this.playerZ);
+    } else if (v === 'safari_jeep') {
+      this.playerX = this.safariJeepState.x - Math.cos(this.safariJeepState.heading) * 2.4;
+      this.playerZ = this.safariJeepState.z + Math.sin(this.safariJeepState.heading) * 2.4;
+      this.playerY = exitFloor(this.playerX, this.playerZ);
+    } else if (v === 'vtol_aircraft') {
+      this.playerX = this.vtolState.x - Math.cos(this.vtolState.heading) * 3.8;
+      this.playerZ = this.vtolState.z + Math.sin(this.vtolState.heading) * 3.8;
+      this.playerY = exitFloor(this.playerX, this.playerZ);
+    } else {
+      const ski = v === 'jetski_sport' ? this.sportJetSkiState : this.perfJetSkiState;
+      this.playerX = ski.x - 1.8;
+      this.playerZ = ski.z + 1.8;
+      this.playerY = this.homeVaultState.inVault
+        ? vaultFloorYAt(this.playerX, this.playerZ)
+        : Math.max(WATER_LEVEL + 0.1, walkableHeightAt(this.playerX, this.playerZ));
+      this.isSwimming = !this.homeVaultState.inVault && isWaterAt(this.playerX, this.playerZ);
+    }
+    this.audio.playDoorChime();
+    this.showNotice('Exited vehicle · Exploring on foot');
+    this.updateSimulation(0.016);
+    this.updateCamera(0.016, true);
+    this.renderSceneFrame();
+    this.emitHudSnapshot();
+  }
+
+  public toggleSafariJeepLights(): void {
+    this.safariJeepState.headlightsOn = !this.safariJeepState.headlightsOn;
+    this.safariJeepState.fogLampsOn = this.safariJeepState.headlightsOn;
+    this.showNotice(
+      this.safariJeepState.headlightsOn
+        ? 'Safari Jeep Headlights & Fog Lamps ON'
+        : 'Safari Jeep Lights OFF'
+    );
+    this.emitHudSnapshot();
+  }
+
+  public toggleVtolHoverMode(): void {
+    this.vtolState.hoverMode = !this.vtolState.hoverMode;
+    this.showNotice(
+      this.vtolState.hoverMode
+        ? 'VTOL Mode: Vertical Hover & Precision Landing'
+        : 'VTOL Mode: Horizontal Forward Cruise Flight'
+    );
+    this.emitHudSnapshot();
+  }
+
+  public setVtolVerticalInput(ascend: boolean, descend: boolean): void {
+    this.vtolVerticalAscend = ascend;
+    this.vtolVerticalDescend = descend;
+  }
+
+  public setCameraPerspective(mode: CameraPerspectiveMode): void {
+    this.cameraPerspective = mode;
+    this.container.dataset.cameraPerspective = mode;
+    const labelMap: Record<CameraPerspectiveMode, string> = {
+      chase: 'Rear Chase Camera',
+      first_person: 'First-Person Vehicle Camera',
+      cockpit: 'Cockpit Interior View',
+      free_roam: 'Free-Roam Orbit Camera',
+      cinematic: 'Cinematic Tracking Camera',
+      wildlife_obs: 'Wildlife Observation Lens',
+      drone: 'Drone Aerial Survey Camera',
+    };
+    this.showNotice(`Camera: ${labelMap[mode]}`);
+    const hideExpeditionRider = mode === 'cockpit' || mode === 'first_person';
+    this.expeditionVehiclesWorld.update({
+      dt: 0,
+      elapsed: this.elapsed,
+      jeep: this.safariJeepState,
+      vtol: this.vtolState,
+      sportJetSki: this.sportJetSkiState,
+      perfJetSki: this.perfJetSkiState,
+      dirtBike: this.dirtBikeState,
+      dirtBikeOccupied: this.activeVehicle === 'dirt_bike_49cc',
+      dirtBikeHideRider: hideExpeditionRider,
+      hoverGlider: this.hoverGliderState,
+      hoverGliderOccupied: this.activeVehicle === 'hover_glider',
+      hoverGliderHideRider: hideExpeditionRider,
+    });
+    this.updateCamera(0.016, true);
+    this.renderSceneFrame();
+    this.emitHudSnapshot();
+  }
+
+  public cycleCameraPerspective(): void {
+    const next = cycleCameraPerspectiveLogic(this.cameraPerspective);
+    this.setCameraPerspective(next);
+  }
+
+  public photographWildlifeInViewfinder(): void {
+    this.audio.unlock();
+    this.audio.playShutter();
+    const target = this.wildlifeViewfinderTarget;
+    if (target) {
+      this.wildlifeDiscoveredIds.add(target.speciesId);
+      this.wildlifePhotographedIds.add(target.speciesId);
+      this.audio.playWildlifeVocalisation(target.speciesId, 0.7);
+      this.showNotice(
+        `Photographed ${target.name} (${target.behavior.replace('_', ' ')}) · ${this.wildlifePhotographedIds.size}/${WILDLIFE_SPECIES_CATALOG.length} Species Logged`
+      );
+    } else {
+      this.showNotice('Wildlife Photo Captured · Aim toward animals to log species in Field Guide');
+    }
+    this.emitHudSnapshot();
+  }
+
+  public observeWildlifeSpecies(speciesId: WildlifeSpeciesId, anchorX: number, anchorZ: number): void {
+    const spec = getWildlifeSpeciesById(speciesId);
+    const liveActor = this.wildlifeActors.find((a) => a.speciesId === speciesId);
+    const tx = liveActor ? liveActor.x : anchorX;
+    const tz = liveActor ? liveActor.z : anchorZ;
+    // Place explorer on safe ground ~14m away facing the wildlife
+    let px = tx - 12;
+    let pz = tz + 10;
+    if (isWaterAt(px, pz) || isOceanAt(px, pz)) {
+      px = tx - 16;
+      pz = tz - 12;
+    }
+    if (this.activeVehicle !== 'none') {
+      this.activeVehicle = 'none';
+    }
+    this.homeVaultState = { ...this.homeVaultState, inVault: false, elevatorPhase: 'idle' };
+    this.inUndergroundCave = false;
+    this.inUndergroundMetro = false;
+    this.setSurfaceGroupsVisible(true);
+    this.playerX = px;
+    this.playerZ = pz;
+    this.playerY = Math.max(WATER_LEVEL + 0.15, walkableHeightAt(px, pz));
+    this.playerHeading = Math.atan2(tx - px, tz - pz);
+    this.camYaw = this.playerHeading + Math.PI;
+    this.camPitch = 0.12;
+    this.cameraPerspective = 'wildlife_obs';
+    this.wildlifeDiscoveredIds.add(speciesId);
+    this.audio.playWildlifeVocalisation(speciesId, 0.85);
+    this.showNotice(`Observing ${spec.name} · Press [F] or Shutter to Photograph`);
+    this.updateSimulation(0.016);
+    this.updateCamera(0.016, true);
+    this.renderSceneFrame();
+    this.emitHudSnapshot();
   }
 
   public toggleHomeSecretVaultHatch(): void {
     this.audio.unlock();
     this.homeVaultState = toggleSecretVaultHatch(this.homeVaultState);
+    if (this.homeVaultState.hatchUnlocked) {
+      this.homeVaultState = { ...this.homeVaultState, exitGateOpen: true };
+      this.homeVaultWorld.chamberGroup.visible = true;
+    }
     this.container.dataset.vaultHatchOpen = String(this.homeVaultState.hatchUnlocked);
     this.audio.playDoorChime();
     this.showNotice(
       this.homeVaultState.hatchUnlocked
-        ? 'Secret Floor Hatch Opened! Step onto the glowing shaft or click "Go Down to Secret Vault"!'
-        : 'Secret Floor Hatch Sealed — Hidden flush beneath the En Illam floor.'
-    );
-    this.personalHome.applyHomeState(
-      this.homeState,
-      0.7,
-      this.elapsed,
-      this.homeVaultState.hatchUnlocked ? 1 : 0
+        ? 'Superhero House Secret Tunnel OPEN! Walk through the West Wall Door or Exterior Blast Doors — no teleporting!'
+        : 'Superhero House Secret Tunnel Sealed.'
     );
     this.renderImmediate();
     this.emitHudSnapshot();
   }
 
+  /**
+   * Opens or closes the real Superhero House Secret Tunnel blast doors & interior wall door from Mobile Phone
+   * WITHOUT teleporting the player — watch the armored doors slide wide open right in front of you and walk/drive in!
+   */
   public openHomeSecretTunnelFromPhone(): void {
     this.audio.unlock();
-    if (this.homeVaultState.inVault) {
-      this.homeVaultState = { ...this.homeVaultState, hatchUnlocked: true, hatchOpenProgress: 1 };
-      this.exitHomeSecretVault();
-      return;
+    const opening = !this.homeVaultState.hatchUnlocked;
+    this.homeVaultState = {
+      ...this.homeVaultState,
+      hatchUnlocked: opening,
+      exitGateOpen: opening ? true : this.homeVaultState.exitGateOpen,
+    };
+    if (opening) {
+      this.homeVaultWorld.chamberGroup.visible = true;
     }
-
-    const insideHome = isPlayerInsidePersonalHome(
-      this.playerX,
-      this.playerY,
-      this.playerZ,
-      false
+    this.container.dataset.vaultHatchOpen = String(this.homeVaultState.hatchUnlocked);
+    this.audio.playDoorChime();
+    this.showNotice(
+      opening
+        ? 'Opening Superhero House Secret Tunnel Doors! Watch them slide open and walk, fly, or drive inside!'
+        : 'Closing Superhero House Secret Tunnel Doors.'
     );
-    if (!insideHome) {
-      this.teleportTo(HOME_CENTER.x, HOME_CENTER.z + 4.0);
-      this.homeVaultState = {
-        ...this.homeVaultState,
-        hatchUnlocked: true,
-        hatchOpenProgress: 0.25,
-      };
-      this.container.dataset.vaultHatchOpen = 'true';
-      this.audio.playDoorChime();
-      this.personalHome.applyHomeState(this.homeState, 0.7, this.elapsed, 1);
-      this.showNotice(
-        'House Secret Superhero Tunnel Opened! Walk into the glowing shaft or tap "Go Down to Secret Vault"!'
-      );
-      this.renderImmediate();
-      this.emitHudSnapshot();
-      return;
-    }
-
-    this.toggleHomeSecretVaultHatch();
+    this.renderImmediate();
+    this.emitHudSnapshot();
   }
 
-  public enterHomeSecretVault(): void {
+  /** Places player in En Illam front yard facing the Superhero House Secret Tunnel Portal beneath Pad B */
+  public goOutsideSuperheroHouse(): void {
+    this.audio.unlock();
+    if (this.homeVaultState.inVault || this.homeVaultState.elevatorPhase !== 'idle') {
+      this.homeVaultState = {
+        ...this.homeVaultState,
+        inVault: false,
+        elevatorPhase: 'idle',
+        activeVaultCarId: null,
+      };
+    }
+    if (this.inUndergroundCave) {
+      this.inUndergroundCave = false;
+      this.frozenKingdom.caveGroup.visible = false;
+    }
+    if (this.inUndergroundMetro) {
+      this.inUndergroundMetro = false;
+      this.airportMetroWorld.undergroundGroup.visible = false;
+    }
+    this.activeVehicle = 'none';
+    this.activeBoatId = null;
+    this.isSitting = false;
+    this.isSwimming = false;
+    this.heroState.isFlying = false;
+    this.setSurfaceGroupsVisible(true);
+    this.scene.background = null;
+    this.playerX = VAULT_HOME_OUTSIDE_STAND_POS.x;
+    this.playerZ = VAULT_HOME_OUTSIDE_STAND_POS.z;
+    this.playerY = walkableHeightWithFloor(this.playerX, this.playerZ, 0.2);
+    this.playerHeading = VAULT_HOME_OUTSIDE_STAND_POS.heading;
+    this.playerVx = 0;
+    this.playerVz = 0;
+    this.camYaw = 0;
+    this.camPitch = 0.14;
+    this.camDistance = 5.6;
+    this.container.dataset.inHomeVault = 'false';
+    this.snapThirdPersonCamera();
+    this.showNotice('Outside En Illam Superhero House — open the Secret Tunnel with Mobile [P] and walk straight in!');
+    this.renderImmediate();
+    this.emitHudSnapshot();
+  }
+
+  public enterHomeSecretVault(instantSkipElevator = false): void {
     this.audio.unlock();
     if (this.inUndergroundCave) {
       this.inUndergroundCave = false;
@@ -2618,13 +3896,6 @@ export class DreamlineEngine {
       this.inUndergroundMetro = false;
       this.airportMetroWorld.undergroundGroup.visible = false;
     }
-    this.homeVaultState = {
-      ...this.homeVaultState,
-      hatchUnlocked: true,
-      hatchOpenProgress: 1,
-      inVault: true,
-      activeVaultCarId: null,
-    };
     this.isSitting = false;
     this.isSwimming = false;
     this.activeVehicle = 'none';
@@ -2635,18 +3906,42 @@ export class DreamlineEngine {
     this.heroState.isWebSwinging = false;
     this.webSwingState.active = false;
 
-    this.setSurfaceGroupsVisible(false);
     this.homeVaultWorld.chamberGroup.visible = true;
     this.homeVaultWorld.carsGroup.visible = true;
     this.batmobileWorld.group.visible = Boolean(this.batmobileState.inVault);
     this.scene.background = new THREE.Color(0x0b1220);
 
-    this.playerX = VAULT_SPAWN_POS.x;
-    this.playerY = VAULT_SPAWN_POS.y;
-    this.playerZ = VAULT_SPAWN_POS.z;
+    if (instantSkipElevator) {
+      this.homeVaultState = {
+        ...this.homeVaultState,
+        hatchUnlocked: true,
+        hatchOpenProgress: 1,
+        inVault: true,
+        elevatorPhase: 'idle',
+        elevatorProgress: 1,
+        elevatorY: VAULT_FLOOR_Y,
+        activeVaultCarId: null,
+      };
+      this.setSurfaceGroupsVisible(false);
+      this.playerX = VAULT_SPAWN_POS.x;
+      this.playerY = VAULT_SPAWN_POS.y;
+      this.playerZ = VAULT_SPAWN_POS.z;
+      this.playerHeading = VAULT_SPAWN_POS.heading;
+      this.container.dataset.inHomeVault = 'true';
+    } else {
+      // PHYSICAL HYDRAULIC ELEVATOR DESCENT — NO TELEPORT!
+      this.homeVaultState = startVaultElevatorDescent(this.homeVaultState);
+      this.setSurfaceGroupsVisible(false);
+      this.playerX = VAULT_ELEVATOR_POS.x;
+      this.playerY = this.homeVaultState.elevatorY;
+      this.playerZ = VAULT_ELEVATOR_POS.z;
+      this.playerHeading = Math.PI;
+      this.container.dataset.inHomeVault = 'descending';
+      this.showNotice('Hydraulic Elevator Descending 28m into the Secret Underground Base...');
+    }
+
     this.playerVx = 0;
     this.playerVz = 0;
-    this.playerHeading = VAULT_SPAWN_POS.heading;
     this.camYaw = 0;
     this.camPitch = 0.22;
     this.camDistance = 5.4;
@@ -2656,61 +3951,83 @@ export class DreamlineEngine {
     this.companionState.z = VAULT_SPAWN_POS.z + 0.8;
     this.companionState.activity = 'idle';
 
-    this.container.dataset.inHomeVault = 'true';
     this.container.dataset.vaultHatchOpen = 'true';
     this.container.dataset.activeVaultCar = 'none';
 
     this.homeVaultWorld.update({
-      inVault: true,
+      inVault: this.homeVaultState.inVault,
+      elevatorPhase: this.homeVaultState.elevatorPhase,
+      elevatorY: this.homeVaultState.elevatorY,
       activeHeroId: this.heroState.activeHeroId,
       cars: this.homeVaultState.cars,
+      exitGateProgress: this.homeVaultState.exitGateProgress,
       elapsed: this.elapsed,
       dt: 0.016,
     });
     this.batmobileWorld.update(this.batmobileState, this.elapsed, 0.9);
     this.audio.playStationChime();
-    this.showNotice(
-      'Entered Secret Underground Superhero Vault & Car Garage! Wear all 7 Hero Costumes or drive any car!'
-    );
     this.snapThirdPersonCamera();
     this.renderImmediate();
     this.emitHudSnapshot();
   }
 
   public exitHomeSecretVault(): void {
-    if (!this.homeVaultState.inVault) return;
+    if (!this.homeVaultState.inVault && this.homeVaultState.elevatorPhase === 'idle') return;
     this.audio.unlock();
+    // PHYSICAL HYDRAULIC ELEVATOR ASCENT back up into En Illam!
+    this.activeVehicle = 'none';
     this.homeVaultState = {
-      ...this.homeVaultState,
-      inVault: false,
+      ...startVaultElevatorAscent(this.homeVaultState),
       activeVaultCarId: null,
     };
-    this.activeVehicle = 'none';
-    this.homeVaultWorld.chamberGroup.visible = false;
-    this.setSurfaceGroupsVisible(true);
-    this.scene.background = null;
-
-    this.playerX = VAULT_HATCH_WORLD.x + 1.4;
-    this.playerZ = VAULT_HATCH_WORLD.z;
-    this.playerY = walkableHeightWithFloor(this.playerX, this.playerZ, 0.5);
+    this.playerX = VAULT_ELEVATOR_POS.x;
+    this.playerY = this.homeVaultState.elevatorY;
+    this.playerZ = VAULT_ELEVATOR_POS.z;
     this.playerVx = 0;
     this.playerVz = 0;
-    this.playerHeading = 0;
-    this.camYaw = Math.PI;
-    this.camPitch = 0.2;
-    this.camDistance = 3.2;
-
-    this.companionState.x = this.playerX - 1.2;
-    this.companionState.z = this.playerZ + 0.8;
-    this.companionState.y = this.playerY;
-    this.companionState.activity = 'idle';
-
-    this.container.dataset.inHomeVault = 'false';
+    this.playerHeading = Math.PI;
+    this.container.dataset.inHomeVault = 'ascending';
     this.container.dataset.activeVaultCar = 'none';
     this.audio.playDoorChime();
-    this.showNotice('Returned upstairs to En Illam Living Room!');
+    this.showNotice('Riding Hydraulic Elevator UP 28m back to En Illam Living Room...');
     this.snapThirdPersonCamera();
     this.renderImmediate();
+    this.emitHudSnapshot();
+  }
+
+  public dispatchSnowmanTaxiToExactCoord(params: Omit<DispatchSnowmanTaxiParams, 'playerX' | 'playerZ'>): void {
+    this.audio.unlock();
+    if (this.homeVaultState.inVault) {
+      this.showNotice('Take the elevator up or drive out the ramp tunnel first to board Snowman Taxi!');
+      this.emitHudSnapshot();
+      return;
+    }
+    this.snowmanTaxiState = dispatchSnowmanTaxiLogic(this.snowmanTaxiState, {
+      ...params,
+      playerX: this.playerX,
+      playerZ: this.playerZ,
+    });
+    this.snowmanTaxiWorld.group.visible = true;
+    this.container.dataset.snowmanTaxiPhase = this.snowmanTaxiState.phase;
+    this.audio.playStationChime();
+    this.showNotice(this.snowmanTaxiState.statusMessage);
+    this.renderImmediate();
+    this.emitHudSnapshot();
+  }
+
+  public triggerSnowmanCycleJetSkiMorph(): void {
+    this.audio.unlock();
+    this.snowmanTaxiState = triggerInstantCycleJetSkiMorphLogic(this.snowmanTaxiState);
+    this.audio.playIcelandTransform(true);
+    this.showNotice(this.snowmanTaxiState.statusMessage);
+    this.emitHudSnapshot();
+  }
+
+  public cancelSnowmanTaxi(): void {
+    this.snowmanTaxiState = cancelSnowmanTaxiLogic(this.snowmanTaxiState);
+    this.snowmanTaxiWorld.group.visible = false;
+    this.container.dataset.snowmanTaxiPhase = 'idle';
+    this.showNotice('Snowman Taxi cancelled.');
     this.emitHudSnapshot();
   }
 
@@ -2796,6 +4113,121 @@ export class DreamlineEngine {
       ),
     };
     this.emitHudSnapshot();
+  }
+
+  public toggleVaultExitPassageGate(): void {
+    this.audio.unlock();
+    this.homeVaultState = toggleVaultExitGate(this.homeVaultState);
+    this.container.dataset.vaultGateOpen = String(this.homeVaultState.exitGateOpen);
+    this.audio.playDoorChime();
+    this.showNotice(
+      this.homeVaultState.exitGateOpen
+        ? 'Outside Exit Passage Blast Gate OPENING! Drive or walk straight down the 94m tunnel to go outside!'
+        : 'Outside Exit Passage Blast Gate Closing — Secret base perimeter sealed.'
+    );
+    this.emitHudSnapshot();
+  }
+
+  public boardSubmarine(): void {
+    this.audio.unlock();
+    if (this.inUndergroundCave) {
+      this.inUndergroundCave = false;
+      this.frozenKingdom.caveGroup.visible = false;
+      this.setSurfaceGroupsVisible(true);
+    }
+    if (this.inUndergroundMetro) {
+      this.inUndergroundMetro = false;
+      this.airportMetroWorld.undergroundGroup.visible = false;
+      this.setSurfaceGroupsVisible(true);
+    }
+    if (this.homeVaultState.inVault) {
+      this.exitHomeSecretVault();
+    }
+    this.activeVehicle = 'submarine';
+    this.activeBoatId = null;
+    this.isSitting = false;
+    this.isSwimming = false;
+    this.submarineDiveHold = 0;
+    this.heroState.isFlying = false;
+    this.heroState.isGliding = false;
+    this.heroState.isWebSwinging = false;
+    this.webSwingState.active = false;
+    this.playerX = this.submarineState.x;
+    this.playerY = this.submarineState.y + 1.2;
+    this.playerZ = this.submarineState.z;
+    this.playerHeading = this.submarineState.heading;
+    this.camYaw = this.submarineState.heading + Math.PI;
+    this.camPitch = 0.22;
+    this.container.dataset.submarineActive = 'true';
+    this.audio.playStationChime();
+    this.showNotice(
+      'Piloting Kadalkarai Submarine! WASD to steer · [Ctrl]/[X] Dive Underwater · [Space] Surface · [E] Exit'
+    );
+    this.snapThirdPersonCamera();
+    this.renderImmediate();
+    this.emitHudSnapshot();
+  }
+
+  public exitSubmarine(): void {
+    if (this.activeVehicle !== 'submarine') return;
+    this.activeVehicle = 'none';
+    this.submarineDiveHold = 0;
+    const nearPier =
+      Math.hypot(this.submarineState.x - SUBMARINE_DOCK_POS.x, this.submarineState.z - SUBMARINE_DOCK_POS.z) < 22;
+    if (nearPier) {
+      this.submarineState = createInitialSubmarineState();
+      this.playerX = SUBMARINE_EXIT_POS.x;
+      this.playerZ = SUBMARINE_EXIT_POS.z;
+      this.playerY = walkableHeightAt(this.playerX, this.playerZ);
+      this.isSwimming = false;
+      this.showNotice('Docked Kadalkarai Submarine at the Submarine Service Pier!');
+    } else {
+      // Surface automatically & step out into the ocean beside the submarine
+      this.submarineState = {
+        ...this.submarineState,
+        depth: 0,
+        targetDepth: 0,
+        y: -0.15,
+        speed: 0,
+        speedKmh: 0,
+        submerged: false,
+      };
+      this.playerX = this.submarineState.x - Math.cos(this.submarineState.heading) * 3.2;
+      this.playerZ = this.submarineState.z + Math.sin(this.submarineState.heading) * 3.2;
+      this.isSwimming = isSwimmableWaterAt(this.playerX, this.playerZ);
+      this.playerY = this.isSwimming
+        ? WATER_LEVEL - 0.52 * this.icelandState.playerScale
+        : walkableHeightAt(this.playerX, this.playerZ);
+      this.showNotice('Surfaced & exited Submarine into Kadalkarai Ocean!');
+    }
+    this.companionState.x = this.playerX - 1.3;
+    this.companionState.z = this.playerZ + 0.8;
+    this.companionState.y = this.isSwimming ? WATER_LEVEL + 0.04 : this.playerY;
+    this.companionState.activity = 'idle';
+    this.container.dataset.submarineActive = 'false';
+    this.container.dataset.submarineDepth = '0';
+    this.audio.playBoatSplash();
+    this.snapThirdPersonCamera();
+    this.renderImmediate();
+    this.emitHudSnapshot();
+  }
+
+  public setSubmarineDiveHold(delta: -1 | 0 | 1): void {
+    this.submarineDiveHold = delta;
+  }
+
+  public toggleSubmarineSearchlight(): void {
+    this.submarineState = {
+      ...this.submarineState,
+      searchlightOn: !this.submarineState.searchlightOn,
+    };
+    this.emitHudSnapshot();
+  }
+
+  public returnFromSnowmanIsland(): void {
+    this.audio.unlock();
+    this.teleportTo(101.0, 58.0);
+    this.showNotice('Snowman Jet Ski Express dropped you back at Kadalkarai Beach!');
   }
 
   public enterUndergroundMetro(stationId?: MetroStationId | string): void {
@@ -3316,6 +4748,67 @@ export class DreamlineEngine {
     this.emitHudSnapshot();
   }
 
+  public boardOrangeHeli(pad?: OrangeHeliPadId): void {
+    this.audio.unlock();
+    if (this.inUndergroundCave) {
+      this.exitUndergroundCave();
+    }
+    if (pad) {
+      this.orangeHeliState = createOrangeHeliAtPad(pad);
+    }
+    this.isSitting = false;
+    this.isSwimming = false;
+    this.sittingSpot = null;
+    this.activeVehicle = 'orange_heli';
+    this.activeBoatId = null;
+    this.boatFpvMode = false;
+    this.transportMode = 'walk';
+    if (this.icelandState.isGiant) {
+      this.icelandState = {
+        ...this.icelandState,
+        sizeMode: 'small',
+        stayGiantThroughout: false,
+        playerScale: 1,
+        targetScale: 1,
+        isGiant: false,
+        playerHeightMeters: 1.68,
+      };
+    }
+    const groundY = this.homeVaultState.inVault
+      ? vaultFloorYAt(this.orangeHeliState.x, this.orangeHeliState.z)
+      : Math.max(walkableHeightAt(this.orangeHeliState.x, this.orangeHeliState.z), WATER_LEVEL);
+    this.orangeHeliState = {
+      ...this.orangeHeliState,
+      y: this.homeVaultState.inVault ? Math.max(this.orangeHeliState.y, groundY + 0.5) : Math.max(this.orangeHeliState.y, groundY + 1.8),
+      forwardSpeed: 0,
+      verticalSpeed: 0,
+      inVault: this.homeVaultState.inVault,
+    };
+    this.playerX = this.orangeHeliState.x;
+    this.playerY = this.orangeHeliState.y;
+    this.playerZ = this.orangeHeliState.z;
+    this.playerHeading = this.orangeHeliState.heading;
+    this.camYaw = this.orangeHeliState.heading + Math.PI;
+    this.camPitch = 0.24;
+    this.orangeHeliWorld.sync(this.orangeHeliState, this.elapsed, true);
+    const dist = 12.2;
+    this.camera.position.set(
+      this.orangeHeliState.x + Math.sin(this.camYaw) * Math.cos(this.camPitch) * dist,
+      this.homeVaultState.inVault
+        ? Math.min(VAULT_CEILING_Y - 1.5, this.orangeHeliState.y + 3.2)
+        : Math.max(2.5, this.orangeHeliState.y + Math.sin(this.camPitch) * dist + 3.0),
+      this.orangeHeliState.z + Math.cos(this.camYaw) * Math.cos(this.camPitch) * dist
+    );
+    _camCurrentLook.set(this.orangeHeliState.x, this.orangeHeliState.y + 1.8, this.orangeHeliState.z);
+    this.camera.lookAt(_camCurrentLook);
+    this.audio.playStationChime();
+    this.showNotice(
+      'Flying SSJ Orange Rescue Helicopter! W/S Fly · A/D Turn · Space Ascend · Q Descend · Shift Boost · E Exit'
+    );
+    this.renderImmediate();
+    this.emitHudSnapshot();
+  }
+
   public boardBoatById(boatId: BoatId): void {
     this.audio.unlock();
     if (this.inUndergroundCave) {
@@ -3341,9 +4834,12 @@ export class DreamlineEngine {
         playerHeightMeters: 1.68,
       };
     }
+    const boatY = this.homeVaultState.inVault
+      ? vaultFloorYAt(boat.x, boat.z) + 0.55
+      : Math.max(0.2, groundHeightAt(boat.x, boat.z) + 0.35);
     this.playerX = boat.x;
     this.playerZ = boat.z;
-    this.playerY = 0.2;
+    this.playerY = boatY;
     this.playerHeading = boat.heading;
     this.camYaw = boat.heading + Math.PI;
     this.camPitch = 0.24;
@@ -3354,11 +4850,19 @@ export class DreamlineEngine {
         : boatId === 'bamboo_catamaran' || boatId === 'tribal_outrigger'
         ? 11.2
         : 7.6;
-    const lookY = boatId === 'sovereign_ship' ? 4.2 : 1.1;
-    const camBaseY = boatId === 'sovereign_ship' ? 4.6 : 2.1;
+    const lookY = this.homeVaultState.inVault
+      ? boatY + 0.9
+      : boatId === 'sovereign_ship'
+      ? 4.2
+      : 1.1;
+    const camBaseY = this.homeVaultState.inVault
+      ? boatY + 2.2
+      : boatId === 'sovereign_ship'
+      ? 4.6
+      : 2.1;
     this.camera.position.set(
       boat.x + Math.sin(this.camYaw) * Math.cos(this.camPitch) * boatDist,
-      Math.max(1.8, Math.sin(this.camPitch) * boatDist + camBaseY),
+      this.homeVaultState.inVault ? Math.min(VAULT_CEILING_Y - 1.5, camBaseY) : Math.max(1.8, Math.sin(this.camPitch) * boatDist + camBaseY),
       boat.z + Math.cos(this.camYaw) * Math.cos(this.camPitch) * boatDist
     );
     _camCurrentLook.set(
@@ -3401,14 +4905,19 @@ export class DreamlineEngine {
         playerHeightMeters: 1.68,
       };
     }
-    this.camperState = { ...this.camperState, doorsOpen: false };
+    this.camperState = { ...this.camperState, doorsOpen: false, inVault: this.homeVaultState.inVault };
     this.playerX = this.camperState.x;
     this.playerZ = this.camperState.z;
+    this.playerY = (this.homeVaultState.inVault
+      ? vaultFloorYAt(this.camperState.x, this.camperState.z)
+      : walkableHeightAt(this.camperState.x, this.camperState.z)) + 0.65;
     this.playerHeading = this.camperState.heading;
     this.camYaw = this.camperState.heading + Math.PI;
     this.camPitch = 0.22;
     // Snap camera immediately behind Olga so the pastel camper van fills the frame right away
-    const cy = walkableHeightAt(this.camperState.x, this.camperState.z) + 1.55;
+    const cy = (this.homeVaultState.inVault
+      ? vaultFloorYAt(this.camperState.x, this.camperState.z)
+      : walkableHeightAt(this.camperState.x, this.camperState.z)) + 1.55;
     const dist = 7.4;
     this.camera.position.set(
       this.camperState.x + Math.sin(this.camYaw) * Math.cos(this.camPitch) * dist,
@@ -3545,21 +5054,23 @@ export class DreamlineEngine {
 
   public toggleHeroFlightOrSpecial(): void {
     if (!this.heroState.activeHeroId || this.activeVehicle !== 'none') return;
-    if (this.homeVaultState.inVault) {
-      this.showNotice('Head upstairs or drive out the East Tunnel to launch into open-sky flight!');
-      this.emitHudSnapshot();
-      return;
-    }
     const spec = getHeroById(this.heroState.activeHeroId);
     if (spec.mobility.canFly) {
       this.heroState.isFlying = !this.heroState.isFlying;
-      this.heroState.flyVelY = this.heroState.isFlying ? 6.5 : 0;
+      this.heroState.flyVelY = this.heroState.isFlying ? 5.5 : 0;
       if (this.heroState.isFlying) {
-        this.playerY = Math.max(this.playerY + 2.2, 2.5);
+        const minLiftY = this.homeVaultState.inVault ? this.playerY + 1.8 : Math.max(this.playerY + 2.2, 2.5);
+        this.playerY = this.homeVaultState.inVault
+          ? Math.min(VAULT_CEILING_Y - 2.4, minLiftY)
+          : minLiftY;
         this.jumpState.isAirborne = false;
         this.jumpState.offsetY = 0;
         this.audio.playRepulsorBlast();
-        this.showNotice(`${spec.name} Flight Thrusters Engaged! Space = Ascend · Ctrl/X = Descend · Shift = Boost`);
+        this.showNotice(
+          this.homeVaultState.inVault
+            ? `${spec.name} Indoor Flight Engaged inside the 1 KM Superhero Mega-Chamber!`
+            : `${spec.name} Flight Thrusters Engaged! Space = Ascend · Ctrl/X = Descend · Shift = Boost`
+        );
       } else {
         this.showNotice(`${spec.name} Flight Disengaged — Descending`);
       }
@@ -3613,48 +5124,193 @@ export class DreamlineEngine {
     this.cycleActiveHeroOutfit();
   }
 
+  public selectHeroPowerOption(index: number): void {
+    if (!this.heroState.activeHeroId) return;
+    const opts = getHeroPowerOptions(this.heroState.activeHeroId);
+    const safeIdx = ((index % opts.length) + opts.length) % opts.length;
+    this.heroState.activePowerIndex = safeIdx;
+    this.showNotice(`Power Selected: ${opts[safeIdx].label} — ${opts[safeIdx].description}`);
+    this.emitHudSnapshot();
+  }
+
+  public cycleHeroPowerOption(): void {
+    if (!this.heroState.activeHeroId) return;
+    const opts = getHeroPowerOptions(this.heroState.activeHeroId);
+    this.selectHeroPowerOption((this.heroState.activePowerIndex + 1) % opts.length);
+  }
+
+  public triggerHeroDodge(): void {
+    if (!this.heroState.activeHeroId || this.activeVehicle !== 'none') return;
+    if (this.heroState.dodgeTimer > 0.08) return;
+    this.audio.unlock();
+    const id = this.heroState.activeHeroId;
+    const fwdX = Math.sin(this.playerHeading);
+    const fwdZ = Math.cos(this.playerHeading);
+    const rightX = Math.cos(this.playerHeading);
+    const rightZ = -Math.sin(this.playerHeading);
+
+    // Contextual directional dodge: dodge sideways if strafing, else acrobatic forward/evade burst!
+    const strafe =
+      (this.keysHeld.has('KeyD') || this.keysHeld.has('ArrowRight') ? 1 : 0) -
+      (this.keysHeld.has('KeyA') || this.keysHeld.has('ArrowLeft') ? 1 : 0);
+    const dirX = strafe !== 0 ? rightX * strafe : fwdX;
+    const dirZ = strafe !== 0 ? rightZ * strafe : fwdZ;
+
+    const dashSpd = id === 'spider_man' ? 22.0 : id === 'iron_man_advanced' || id === 'superman' ? 25.0 : 16.5;
+    this.playerVx = dirX * dashSpd;
+    this.playerVz = dirZ * dashSpd;
+    this.heroState.dodgeTimer = 0.48;
+    this.heroState.dodgeKind =
+      id === 'spider_man'
+        ? 'spider_flip'
+        : id === 'batman'
+          ? 'cape_evade'
+          : id === 'iron_man_classic' || id === 'iron_man_advanced' || id === 'superman'
+            ? 'jet_dash'
+            : 'combat_roll';
+
+    if (id === 'spider_man') {
+      this.heroState.spiderSenseActive = true;
+      this.heroState.secondaryTimer = Math.max(this.heroState.secondaryTimer, 1.4);
+      this.jumpState.isAirborne = true;
+      this.jumpState.velocityY = Math.max(this.jumpState.velocityY, 6.2);
+    }
+    this.audio.playJump(id === 'spider_man' ? 1.28 : 1.08);
+    this.showNotice(
+      id === 'spider_man'
+        ? 'Spider-Sense Acrobatic Dodge Flip!'
+        : `${getHeroById(id).name} Evasive Dodge!`
+    );
+    this.emitHudSnapshot();
+  }
+
+  public toggleSpiderDive(): void {
+    if (this.heroState.activeHeroId !== 'spider_man' || this.activeVehicle !== 'none') return;
+    if (this.homeVaultState.inVault) return;
+    this.audio.unlock();
+    if (this.heroState.isWebSwinging) {
+      // Release into high dive-slingshot arc!
+      this.heroState.isWebSwinging = false;
+      this.webSwingState.active = false;
+      this.heroState.isDiving = true;
+      this.jumpState.isAirborne = true;
+      this.jumpState.velocityY = -12.5;
+      this.playerY = Math.max(this.playerY, walkableHeightAt(this.playerX, this.playerZ) + 12.0);
+      this.showNotice('Spider-Man Sky-Dive! Tap Web-Swing to convert dive into slingshot speed!');
+    } else {
+      this.heroState.isDiving = !this.heroState.isDiving;
+      if (this.heroState.isDiving) {
+        this.playerY = Math.max(this.playerY, walkableHeightAt(this.playerX, this.playerZ) + 16.0);
+        this.jumpState.isAirborne = true;
+        this.jumpState.velocityY = -11.0;
+        this.showNotice('Spider-Man Sky-Dive Engaged! Press Swing [Q] near bottom for slingshot boost!');
+      }
+    }
+    this.emitHudSnapshot();
+  }
+
   public triggerHeroPrimaryPower(): void {
     if (!this.heroState.activeHeroId || this.activeVehicle !== 'none') return;
     if (this.heroState.powerCooldown > 0.05) return;
     this.audio.unlock();
 
     const spec = getHeroById(this.heroState.activeHeroId);
+    const options = getHeroPowerOptions(this.heroState.activeHeroId);
+    const chosenOpt = options[this.heroState.activePowerIndex % options.length] ?? options[0];
     const power = spec.primaryPower;
-    this.heroState.powerCooldown = power.cooldownSec;
+    this.heroState.powerCooldown = chosenOpt ? chosenOpt.cooldownSec : power.cooldownSec;
     this.heroState.attackAnimTimer = 0.55;
 
     const fwdX = Math.sin(this.playerHeading);
     const fwdZ = Math.cos(this.playerHeading);
 
-    // Spider-Man primary [Q]: toggles real pendulum Web-Swinging on the open surface!
+    // Spider-Man selectable superpowers: Pendulum Swing, Web-Zip Launch, Web Cyclone 360°, Dive Slingshot!
     if (power.kind === 'web_swing') {
-      if (this.homeVaultState.inVault) {
-        this.showNotice('Web-Swinging opens up outdoors — step upstairs or exit the garage first!');
+      if (this.homeVaultState.inVault && chosenOpt.mode !== 'web_cyclone') {
+        this.showNotice('Web-Swinging opens up outdoors — step upstairs or exit the ramp tunnel first!');
+        this.emitHudSnapshot();
+        return;
+      }
+      if (chosenOpt.mode === 'dive_slingshot') {
+        this.toggleSpiderDive();
+        return;
+      }
+      if (chosenOpt.mode === 'web_cyclone') {
+        this.heroState.airTrickKind = 'web_cyclone';
+        this.heroState.airTrickTimer = 0.72;
+        this.heroState.airTrickAngle = 0;
+        this.activeShockwaveVfx = {
+          x: this.playerX,
+          y: this.playerY + 0.9,
+          z: this.playerZ,
+          maxRadius: chosenOpt.impactRadius,
+          timer: 0.55,
+          maxTime: 0.55,
+          color: 0xe2e8f0,
+        };
+        this.audio.playWebShoot();
+        this.showNotice('Spider-Man 360° Web Cyclone Shockwave!');
+        this.emitHudSnapshot();
+        return;
+      }
+      if (chosenOpt.mode === 'web_zip') {
+        this.heroState.isWebSwinging = false;
+        this.webSwingState.active = false;
+        this.playerVx = fwdX * 32.0;
+        this.playerVz = fwdZ * 32.0;
+        this.jumpState.isAirborne = true;
+        this.jumpState.velocityY = 12.5;
+        this.heroState.airTrickKind = 'corkscrew_spin';
+        this.heroState.airTrickTimer = 0.75;
+        this.heroState.airTrickAngle = 0;
+        this.audio.playWebShoot();
+        this.showNotice('Spider-Man Point-Launch Web-Zip + Corkscrew Spin!');
         this.emitHudSnapshot();
         return;
       }
       if (this.heroState.isWebSwinging && this.webSwingState.active) {
+        const rel = releaseWebSwingWithSpin(this.webSwingState, this.playerHeading);
         this.heroState.isWebSwinging = false;
         this.webSwingState.active = false;
+        this.playerVx = rel.vx;
+        this.playerVz = rel.vz;
         this.jumpState.isAirborne = true;
-        this.jumpState.velocityY = 11.5;
-        this.audio.playJump(1.2);
-        this.showNotice('Web Released — Mid-Air Acrobatic Launch!');
+        this.jumpState.velocityY = rel.vy;
+        this.heroState.airTrickKind = rel.trickKind;
+        this.heroState.airTrickTimer = 0.85;
+        this.heroState.airTrickAngle = 0;
+        this.audio.playJump(rel.apexBonus ? 1.32 : 1.18);
+        this.showNotice(
+          rel.apexBonus
+            ? `Apex Web Launch — ${rel.trickKind.replace('_', ' ').toUpperCase()}!`
+            : `Web Spin Release — ${rel.trickKind.replace('_', ' ').toUpperCase()}!`
+        );
       } else {
+        const diveVy = this.heroState.isDiving ? -16.0 : this.jumpState.velocityY;
+        this.heroState.isDiving = false;
         this.webSwingState = startWebSwing(
           this.emptyWebAnchorState,
           this.playerX,
-          Math.max(this.playerY, 4.5),
+          Math.max(this.playerY, walkableHeightAt(this.playerX, this.playerZ) + 5.2),
           this.playerZ,
           this.playerHeading,
           this.playerVx,
           this.playerVz,
-          this.webSwingState.handSide
+          this.webSwingState.handSide,
+          diveVy,
+          this.heroState.swingComboCount
         );
         this.heroState.isWebSwinging = true;
-        this.playerY = Math.max(this.playerY, 5.2);
+        this.heroState.swingComboCount = this.webSwingState.comboCount;
+        this.heroState.airTrickKind = 'none';
+        this.heroState.airTrickTimer = 0;
+        this.playerY = Math.max(this.playerY, walkableHeightAt(this.playerX, this.playerZ) + 5.6);
         this.audio.playWebShoot();
-        this.showNotice('Spider-Man Web-Swinging! WASD to carve · Shift boost · Space/Q to release');
+        this.showNotice(
+          this.webSwingState.diveSlingshotBoost > 4
+            ? `Dive-to-Swing Slingshot x${this.webSwingState.comboCount}!`
+            : `Spider-Man Pendulum Swing x${this.webSwingState.comboCount} · Space/Q for 360° Spin Release!`
+        );
       }
       this.emitHudSnapshot();
       return;
@@ -3984,9 +5640,7 @@ export class DreamlineEngine {
       if (result.killedDino) {
         this.audio.playDinoRoar();
         this.showNotice(
-          this.dinosaurIslandState.brokenWalls < 4
-            ? `T-Rex #${this.dinosaurIslandState.kills} defeated! Containment walls shattering 1→4!`
-            : `T-Rex #${this.dinosaurIslandState.kills} defeated! Press Next Endless Dino Wave [N]`
+          `T-Rex #${this.dinosaurIslandState.kills} defeated! Press Next Endless Dino Wave [N]`
         );
       } else {
         this.showNotice(this.dinosaurIslandState.statusLine);
@@ -4007,11 +5661,15 @@ export class DreamlineEngine {
       };
       this.playerX = car.x - Math.cos(car.heading) * 2.1;
       this.playerZ = car.z + Math.sin(car.heading) * 2.1;
-      this.playerY = walkableHeightAt(this.playerX, this.playerZ);
+      this.playerY = this.homeVaultState.inVault
+        ? vaultFloorYAt(this.playerX, this.playerZ)
+        : walkableHeightAt(this.playerX, this.playerZ);
       this.playerHeading = car.heading;
       this.companionState.x = this.playerX - 1.2;
       this.companionState.z = this.playerZ + 0.6;
-      this.companionState.y = walkableHeightAt(this.companionState.x, this.companionState.z);
+      this.companionState.y = this.homeVaultState.inVault
+        ? vaultFloorYAt(this.companionState.x, this.companionState.z)
+        : walkableHeightAt(this.companionState.x, this.companionState.z);
       this.companionState.activity = 'idle';
       this.audio.playDoorChime();
       this.showNotice('Stepped out of Safari Car · Press E or J to drive again');
@@ -4030,15 +5688,19 @@ export class DreamlineEngine {
     this.transportMode = 'walk';
     this.playerX = car.x;
     this.playerZ = car.z;
-    this.playerY = walkableHeightAt(car.x, car.z) + 0.8;
+    const baseCarY = this.homeVaultState.inVault
+      ? vaultFloorYAt(car.x, car.z)
+      : walkableHeightAt(car.x, car.z);
+    this.playerY = baseCarY + 0.8;
     this.playerHeading = car.heading;
     this.camYaw = car.heading + Math.PI;
     this.camPitch = 0.24;
-    const cy = walkableHeightAt(car.x, car.z) + 1.5;
+    const cy = baseCarY + 1.5;
     const dist = 7.6;
+    const rawCamY = Math.max(cy + 0.8, cy + Math.sin(this.camPitch) * dist + 1.2);
     this.camera.position.set(
       car.x + Math.sin(this.camYaw) * Math.cos(this.camPitch) * dist,
-      Math.max(cy + 0.8, cy + Math.sin(this.camPitch) * dist + 1.2),
+      this.homeVaultState.inVault ? Math.min(VAULT_CEILING_Y - 1.0, rawCamY) : rawCamY,
       car.z + Math.cos(this.camYaw) * Math.cos(this.camPitch) * dist
     );
     _camCurrentLook.set(car.x, cy, car.z);
@@ -4246,6 +5908,8 @@ export class DreamlineEngine {
     this.isSitting = false;
     this.sittingSpot = null;
     this.activeVehicle = 'none';
+    this.submarineDiveHold = 0;
+    this.container.dataset.submarineActive = 'false';
     if (this.skyTaxi.playerOnboard) {
       this.skyTaxi = { ...this.skyTaxi, playerOnboard: false, phase: 'patrol_cruising' };
     }
@@ -4257,6 +5921,21 @@ export class DreamlineEngine {
     this.playerY = walkableHeightAt(x, z);
     this.playerVx = 0;
     this.playerVz = 0;
+    this.playerRig.setPose({
+      x: this.playerX,
+      y: this.playerY,
+      z: this.playerZ,
+      heading: this.playerHeading,
+      speed: 0,
+      turnRate: 0,
+      transportMode: this.transportMode,
+      isSitting: false,
+      visible: !this.heroState.activeHeroId,
+      lanternStrength: 0,
+      scale: this.icelandState.playerScale,
+      elapsed: this.elapsed,
+      dt: 0,
+    });
     const tpFlockStats = this.birdFlockingWorld.onFocusTeleport(
       this.playerX,
       this.playerZ,
@@ -4277,11 +5956,24 @@ export class DreamlineEngine {
       this.camDistance = 10.5;
       this.transportMode = 'walk';
     } else if (isOnDinosaurIsland(x, z)) {
-      // SSJ Dinosaur Island: frame the chasing T-Rex, Safari Car & PAD-01N breakout walls!
-      this.camYaw = -2.35;
-      this.playerHeading = 0.78;
-      this.camDistance = 6.2;
+      // Enormous Jurassic Park · SSJ Dinosaur Island: frame full 16m JURASSIC PARK sign, 4 roaring torches & colossal swinging doors!
+      this.camYaw = 0.02;
+      this.camPitch = 0.04;
+      this.playerHeading = Math.PI;
+      this.camDistance = 10.6;
       this.dinosaurIslandState = { ...this.dinosaurIslandState, onIsland: true };
+    } else if (Math.hypot(x - VEHICLE_GARAGE_CENTER.x, z - VEHICLE_GARAGE_CENTER.z) < 22) {
+      // Dreamline Vehicle Spawning Garage: look North into the 3 open bays, marquee sign & illuminated spawn turntable pad!
+      this.camYaw = 0.02;
+      this.camPitch = 0.1;
+      this.playerHeading = Math.PI;
+      this.camDistance = 9.4;
+    } else if (isInsideAirport(x, z)) {
+      // Dreamline International Airport: frame all 3 illuminated Airport Aircraft Stands (Orange Heli, VTOL, Sky Explorer) cleanly!
+      this.camYaw = 0.04;
+      this.camPitch = 0.14;
+      this.playerHeading = Math.PI;
+      this.camDistance = 10.4;
     } else if (Math.hypot(x - AVS_SNOW_HOUSE_CENTER.x, z - AVS_SNOW_HOUSE_CENTER.z) < 32) {
       // AVS Snow Residence: frame the rotated front facade facing Frozen Mirror Lake & rooftop helipad cleanly!
       this.camYaw = AVS_SNOW_HOUSE_ROT_Y + 0.14;
@@ -4397,22 +6089,33 @@ export class DreamlineEngine {
 
   public capturePostcardDataUrl(): string {
     this.audio.playShutter();
-    this.renderer.render(this.scene, this.camera);
+    this.renderSceneFrame();
     const dataUrl = this.renderer.domElement.toDataURL('image/jpeg', 0.86);
     this.personalHome.updatePostcardDisplay(dataUrl);
     return dataUrl;
   }
 
   public triggerPrimaryInteract(): void {
-    // 0. Exiting active Sky Explorer Air Taxi
+    // 0. Exiting active Sky Explorer Air Taxi or Flagship Expedition Vehicles
     if (this.skyTaxi.playerOnboard) {
       this.disembarkSkyTaxi();
+      return;
+    }
+    if (
+      this.activeVehicle === 'safari_jeep' ||
+      this.activeVehicle === 'vtol_aircraft' ||
+      this.activeVehicle === 'jetski_sport' ||
+      this.activeVehicle === 'jetski_perf' ||
+      this.activeVehicle === 'dirt_bike_49cc' ||
+      this.activeVehicle === 'hover_glider'
+    ) {
+      this.exitExpeditionVehicle();
       return;
     }
 
     // 1. Exiting active vehicles (Train, Bus, Boat)
     if (this.activeVehicle === 'train') {
-      if (this.trainState.phase === 'stopped' || (this.trainDriverMode && this.trainState.speedKmh < 3)) {
+      if (this.trainState.phase === 'stopped' || this.trainDriverMode) {
         const nearStation = findNearbyStationIndex(this.trainState.worldX, this.trainState.worldZ, 18);
         const exit =
           nearStation !== null
@@ -4424,8 +6127,10 @@ export class DreamlineEngine {
               };
         this.activeVehicle = 'none';
         this.trainDriverMode = false;
+        this.trainCruiseActive = false;
+        this.trainDriverNotch = 0;
         this.trainManualDoors = false;
-        this.trainState = { ...this.trainState, dwellHold: false };
+        this.trainState = { ...this.trainState, speed: 0, speedKmh: 0, dwellHold: false };
         if (this.trainState.routePlan?.status === 'completed') {
           this.trainState = { ...this.trainState, routePlan: null };
         }
@@ -4470,11 +6175,15 @@ export class DreamlineEngine {
         this.busManualDoors = false;
         this.playerX = exit.x;
         this.playerZ = exit.z;
-        this.playerY = walkableHeightAt(exit.x, exit.z);
+        this.playerY = this.homeVaultState.inVault
+          ? vaultFloorYAt(exit.x, exit.z)
+          : walkableHeightAt(exit.x, exit.z);
         this.playerHeading = exit.heading;
         this.companionState.x = exit.x - 1.3;
         this.companionState.z = exit.z + 0.5;
-        this.companionState.y = this.playerY;
+        this.companionState.y = this.homeVaultState.inVault
+          ? vaultFloorYAt(this.companionState.x, this.companionState.z)
+          : this.playerY;
         this.companionState.activity = 'idle';
         const stop = BUS_STOPS[this.busState.currentStopIndex];
         this.showNotice(
@@ -4501,7 +6210,18 @@ export class DreamlineEngine {
         boat.speed = 0;
         const distToDock = Math.hypot(boat.x - boat.dockX, boat.z - boat.dockZ);
         const dockRadius = boat.id === 'sovereign_ship' ? 15.5 : 9.5;
-        if (distToDock <= dockRadius) {
+        if (this.homeVaultState.inVault) {
+          this.playerX = boat.x + Math.cos(boat.heading) * 2.4;
+          this.playerZ = boat.z - Math.sin(boat.heading) * 2.4;
+          this.isSwimming = false;
+          this.playerY = vaultFloorYAt(this.playerX, this.playerZ);
+          this.companionState.x = this.playerX - 1.3;
+          this.companionState.z = this.playerZ + 0.8;
+          this.companionState.y = vaultFloorYAt(this.companionState.x, this.companionState.z);
+          this.companionState.activity = 'idle';
+          this.audio.playDoorChime();
+          this.showNotice(`Stepped out of ${boat.name} inside the Underground Mega-Chamber`);
+        } else if (distToDock <= dockRadius) {
           // Near wooden dock: moor cleanly & step onto the dock
           this.playerX = boat.exitX;
           this.playerZ = boat.exitZ;
@@ -4542,11 +6262,15 @@ export class DreamlineEngine {
       this.camperState = { ...this.camperState, speed: 0, speedKmh: 0, isBraking: false };
       this.playerX = exit.x;
       this.playerZ = exit.z;
-      this.playerY = walkableHeightAt(exit.x, exit.z);
+      this.playerY = this.homeVaultState.inVault
+        ? vaultFloorYAt(exit.x, exit.z)
+        : walkableHeightAt(exit.x, exit.z);
       this.playerHeading = exit.heading;
       this.companionState.x = exit.x - 1.2;
       this.companionState.z = exit.z + 0.6;
-      this.companionState.y = walkableHeightAt(this.companionState.x, this.companionState.z);
+      this.companionState.y = this.homeVaultState.inVault
+        ? vaultFloorYAt(this.companionState.x, this.companionState.z)
+        : walkableHeightAt(this.companionState.x, this.companionState.z);
       this.companionState.activity = 'idle';
       this.audio.playDoorChime();
       this.showNotice('Parked Olga Camper Van · Press E nearby to drive again anytime');
@@ -4562,6 +6286,11 @@ export class DreamlineEngine {
 
     if (this.activeVehicle === 'vault_car') {
       this.exitVaultCar();
+      return;
+    }
+
+    if (this.activeVehicle === 'submarine') {
+      this.exitSubmarine();
       return;
     }
 
@@ -4586,15 +6315,53 @@ export class DreamlineEngine {
         boostActive: false,
       };
       this.playerX = exit.x;
-      this.playerY = exit.y;
+      this.playerY = this.homeVaultState.inVault ? vaultFloorYAt(exit.x, exit.z) : exit.y;
       this.playerZ = exit.z;
-      this.isSwimming = isSwimmableWaterAt(exit.x, exit.z) && exit.y <= WATER_LEVEL + 0.35;
+      this.isSwimming = !this.homeVaultState.inVault && isSwimmableWaterAt(exit.x, exit.z) && exit.y <= WATER_LEVEL + 0.35;
       this.companionState.x = exit.x - 1.4;
       this.companionState.z = exit.z + 0.8;
-      this.companionState.y = this.isSwimming ? WATER_LEVEL + 0.04 : exit.y;
+      this.companionState.y = this.homeVaultState.inVault
+        ? vaultFloorYAt(this.companionState.x, this.companionState.z)
+        : this.isSwimming
+        ? WATER_LEVEL + 0.04
+        : exit.y;
       this.companionState.activity = 'idle';
       this.audio.playDoorChime();
       this.showNotice('Landed SSJ Tropical Sky Explorer · Press E nearby to fly again anytime!');
+      this.snapThirdPersonCamera();
+      this.emitHudSnapshot();
+      return;
+    }
+
+    if (this.activeVehicle === 'orange_heli') {
+      const exit = getOrangeHeliExitPosition(this.orangeHeliState);
+      this.activeVehicle = 'none';
+      this.skyAscendHeld = false;
+      this.skyDescendHeld = false;
+      this.orangeHeliState = {
+        ...this.orangeHeliState,
+        forwardSpeed: 0,
+        verticalSpeed: 0,
+        yawRate: 0,
+        roll: 0,
+        pitch: 0,
+        speedKmh: 0,
+        boostActive: false,
+      };
+      this.playerX = exit.x;
+      this.playerY = this.homeVaultState.inVault ? vaultFloorYAt(exit.x, exit.z) : exit.y;
+      this.playerZ = exit.z;
+      this.isSwimming = !this.homeVaultState.inVault && isSwimmableWaterAt(exit.x, exit.z) && exit.y <= WATER_LEVEL + 0.35;
+      this.companionState.x = exit.x - 1.4;
+      this.companionState.z = exit.z + 0.8;
+      this.companionState.y = this.homeVaultState.inVault
+        ? vaultFloorYAt(this.companionState.x, this.companionState.z)
+        : this.isSwimming
+        ? WATER_LEVEL + 0.04
+        : exit.y;
+      this.companionState.activity = 'idle';
+      this.audio.playDoorChime();
+      this.showNotice('Landed SSJ Orange Rescue Helicopter · Press E nearby to fly again anytime!');
       this.snapThirdPersonCamera();
       this.emitHudSnapshot();
       return;
@@ -4783,9 +6550,15 @@ export class DreamlineEngine {
         prompt.metaId === 'coastal_boat' ||
         prompt.metaId === 'bamboo_catamaran' ||
         prompt.metaId === 'tribal_outrigger' ||
-        prompt.metaId === 'sovereign_ship')
+        prompt.metaId === 'sovereign_ship' ||
+        prompt.metaId === 'ssj_expedition_boat')
     ) {
       this.boardBoatById(prompt.metaId);
+      return;
+    }
+
+    if (prompt.kind === 'orange_heli_fly') {
+      this.boardOrangeHeli();
       return;
     }
 
@@ -4985,6 +6758,26 @@ export class DreamlineEngine {
       return;
     }
 
+    if (prompt.kind === 'vault_exit_gate') {
+      this.toggleVaultExitPassageGate();
+      return;
+    }
+
+    if (prompt.kind === 'submarine_board') {
+      this.boardSubmarine();
+      return;
+    }
+
+    if (prompt.kind === 'ocean_hero_console') {
+      this.callbacks.onModeChangeRequest('hero_armory');
+      return;
+    }
+
+    if (prompt.kind === 'snowman_island_return') {
+      this.returnFromSnowmanIsland();
+      return;
+    }
+
     if (prompt.kind === 'batmobile_drive') {
       this.boardBatmobile();
       return;
@@ -5030,6 +6823,100 @@ export class DreamlineEngine {
       this.playerVz = 0;
       this.showNotice('Resting quietly with Frosty — press E or move to stand up');
       this.emitHudSnapshot();
+      return;
+    }
+
+    if (prompt.kind === 'hover_glider_ride') {
+      this.boardExpeditionVehicle('hover_glider');
+      return;
+    }
+    if (prompt.kind === 'dirt_bike_49cc_ride') {
+      this.boardExpeditionVehicle('dirt_bike_49cc');
+      return;
+    }
+    if (prompt.kind === 'safari_jeep_drive') {
+      this.boardExpeditionVehicle('safari_jeep');
+      return;
+    }
+    if (prompt.kind === 'vtol_aircraft_fly') {
+      this.boardExpeditionVehicle('vtol_aircraft');
+      return;
+    }
+    if (prompt.kind === 'jetski_sport_ride') {
+      this.boardExpeditionVehicle('jetski_sport');
+      return;
+    }
+    if (prompt.kind === 'jetski_perf_ride') {
+      this.boardExpeditionVehicle('jetski_perf');
+      return;
+    }
+
+    if (prompt.kind === 'jurassic_gate_toggle') {
+      this.dinosaurIslandState = toggleJurassicGate(this.dinosaurIslandState);
+      this.audio.playStationChime();
+      this.showNotice(
+        this.dinosaurIslandState.gateTargetOpen
+          ? 'Jurassic Park Grand Gates Swinging WIDE OPEN!'
+          : 'Jurassic Park Grand Gates Closing!'
+      );
+      this.emitHudSnapshot();
+      return;
+    }
+
+    if (prompt.kind === 'vehicle_garage_console') {
+      this.audio.playStationChime();
+      this.callbacks.onModeChangeRequest('mobile_phone');
+      this.showNotice('Dreamline Vehicle Spawning Garage Ready · Pick any car, jeep, boat or aircraft to spawn in the bay!');
+      return;
+    }
+
+    if (prompt.kind === 'terrace_aircraft_lever') {
+      this.audio.playStationChime();
+      this.callbacks.onModeChangeRequest('mobile_phone');
+      this.showNotice('External Sky-Terrace Launch Lever Active · Pick any of the 3 aircraft (Orange Heli, VTOL, Sky Explorer) to launch!');
+      return;
+    }
+
+    if (prompt.kind === 'airport_aircraft_stand') {
+      const standY = Math.max(walkableHeightAt(prompt.x, prompt.z), 0.65);
+      if (prompt.metaId === 'orange_heli') {
+        this.orangeHeliState = {
+          ...this.orangeHeliState,
+          x: prompt.x,
+          y: standY + 1.4,
+          z: prompt.z,
+          heading: Math.PI * 0.5,
+          forwardSpeed: 0,
+          verticalSpeed: 0,
+          onGround: false,
+        };
+        this.boardOrangeHeli();
+        return;
+      }
+      if (prompt.metaId === 'vtol_aircraft') {
+        this.vtolState = {
+          ...this.vtolState,
+          x: prompt.x,
+          y: standY + 1.5,
+          z: prompt.z,
+          heading: Math.PI * 0.5,
+          vx: 0,
+          vy: 0,
+          vz: 0,
+        };
+        this.boardExpeditionVehicle('vtol_aircraft');
+        return;
+      }
+      this.skyExplorerState = {
+        ...this.skyExplorerState,
+        x: prompt.x,
+        y: standY + 3.2,
+        z: prompt.z,
+        heading: Math.PI * 0.5,
+        forwardSpeed: 0,
+        verticalSpeed: 0,
+      };
+      this.boardSkyExplorer();
       return;
     }
 
@@ -5280,6 +7167,83 @@ export class DreamlineEngine {
         };
       }
     }
+    // Flagship Expedition Vehicles proximity boarding prompts (Aero-Ti Hoverboard Glider, 49cc Dirt Bike, Safari Jeep, VTOL Aircraft, Jet Skis)
+    if (Math.hypot(this.playerX - this.hoverGliderState.x, this.playerZ - this.hoverGliderState.z) <= 3.6) {
+      return {
+        id: 'board_hover_glider',
+        kind: 'hover_glider_ride',
+        label: 'Fly Aero-Ti Hoverboard Glider',
+        sublabel: 'Brushed Titanium Twin-Jet Glider · Look Up/Down + W to Fly · Press [E]',
+        x: this.hoverGliderState.x,
+        y: this.hoverGliderState.y + 0.85,
+        z: this.hoverGliderState.z,
+        radius: 3.6,
+      };
+    }
+    if (Math.hypot(this.playerX - this.dirtBikeState.x, this.playerZ - this.dirtBikeState.z) <= 3.6) {
+      return {
+        id: 'board_dirt_bike_49cc',
+        kind: 'dirt_bike_49cc_ride',
+        label: 'Ride 49cc Petrol Dirt Bike (Orion Mini)',
+        sublabel: '2-Stroke Motocross · Anodized USD Forks & Wave Disc Brakes · Press [E]',
+        x: this.dirtBikeState.x,
+        y: this.dirtBikeState.y + 0.9,
+        z: this.dirtBikeState.z,
+        radius: 3.6,
+      };
+    }
+    if (Math.hypot(this.playerX - this.safariJeepState.x, this.playerZ - this.safariJeepState.z) <= 4.6) {
+      return {
+        id: 'board_safari_jeep',
+        kind: 'safari_jeep_drive',
+        label: 'Drive 4×4 Safari Jeep',
+        sublabel: 'Open-Top Off-Road 4WD · Suspension & Terrain Grip · Press [E]',
+        x: this.safariJeepState.x,
+        y: this.safariJeepState.y + 1.0,
+        z: this.safariJeepState.z,
+        radius: 4.6,
+      };
+    }
+    if (
+      Math.hypot(this.playerX - this.vtolState.x, this.playerZ - this.vtolState.z) <= 5.4 &&
+      Math.abs(this.playerY - this.vtolState.y) <= 3.6
+    ) {
+      return {
+        id: 'board_vtol_aircraft',
+        kind: 'vtol_aircraft_fly',
+        label: 'Pilot Gold/Wood VTOL Aircraft',
+        sublabel: 'Twin Circular Ducted Fans · Hover & Cruise Flight · Press [E]',
+        x: this.vtolState.x,
+        y: this.vtolState.y + 1.2,
+        z: this.vtolState.z,
+        radius: 5.4,
+      };
+    }
+    if (Math.hypot(this.playerX - this.sportJetSkiState.x, this.playerZ - this.sportJetSkiState.z) <= 4.8) {
+      return {
+        id: 'board_jetski_sport',
+        kind: 'jetski_sport_ride',
+        label: 'Ride Sport Jet Ski 310X (Yellow)',
+        sublabel: 'Two-Person Gloss Marine Watercraft · Press [E]',
+        x: this.sportJetSkiState.x,
+        y: this.sportJetSkiState.y + 0.6,
+        z: this.sportJetSkiState.z,
+        radius: 4.8,
+      };
+    }
+    if (Math.hypot(this.playerX - this.perfJetSkiState.x, this.playerZ - this.perfJetSkiState.z) <= 4.8) {
+      return {
+        id: 'board_jetski_perf',
+        kind: 'jetski_perf_ride',
+        label: 'Ride Apex-K Pro Jet Ski (Green)',
+        sublabel: 'High-Performance Carving Watercraft · Press [E]',
+        x: this.perfJetSkiState.x,
+        y: this.perfJetSkiState.y + 0.6,
+        z: this.perfJetSkiState.z,
+        radius: 4.8,
+      };
+    }
+
     if (
       !this.batmobileState.inVault &&
       Math.hypot(this.playerX - this.batmobileState.x, this.playerZ - this.batmobileState.z) <= 4.8
@@ -5354,7 +7318,12 @@ export class DreamlineEngine {
         this.smoothCam.manualOrbitCooldown = 1.8;
       }
     }
-    const combined = combineMovementInput(keyForward, keyRight, this.joyForward, this.joyRight);
+    const combined = combineMovementInput(
+      keyForward,
+      keyRight,
+      this.joyForward + this.screenTouch.forward,
+      this.joyRight + this.screenTouch.right
+    );
     const isSprinting =
       this.mobileSprint ||
       this.keysHeld.has('ShiftLeft') ||
@@ -5363,14 +7332,27 @@ export class DreamlineEngine {
     // 2. Step Train & Rural Bus (Auto Pilot, Mobile Dispatch, or Manual Driver Mode)
     if (this.mode !== 'paused') {
       if (this.activeVehicle === 'train' && this.trainDriverMode) {
-        const trainBrake =
-          this.trainManualBrake || (this.mode === 'playing' && this.keysHeld.has('Space'));
+        const manualThrottle = this.mode === 'playing' ? combined.forward : 0;
+        if (Math.abs(manualThrottle) > 0.08) {
+          this.trainCruiseActive = false;
+          this.trainManualBrake = false;
+        }
+        const keyBrake = this.mode === 'playing' && this.keysHeld.has('Space');
+        if (keyBrake) {
+          this.trainDriverNotch = 0;
+          this.trainCruiseActive = true;
+        }
+        const trainBrake = this.trainManualBrake || keyBrake;
+        const cruiseTarget = this.trainCruiseActive
+          ? TRAIN_DRIVER_NOTCH_MPS[this.trainDriverNotch]
+          : null;
         this.trainState = stepTrainManualDrive(
           this.trainState,
-          this.mode === 'playing' ? combined.forward : 0,
+          manualThrottle,
           trainBrake,
           this.trainManualDoors,
-          dt
+          dt,
+          cruiseTarget
         );
       } else {
         this.trainState = stepTrainState(this.trainState, dt);
@@ -5378,13 +7360,35 @@ export class DreamlineEngine {
 
       if (this.activeVehicle === 'bus' && this.busDriverMode) {
         const busBrake = this.mode === 'playing' && this.keysHeld.has('Space');
-        this.busState = stepBusManualDrive(
-          this.busState,
+        const steppedBus = stepBusManualDrive(
+          { ...this.busState, inVault: this.homeVaultState.inVault },
           this.mode === 'playing' ? combined.forward : 0,
           this.mode === 'playing' ? combined.right : 0,
           busBrake,
           this.busManualDoors,
           dt
+        );
+        const busTunnel = stepGenericVehicleVaultTunnel({
+          x: steppedBus.worldX,
+          z: steppedBus.worldZ,
+          heading: steppedBus.heading,
+          speed: steppedBus.speedKmh / 3.6 * (combined.forward < -0.05 ? -1 : 1),
+          inVault: this.homeVaultState.inVault,
+          exitGateProgress: this.homeVaultState.exitGateProgress,
+          hatchOpenProgress: this.homeVaultState.hatchOpenProgress,
+          margin: 1.85,
+        });
+        this.busState = {
+          ...steppedBus,
+          worldX: busTunnel.x,
+          worldZ: busTunnel.z,
+          inVault: busTunnel.inVault,
+        };
+        this.applyVehicleVaultTransition(
+          'Dreamline Rural Bus',
+          busTunnel.y,
+          busTunnel.enteredVault,
+          busTunnel.exitedToSurface
         );
       } else if (this.busDispatch.phase !== 'idle') {
         const dispStep = stepDispatchedBus(this.busState, this.busDispatch, dt);
@@ -5613,8 +7617,56 @@ export class DreamlineEngine {
           }
         }
 
+        // Tick Hero Dodge & 360° Mid-Air Spin timers
+        if (this.heroState.dodgeTimer > 0) {
+          this.heroState.dodgeTimer = Math.max(0, this.heroState.dodgeTimer - dt);
+          if (this.heroState.dodgeTimer <= 0) this.heroState.dodgeKind = 'none';
+        }
+        if (this.heroState.airTrickTimer > 0) {
+          this.heroState.airTrickTimer = Math.max(0, this.heroState.airTrickTimer - dt);
+          this.heroState.airTrickAngle += dt * Math.PI * 3.1;
+          if (this.heroState.airTrickTimer <= 0) {
+            this.heroState.airTrickKind = 'none';
+            this.heroState.airTrickAngle = 0;
+          }
+        }
+        // Step Physical Hydraulic Elevator ride DOWN / UP (NO instant teleporting!)
+        if (this.homeVaultState.elevatorPhase !== 'idle') {
+          const elStep = stepVaultElevator(this.homeVaultState, dt);
+          this.homeVaultState = elStep.state;
+          this.playerX = VAULT_ELEVATOR_POS.x;
+          this.playerY = this.homeVaultState.elevatorY;
+          this.playerZ = VAULT_ELEVATOR_POS.z;
+          this.playerVx = 0;
+          this.playerVz = 0;
+          if (elStep.arrivedUnderground) {
+            this.playerX = VAULT_SPAWN_POS.x;
+            this.playerY = VAULT_SPAWN_POS.y;
+            this.playerZ = VAULT_SPAWN_POS.z;
+            this.playerHeading = VAULT_SPAWN_POS.heading;
+            this.container.dataset.inHomeVault = 'true';
+            this.audio.playStationChime();
+            this.showNotice(
+              'Arrived at 22m-Tall Secret Underground Base! Walk/drive up the 94m inclined ramp straight outside!'
+            );
+            this.emitHudSnapshot();
+          } else if (elStep.arrivedSurface) {
+            this.homeVaultWorld.chamberGroup.visible = false;
+            this.setSurfaceGroupsVisible(true);
+            this.scene.background = null;
+            this.playerX = VAULT_HATCH_WORLD.x + 1.4;
+            this.playerZ = VAULT_HATCH_WORLD.z;
+            this.playerY = walkableHeightWithFloor(this.playerX, this.playerZ, 0.5);
+            this.playerHeading = 0;
+            this.container.dataset.inHomeVault = 'false';
+            this.audio.playDoorChime();
+            this.showNotice('Hydraulic Elevator arrived upstairs in En Illam Living Room!');
+            this.snapThirdPersonCamera();
+            this.emitHudSnapshot();
+          }
+        }
         // Branch 0: Deployable 3D Parachute Glide (works anywhere across the entire open world!)
-        if (
+        else if (
           this.parachuteState.active &&
           !this.inUndergroundCave &&
           !this.inUndergroundMetro &&
@@ -5644,7 +7696,7 @@ export class DreamlineEngine {
             this.showNotice('Parachute Touchdown! Smooth landing!');
           }
         }
-        // Branch A: Real Pendulum Spider-Man Web-Swinging (works EVERYWHERE with terrain floor awareness!)
+        // Branch A: Insomniac-Style Pendulum Spider-Man Web-Swinging + Auto-Re-Anchor Chain + Dynamic Speed FOV!
         else if (this.heroState.isWebSwinging && this.webSwingState.active) {
           const swingRes = stepWebSwingPhysics(
             this.webSwingState,
@@ -5657,7 +7709,7 @@ export class DreamlineEngine {
             isSprinting,
             dt
           );
-          const localMinY = Math.max(2.2, walkableHeightAt(swingRes.x, swingRes.z) + 2.2);
+          const localMinY = Math.max(2.6, walkableHeightAt(swingRes.x, swingRes.z) + 2.6);
           this.playerX = swingRes.x;
           this.playerY = Math.max(localMinY, swingRes.y);
           this.playerZ = swingRes.z;
@@ -5667,6 +7719,24 @@ export class DreamlineEngine {
           this.playerVz = swingRes.swing.vz;
           this.heroState.flightSpeedKmh = Math.round(swingRes.speed * 3.6);
           moveSpeed = swingRes.speed;
+
+          // Seamless Insomniac hand-swap auto-re-anchor when holding forward past the high apex!
+          if (swingRes.shouldAutoReanchor && smoothMove.forward > 0.25) {
+            this.webSwingState = startWebSwing(
+              this.emptyWebAnchorState,
+              this.playerX,
+              this.playerY,
+              this.playerZ,
+              this.playerHeading,
+              this.playerVx,
+              this.playerVz,
+              this.webSwingState.handSide,
+              this.webSwingState.vy,
+              this.heroState.swingComboCount
+            );
+            this.heroState.swingComboCount = this.webSwingState.comboCount;
+            this.audio.playWebShoot();
+          }
         }
         // Branch B: Long-Distance 3D Controlled Superhero Flight (Iron Man Classic / Advanced / Hulkbuster / Superman)
         else if (this.heroState.isFlying && heroSpec?.mobility.canFly) {
@@ -5690,42 +7760,108 @@ export class DreamlineEngine {
             this.keysHeld.has('ControlRight') ||
             this.keysHeld.has('KeyX') ||
             this.skyDescendHeld;
-          const targetVy = ascend ? 21.0 : descend ? -18.5 : 0;
+          const heroLookFly = computeLookToFlyVerticalRate(this.camPitch, smoothMove.forward, {
+            neutralPitch: 0.14,
+            deadzone: 0.08,
+            maxClimbRate: isSprinting ? 30.0 : 21.0,
+            maxDiveRate: isSprinting ? 28.0 : 19.0,
+          });
+          const targetVy = ascend
+            ? 21.0
+            : descend
+            ? -18.5
+            : heroLookFly.active
+            ? heroLookFly.verticalRate
+            : 0;
+          const divingToLand = descend || heroLookFly.normalizedPitch < -0.35;
           this.heroState.flyVelY += (targetVy - this.heroState.flyVelY) * (1 - Math.exp(-5.8 * dt));
 
           let nextX = this.playerX + this.playerVx * dt;
           let nextZ = this.playerZ + this.playerVz * dt;
-          // Expanded 600m long-distance aerial flight corridor over the whole world & infinite ocean!
-          const flyDist = Math.hypot(nextX, nextZ);
-          if (flyDist > 600) {
-            const s = 600 / flyDist;
-            nextX *= s;
-            nextZ *= s;
-          }
-          if (this.playerY < 18) {
-            const resolved = resolvePlayerCollision(
-              nextX,
-              nextZ,
+          if (this.homeVaultState.inVault) {
+            const gateOpen = this.homeVaultState.exitGateProgress > 0.6;
+            const houseOpen = this.homeVaultState.hatchOpenProgress > 0.45;
+            const vRes = clampVaultPosition(nextX, nextZ, 1.35, gateOpen, houseOpen);
+            this.playerX = vRes.x;
+            this.playerZ = vRes.z;
+            const floorY = vaultFloorYAt(this.playerX, this.playerZ);
+            const maxY =
+              this.playerY > -10.0 && this.playerZ > -36.0
+                ? floorY + 3.8
+                : VAULT_CEILING_Y - 2.2;
+            this.playerY = Math.min(maxY, Math.max(floorY, this.playerY + this.heroState.flyVelY * dt));
+            // Show outside daylight smoothly when flying up either exit ramp!
+            const nearSurface = this.playerY > -9.5;
+            this.setSurfaceGroupsVisible(nearSurface);
+            this.scene.background = nearSurface ? null : new THREE.Color(0x0b1220);
+
+            const houseExit = isExitingHouseSecretTunnelToSurface(
               this.playerX,
               this.playerZ,
-              0.55,
-              this.allColliders,
-              this.playerY,
-              true
+              this.homeVaultState.hatchOpenProgress
             );
-            this.playerX = resolved.x;
-            this.playerZ = resolved.z;
+            if (houseExit) {
+              this.homeVaultState = { ...this.homeVaultState, inVault: false, activeVaultCarId: null };
+              this.setSurfaceGroupsVisible(true);
+              this.scene.background = null;
+              this.container.dataset.inHomeVault = 'false';
+              this.audio.playStationChime();
+              this.showNotice('Flew straight out of the Superhero House Secret Tunnel into open sky!');
+              this.emitHudSnapshot();
+            } else if (this.playerY <= floorY + 0.08 && divingToLand) {
+              this.heroState.isFlying = false;
+              this.heroState.flyVelY = 0;
+              this.audio.playLand(heroSpec.mobility.heavyFootsteps ? 0.52 : 1.0);
+            }
           } else {
-            this.playerX = nextX;
-            this.playerZ = nextZ;
-          }
+            // Expanded 600m long-distance aerial flight corridor over the whole world & infinite ocean!
+            const flyDist = Math.hypot(nextX, nextZ);
+            if (flyDist > 600) {
+              const s = 600 / flyDist;
+              nextX *= s;
+              nextZ *= s;
+            }
+            if (this.playerY < 18) {
+              const resolved = resolvePlayerCollision(
+                nextX,
+                nextZ,
+                this.playerX,
+                this.playerZ,
+                0.55,
+                this.allColliders,
+                this.playerY,
+                true
+              );
+              this.playerX = resolved.x;
+              this.playerZ = resolved.z;
+            } else {
+              this.playerX = nextX;
+              this.playerZ = nextZ;
+            }
 
-          const floorY = walkableHeightWithFloor(this.playerX, this.playerZ, this.playerY);
-          this.playerY = Math.min(168, Math.max(floorY, this.playerY + this.heroState.flyVelY * dt));
-          if (this.playerY <= floorY + 0.08 && descend) {
-            this.heroState.isFlying = false;
-            this.heroState.flyVelY = 0;
-            this.audio.playLand(heroSpec.mobility.heavyFootsteps ? 0.52 : 1.0);
+            // Flying low straight through the open House Secret Tunnel Portal enters seamlessly!
+            if (
+              this.playerY < 4.4 &&
+              isEnteringHouseSecretTunnelFromSurface(
+                this.playerX,
+                this.playerZ,
+                this.homeVaultState.hatchOpenProgress
+              )
+            ) {
+              this.homeVaultState = { ...this.homeVaultState, inVault: true };
+              this.homeVaultWorld.chamberGroup.visible = true;
+              this.container.dataset.inHomeVault = 'true';
+              this.showNotice('Flew straight into the Superhero House Secret Tunnel → 1 KM Mega-Chamber!');
+              this.emitHudSnapshot();
+            }
+
+            const floorY = walkableHeightWithFloor(this.playerX, this.playerZ, this.playerY);
+            this.playerY = Math.min(168, Math.max(floorY, this.playerY + this.heroState.flyVelY * dt));
+            if (this.playerY <= floorY + 0.08 && divingToLand) {
+              this.heroState.isFlying = false;
+              this.heroState.flyVelY = 0;
+              this.audio.playLand(heroSpec.mobility.heavyFootsteps ? 0.52 : 1.0);
+            }
           }
 
           moveSpeed = Math.hypot(this.playerVx, this.playerVz);
@@ -5769,9 +7905,53 @@ export class DreamlineEngine {
           const nextX = this.playerX + this.playerVx * dt;
           const nextZ = this.playerZ + this.playerVz * dt;
           if (this.homeVaultState.inVault) {
-            const vRes = clampVaultPosition(nextX, nextZ, 1.35);
+            const gateOpen = this.homeVaultState.exitGateProgress > 0.6;
+            const houseOpen = this.homeVaultState.hatchOpenProgress > 0.45;
+            const vRes = clampVaultPosition(nextX, nextZ, 1.15, gateOpen, houseOpen);
             this.playerX = vRes.x;
             this.playerZ = vRes.z;
+            const rampY = vaultFloorYAt(this.playerX, this.playerZ);
+
+            // Real seamless daylight visibility whenever climbing near the top of EITHER exit ramp!
+            const nearSurface = rampY > -9.5;
+            this.setSurfaceGroupsVisible(nearSurface);
+            this.scene.background = nearSurface ? null : new THREE.Color(0x0b1220);
+
+            // A. Real physical walk out through the open Superhero House Secret Tunnel Portal OR Interior Wall Door (ZERO teleport!)
+            const houseExit = isExitingHouseSecretTunnelToSurface(
+              this.playerX,
+              this.playerZ,
+              this.homeVaultState.hatchOpenProgress
+            );
+            if (houseExit) {
+              this.homeVaultState = { ...this.homeVaultState, inVault: false, activeVaultCarId: null };
+              this.setSurfaceGroupsVisible(true);
+              this.scene.background = null;
+              this.playerY = walkableHeightWithFloor(this.playerX, this.playerZ, rampY);
+              this.container.dataset.inHomeVault = 'false';
+              this.audio.playStationChime();
+              this.showNotice(
+                houseExit === 'living_room'
+                  ? 'Walked straight through the Interior Secret Wall Door into En Illam Living Room!'
+                  : 'Walked continuously up the Secret Tunnel straight out into your front yard!'
+              );
+              this.emitHudSnapshot();
+            }
+            // B. Real physical walk out through the open East Driving Ramp Crest (ZERO teleport!)
+            else if (
+              gateOpen &&
+              this.playerX >= VAULT_SURFACE_DRIVE_EXIT.x - 0.5 &&
+              Math.abs(this.playerZ) <= 5.6
+            ) {
+              this.homeVaultState = { ...this.homeVaultState, inVault: false, activeVaultCarId: null };
+              this.setSurfaceGroupsVisible(true);
+              this.scene.background = null;
+              this.playerY = walkableHeightAt(this.playerX, this.playerZ);
+              this.container.dataset.inHomeVault = 'false';
+              this.audio.playStationChime();
+              this.showNotice('Walked continuously up the 94m ramp straight out into daylight!');
+              this.emitHudSnapshot();
+            }
           } else if (this.inUndergroundMetro) {
             const mRes = clampUndergroundMetroPosition(nextX, nextZ, this.playerX, this.playerZ);
             this.playerX = mRes.x;
@@ -5798,12 +7978,46 @@ export class DreamlineEngine {
             );
             this.playerX = resolved.x;
             this.playerZ = resolved.z;
+
+            // A. Real physical walk INTO the open Superhero House Secret Tunnel Portal (from outside yard OR En Illam Living Room — ZERO teleport!)
+            if (
+              isEnteringHouseSecretTunnelFromSurface(
+                this.playerX,
+                this.playerZ,
+                this.homeVaultState.hatchOpenProgress
+              )
+            ) {
+              this.homeVaultState = {
+                ...this.homeVaultState,
+                inVault: true,
+              };
+              this.homeVaultWorld.chamberGroup.visible = true;
+              this.playerY = vaultFloorYAt(this.playerX, this.playerZ);
+              this.container.dataset.inHomeVault = 'true';
+              this.audio.playDoorChime();
+              this.showNotice('Entering Superhero House Secret Tunnel! Walk down the ramp to the 1 KM Mega-Chamber!');
+              this.emitHudSnapshot();
+            }
+            // B. Literal physical re-entry walking west into the East Surface Tunnel Portal Arch at (122, 0)!
+            else if (isNearSurfaceTunnelMouth(this.playerX, this.playerZ) && this.playerVx < -0.5) {
+              this.homeVaultState = {
+                ...this.homeVaultState,
+                inVault: true,
+                exitGateOpen: true,
+                exitGateProgress: 1,
+              };
+              this.homeVaultWorld.chamberGroup.visible = true;
+              this.playerY = vaultFloorYAt(this.playerX, this.playerZ);
+              this.container.dataset.inHomeVault = 'true';
+              this.showNotice('Walking down the 94m inclined ramp into the Secret Underground Base!');
+              this.emitHudSnapshot();
+            }
           }
 
           const wasSwimming = this.isSwimming;
           const groundRefY = this.playerY - this.jumpState.offsetY;
           const groundY = this.homeVaultState.inVault
-            ? VAULT_FLOOR_Y
+            ? vaultFloorYAt(this.playerX, this.playerZ)
             : this.inUndergroundMetro
               ? getUndergroundMetroFloorY(this.playerX, this.playerZ)
               : this.inUndergroundCave
@@ -5854,19 +8068,39 @@ export class DreamlineEngine {
             if (onWater) {
               this.transportMode = 'walk';
               const waterSurfaceY = effWaterLevel - 0.52 * this.icelandState.playerScale;
-              this.playerY = waterSurfaceY + this.jumpState.offsetY;
+              if (isOceanAt(this.playerX, this.playerZ)) {
+                const diveDown =
+                  this.swimDiveHold === 1 ||
+                  this.keysHeld.has('KeyX') ||
+                  this.keysHeld.has('ControlLeft');
+                const swimUp = this.swimDiveHold === -1 || this.keysHeld.has('Space');
+                if (diveDown) {
+                  this.swimDiveDepth = Math.min(8.5, this.swimDiveDepth + 3.4 * dt);
+                } else if (swimUp) {
+                  this.swimDiveDepth = Math.max(0, this.swimDiveDepth - 4.2 * dt);
+                }
+              } else {
+                this.swimDiveDepth = 0;
+              }
+              const minSwimY = groundY + 0.95;
+              this.playerY = Math.max(
+                minSwimY,
+                waterSurfaceY - this.swimDiveDepth + (this.swimDiveDepth < 0.2 ? this.jumpState.offsetY : 0)
+              );
               if (!wasSwimming) {
                 this.audio.playBoatSplash();
                 this.showNotice(
                   floodedHere
                     ? 'Swimming through Floodwater · Use WASD / Joystick to swim!'
-                    : 'Swimming in clear water · Use WASD / Joystick to swim · Shift to sprint-swim!'
+                    : 'Swimming in clear Ocean · Hold X/Ctrl or Dive button to dive underwater!'
                 );
               }
             } else if (this.playerY > groundY + this.jumpState.offsetY + 0.35 && !this.jumpState.isAirborne) {
+              this.swimDiveDepth = 0;
               // Smooth gravity drop off skyscrapers
               this.playerY = Math.max(groundY, this.playerY - 18.0 * dt);
             } else {
+              this.swimDiveDepth = 0;
               this.playerY = groundY + this.jumpState.offsetY;
             }
           }
@@ -5923,54 +8157,132 @@ export class DreamlineEngine {
     } else if (this.activeVehicle === 'camper') {
       this.isSwimming = false;
       const braking = this.mode === 'playing' && this.keysHeld.has('Space');
-      this.camperState = stepCamperState(
-        this.camperState,
+      const steppedCamper = stepCamperState(
+        { ...this.camperState, inVault: this.homeVaultState.inVault },
         this.mode === 'playing' ? combined.forward : 0,
         this.mode === 'playing' ? combined.right : 0,
         braking,
-        this.allColliders,
+        this.homeVaultState.inVault ? [] : this.allColliders,
         dt
+      );
+      const camperTunnel = stepGenericVehicleVaultTunnel({
+        x: steppedCamper.x,
+        z: steppedCamper.z,
+        heading: steppedCamper.heading,
+        speed: steppedCamper.speed,
+        inVault: this.homeVaultState.inVault,
+        exitGateProgress: this.homeVaultState.exitGateProgress,
+        hatchOpenProgress: this.homeVaultState.hatchOpenProgress,
+        margin: 1.75,
+      });
+      this.camperState = {
+        ...steppedCamper,
+        x: camperTunnel.x,
+        z: camperTunnel.z,
+        speed: camperTunnel.hitWall ? steppedCamper.speed * -0.18 : steppedCamper.speed,
+        inVault: camperTunnel.inVault,
+      };
+      this.applyVehicleVaultTransition(
+        'Olga Camper Van',
+        camperTunnel.y,
+        camperTunnel.enteredVault,
+        camperTunnel.exitedToSurface
       );
       moveSpeed = Math.abs(this.camperState.speed);
       this.playerX = this.camperState.x;
       this.playerZ = this.camperState.z;
-      this.playerY = walkableHeightAt(this.camperState.x, this.camperState.z) + 0.65;
+      this.playerY =
+        (this.homeVaultState.inVault
+          ? vaultFloorYAt(this.camperState.x, this.camperState.z)
+          : walkableHeightAt(this.camperState.x, this.camperState.z)) + 0.65;
       this.playerHeading = this.camperState.heading;
     } else if (this.activeVehicle === 'safari_car') {
       this.isSwimming = false;
-      const nextCar = stepSafariCarState(
-        this.dinosaurIslandState.safariCar,
+      const steppedCar = stepSafariCarState(
+        { ...this.dinosaurIslandState.safariCar, inVault: this.homeVaultState.inVault },
         this.mode === 'playing' ? combined.forward : 0,
         this.mode === 'playing' ? combined.right : 0,
         isSprinting,
         this.dinosaurIslandState.wallsIntact,
-        dt
+        dt,
+        this.homeVaultState.inVault ? undefined : isWaterAt
       );
+      const carTunnel = stepGenericVehicleVaultTunnel({
+        x: steppedCar.x,
+        z: steppedCar.z,
+        heading: steppedCar.heading,
+        speed: steppedCar.speed,
+        inVault: this.homeVaultState.inVault,
+        exitGateProgress: this.homeVaultState.exitGateProgress,
+        hatchOpenProgress: this.homeVaultState.hatchOpenProgress,
+        margin: 1.75,
+      });
+      const nextCar = {
+        ...steppedCar,
+        x: carTunnel.x,
+        z: carTunnel.z,
+        speed: carTunnel.hitWall ? steppedCar.speed * -0.18 : steppedCar.speed,
+        inVault: carTunnel.inVault,
+      };
       this.dinosaurIslandState = {
         ...this.dinosaurIslandState,
         safariCar: nextCar,
       };
+      this.applyVehicleVaultTransition(
+        'Jurassic Safari Cruiser',
+        carTunnel.y,
+        carTunnel.enteredVault,
+        carTunnel.exitedToSurface
+      );
       moveSpeed = Math.abs(nextCar.speed);
       this.playerX = nextCar.x;
       this.playerZ = nextCar.z;
-      this.playerY = walkableHeightAt(nextCar.x, nextCar.z) + 0.8;
+      this.playerY =
+        (this.homeVaultState.inVault
+          ? vaultFloorYAt(nextCar.x, nextCar.z)
+          : walkableHeightAt(nextCar.x, nextCar.z)) + 0.8;
       this.playerHeading = nextCar.heading;
     } else if (this.activeVehicle === 'boat' && this.activeBoatId) {
       this.isSwimming = false;
       const idx = this.boats.findIndex((b) => b.id === this.activeBoatId);
       if (idx >= 0) {
-        this.boats[idx] = stepBoatState(
-          this.boats[idx],
+        const steppedBoat = stepBoatState(
+          { ...this.boats[idx], inVault: this.homeVaultState.inVault },
           this.mode === 'playing' ? combined.forward : 0,
           this.mode === 'playing' ? combined.right : 0,
           isSprinting,
           dt
         );
+        const boatTunnel = stepGenericVehicleVaultTunnel({
+          x: steppedBoat.x,
+          z: steppedBoat.z,
+          heading: steppedBoat.heading,
+          speed: steppedBoat.speed,
+          inVault: this.homeVaultState.inVault,
+          exitGateProgress: this.homeVaultState.exitGateProgress,
+          hatchOpenProgress: this.homeVaultState.hatchOpenProgress,
+          margin: 1.8,
+        });
+        this.boats[idx] = {
+          ...steppedBoat,
+          x: boatTunnel.x,
+          z: boatTunnel.z,
+          speed: boatTunnel.hitWall ? steppedBoat.speed * -0.18 : steppedBoat.speed,
+          inVault: boatTunnel.inVault,
+        };
+        this.applyVehicleVaultTransition(
+          steppedBoat.name,
+          boatTunnel.y,
+          boatTunnel.enteredVault,
+          boatTunnel.exitedToSurface
+        );
         const b = this.boats[idx];
         moveSpeed = Math.abs(b.speed);
         this.playerX = b.x;
         this.playerZ = b.z;
-        this.playerY = 0.2;
+        this.playerY = this.homeVaultState.inVault
+          ? vaultFloorYAt(b.x, b.z) + 0.55
+          : Math.max(0.2, groundHeightAt(b.x, b.z) + 0.35);
         this.playerHeading = b.heading;
       }
     } else if (this.activeVehicle === 'train') {
@@ -5997,7 +8309,10 @@ export class DreamlineEngine {
       this.isSwimming = false;
       this.playerX = this.busState.worldX;
       this.playerZ = this.busState.worldZ;
-      this.playerY = walkableHeightAt(this.busState.worldX, this.busState.worldZ) + 1.4;
+      this.playerY =
+        (this.homeVaultState.inVault
+          ? vaultFloorYAt(this.busState.worldX, this.busState.worldZ)
+          : walkableHeightAt(this.busState.worldX, this.busState.worldZ)) + 1.4;
       this.playerHeading = this.busState.heading;
     } else if (this.activeVehicle === 'sky_explorer') {
       this.isSwimming = false;
@@ -6009,20 +8324,119 @@ export class DreamlineEngine {
           this.keysHeld.has('ControlRight') ||
           this.keysHeld.has('KeyQ') ||
           this.skyDescendHeld);
-      this.skyExplorerState = stepSkyExplorerState(
-        this.skyExplorerState,
+      const steppedSky = stepSkyExplorerState(
+        { ...this.skyExplorerState, inVault: this.homeVaultState.inVault },
         this.mode === 'playing' ? combined.forward : 0,
         this.mode === 'playing' ? combined.right : 0,
         ascend,
         descend,
         isSprinting,
-        dt
+        dt,
+        this.homeVaultState.inVault ? vaultFloorYAt : undefined,
+        this.homeVaultState.inVault ? VAULT_CEILING_Y - 2.4 : undefined,
+        this.camPitch
       );
+      const skyTunnel =
+        this.homeVaultState.inVault || steppedSky.y < 5.5
+          ? stepGenericVehicleVaultTunnel({
+              x: steppedSky.x,
+              z: steppedSky.z,
+              heading: steppedSky.heading,
+              speed: steppedSky.forwardSpeed,
+              inVault: this.homeVaultState.inVault,
+              exitGateProgress: this.homeVaultState.exitGateProgress,
+              hatchOpenProgress: this.homeVaultState.hatchOpenProgress,
+              margin: 1.85,
+            })
+          : null;
+      this.skyExplorerState = skyTunnel
+        ? {
+            ...steppedSky,
+            x: skyTunnel.x,
+            z: skyTunnel.z,
+            y: skyTunnel.enteredVault
+              ? skyTunnel.y + 0.8
+              : skyTunnel.inVault
+              ? Math.max(skyTunnel.y + 0.65, Math.min(VAULT_CEILING_Y - 2.4, steppedSky.y))
+              : steppedSky.y,
+            inVault: skyTunnel.inVault,
+          }
+        : steppedSky;
+      if (skyTunnel) {
+        this.applyVehicleVaultTransition(
+          'SSJ Tropical Sky Explorer',
+          this.skyExplorerState.y,
+          skyTunnel.enteredVault,
+          skyTunnel.exitedToSurface
+        );
+      }
       moveSpeed = Math.abs(this.skyExplorerState.forwardSpeed);
       this.playerX = this.skyExplorerState.x;
       this.playerY = this.skyExplorerState.y;
       this.playerZ = this.skyExplorerState.z;
       this.playerHeading = this.skyExplorerState.heading;
+    } else if (this.activeVehicle === 'orange_heli') {
+      this.isSwimming = false;
+      const ascend =
+        this.mode === 'playing' && (this.keysHeld.has('Space') || this.skyAscendHeld);
+      const descend =
+        this.mode === 'playing' &&
+        (this.keysHeld.has('ControlLeft') ||
+          this.keysHeld.has('ControlRight') ||
+          this.keysHeld.has('KeyQ') ||
+          this.skyDescendHeld);
+      const steppedHeli = stepOrangeHeliState(
+        { ...this.orangeHeliState, inVault: this.homeVaultState.inVault },
+        this.mode === 'playing' ? combined.forward : 0,
+        this.mode === 'playing' ? combined.right : 0,
+        ascend,
+        descend,
+        isSprinting,
+        true,
+        dt,
+        this.homeVaultState.inVault ? vaultFloorYAt : undefined,
+        this.homeVaultState.inVault ? VAULT_CEILING_Y - 2.8 : undefined,
+        this.camPitch
+      );
+      const heliTunnel =
+        this.homeVaultState.inVault || steppedHeli.y < 5.5
+          ? stepGenericVehicleVaultTunnel({
+              x: steppedHeli.x,
+              z: steppedHeli.z,
+              heading: steppedHeli.heading,
+              speed: steppedHeli.forwardSpeed,
+              inVault: this.homeVaultState.inVault,
+              exitGateProgress: this.homeVaultState.exitGateProgress,
+              hatchOpenProgress: this.homeVaultState.hatchOpenProgress,
+              margin: 1.9,
+            })
+          : null;
+      this.orangeHeliState = heliTunnel
+        ? {
+            ...steppedHeli,
+            x: heliTunnel.x,
+            z: heliTunnel.z,
+            y: heliTunnel.enteredVault
+              ? heliTunnel.y + 0.6
+              : heliTunnel.inVault
+              ? Math.max(heliTunnel.y + 0.1, Math.min(VAULT_CEILING_Y - 2.8, steppedHeli.y))
+              : steppedHeli.y,
+            inVault: heliTunnel.inVault,
+          }
+        : steppedHeli;
+      if (heliTunnel) {
+        this.applyVehicleVaultTransition(
+          'SSJ Orange Rescue Helicopter',
+          this.orangeHeliState.y,
+          heliTunnel.enteredVault,
+          heliTunnel.exitedToSurface
+        );
+      }
+      moveSpeed = Math.abs(this.orangeHeliState.forwardSpeed);
+      this.playerX = this.orangeHeliState.x;
+      this.playerY = this.orangeHeliState.y;
+      this.playerZ = this.orangeHeliState.z;
+      this.playerHeading = this.orangeHeliState.heading;
     } else if (this.activeVehicle === 'batmobile') {
       this.isSwimming = false;
       const braking = this.mode === 'playing' && this.keysHeld.has('Space');
@@ -6032,7 +8446,9 @@ export class DreamlineEngine {
         this.mode === 'playing' ? combined.right : 0,
         this.mode === 'playing' && isSprinting,
         braking,
-        dt
+        dt,
+        this.homeVaultState.exitGateProgress,
+        this.homeVaultState.hatchOpenProgress
       );
       this.batmobileState = batStep.state;
       moveSpeed = Math.abs(this.batmobileState.speed);
@@ -6041,16 +8457,27 @@ export class DreamlineEngine {
       this.playerZ = this.batmobileState.z;
       this.playerHeading = this.batmobileState.heading;
 
+      if (this.homeVaultState.inVault) {
+        const nearSurface = this.batmobileState.y > -9.5;
+        this.setSurfaceGroupsVisible(nearSurface);
+        this.scene.background = nearSurface ? null : new THREE.Color(0x0b1220);
+      }
+
       if (batStep.exitedToSurface && this.homeVaultState.inVault) {
         this.homeVaultState = { ...this.homeVaultState, inVault: false };
-        this.homeVaultWorld.chamberGroup.visible = false;
         this.setSurfaceGroupsVisible(true);
         this.batmobileWorld.group.visible = true;
         this.scene.background = null;
         this.container.dataset.inHomeVault = 'false';
-        this.camYaw = this.batmobileState.heading + Math.PI;
         this.audio.playStationChime();
-        this.showNotice('Drove The Tumbler Batmobile out of the Secret Underground Garage onto the open road!');
+        this.showNotice('Drove The Tumbler Batmobile straight out of the Secret Tunnel into daylight!');
+      } else if (batStep.enteredVault && !this.homeVaultState.inVault) {
+        this.homeVaultState = { ...this.homeVaultState, inVault: true };
+        this.homeVaultWorld.chamberGroup.visible = true;
+        this.batmobileWorld.group.visible = true;
+        this.container.dataset.inHomeVault = 'true';
+        this.audio.playDoorChime();
+        this.showNotice('Drove The Tumbler Batmobile straight into the Superhero House Secret Tunnel!');
       }
     } else if (this.activeVehicle === 'vault_car' && this.homeVaultState.activeVaultCarId) {
       this.isSwimming = false;
@@ -6065,7 +8492,9 @@ export class DreamlineEngine {
           this.mode === 'playing' ? combined.right : 0,
           this.mode === 'playing' && isSprinting,
           braking,
-          dt
+          dt,
+          this.homeVaultState.exitGateProgress,
+          this.homeVaultState.hatchOpenProgress
         );
         const nextCars = [...this.homeVaultState.cars];
         nextCars[carIdx] = stepRes.state;
@@ -6076,18 +8505,55 @@ export class DreamlineEngine {
         this.playerZ = stepRes.state.z;
         this.playerHeading = stepRes.state.heading;
 
+        if (this.homeVaultState.inVault) {
+          const nearSurface = stepRes.state.y > -9.5;
+          this.setSurfaceGroupsVisible(nearSurface);
+          this.scene.background = nearSurface ? null : new THREE.Color(0x0b1220);
+        }
+
         if (stepRes.exitedToSurface && this.homeVaultState.inVault) {
           this.homeVaultState = { ...this.homeVaultState, inVault: false };
-          this.homeVaultWorld.chamberGroup.visible = false;
           this.setSurfaceGroupsVisible(true);
           this.scene.background = null;
           this.container.dataset.inHomeVault = 'false';
-          this.camYaw = stepRes.state.heading + Math.PI;
           this.audio.playStationChime();
           const spec = getVaultCarSpec(stepRes.state.id);
-          this.showNotice(`Drove ${spec.name} out of the Secret Underground Garage onto the countryside road!`);
+          this.showNotice(`Drove ${spec.name} straight out of the Secret Tunnel into daylight!`);
+        } else if (stepRes.enteredVault && !this.homeVaultState.inVault) {
+          this.homeVaultState = { ...this.homeVaultState, inVault: true };
+          this.homeVaultWorld.chamberGroup.visible = true;
+          this.container.dataset.inHomeVault = 'true';
+          this.audio.playDoorChime();
+          const spec = getVaultCarSpec(stepRes.state.id);
+          this.showNotice(`Drove ${spec.name} straight down into the Superhero House Secret Tunnel!`);
         }
       }
+    } else if (this.activeVehicle === 'submarine') {
+      this.isSwimming = false;
+      const diveKey =
+        this.keysHeld.has('ControlLeft') ||
+        this.keysHeld.has('ControlRight') ||
+        this.keysHeld.has('KeyX') ||
+        this.keysHeld.has('KeyQ');
+      const riseKey = this.keysHeld.has('Space');
+      const diveDelta = this.submarineDiveHold !== 0 ? this.submarineDiveHold : diveKey ? 1 : riseKey ? -1 : 0;
+      this.submarineState = stepSubmarineState(
+        this.submarineState,
+        {
+          throttle: this.mode === 'playing' ? combined.forward : 0,
+          steer: this.mode === 'playing' ? combined.right : 0,
+          diveDelta: this.mode === 'playing' ? diveDelta : 0,
+          boost: this.mode === 'playing' && isSprinting,
+        },
+        dt,
+        isOceanAt
+      );
+      moveSpeed = Math.abs(this.submarineState.speed);
+      this.playerX = this.submarineState.x;
+      this.playerY = this.submarineState.y + 1.2;
+      this.playerZ = this.submarineState.z;
+      this.playerHeading = this.submarineState.heading;
+      this.container.dataset.submarineDepth = this.submarineState.depth.toFixed(1);
     } else if (this.activeVehicle === 'airliner') {
       const ascend = this.keysHeld.has('Space') || this.skyAscendHeld;
       const descend =
@@ -6105,13 +8571,485 @@ export class DreamlineEngine {
         isSprinting,
         dt,
         walkableHeightAt,
-        620
+        620,
+        this.camPitch
       );
       this.playerX = this.airlinerState.x;
       this.playerY = this.airlinerState.y + 2.4;
       this.playerZ = this.airlinerState.z;
       this.playerHeading = this.airlinerState.heading;
       moveSpeed = Math.abs(this.airlinerState.speed);
+    }
+
+    // Step >1-Minute Ocean Water Snowman Jet Ski Rescue State Machine!
+    const inOpenOceanSwim =
+      this.mode === 'playing' &&
+      this.activeVehicle === 'none' &&
+      !this.inUndergroundCave &&
+      !this.inUndergroundMetro &&
+      !this.homeVaultState.inVault &&
+      this.isSwimming &&
+      isOceanAt(this.playerX, this.playerZ);
+
+    const rescueOut = stepOceanSnowmanRescue(this.snowmanRescueState, {
+      dt,
+      inOceanWater: inOpenOceanSwim,
+      playerX: this.playerX,
+      playerZ: this.playerZ,
+    });
+    this.snowmanRescueState = rescueOut.state;
+    this.container.dataset.oceanSwimSeconds = this.snowmanRescueState.oceanSwimSeconds.toFixed(1);
+    this.container.dataset.snowmanRescuePhase = this.snowmanRescueState.phase;
+
+    if (rescueOut.justTriggeredRescue) {
+      this.audio.playStationChime();
+      this.showNotice(
+        'Over 30 seconds in ocean water! Rescue Snowman on a Jet Ski is speeding to save you and take you to Snowman Island!'
+      );
+      this.emitHudSnapshot();
+    }
+    if (rescueOut.overridePlayerPos) {
+      this.playerX = rescueOut.overridePlayerPos.x;
+      this.playerY = rescueOut.overridePlayerPos.y;
+      this.playerZ = rescueOut.overridePlayerPos.z;
+      this.playerHeading = rescueOut.overridePlayerPos.heading;
+      this.playerVx = 0;
+      this.playerVz = 0;
+      this.isSwimming = false;
+    }
+    if (rescueOut.justArrivedAtIsland) {
+      this.playerY = walkableHeightAt(this.playerX, this.playerZ);
+      this.companionState.x = this.playerX - 1.6;
+      this.companionState.z = this.playerZ + 1.2;
+      this.companionState.y = this.playerY;
+      this.companionState.activity = 'idle';
+      this.audio.playStationChime();
+      this.showNotice(
+        'Rescued by the Snowman on Jet Ski! Welcome to the new Snowman Island!'
+      );
+      this.snapThirdPersonCamera();
+      this.emitHudSnapshot();
+    }
+
+    // Step Snowman Multi-Transport Exact-Location Taxi Service (Cycle<->JetSki morph, Bus, Train, Sub, Aircraft, Combined!)
+    if (this.snowmanTaxiState.phase !== 'idle') {
+      const taxiOut = stepSnowmanTaxi(this.snowmanTaxiState, {
+        dt,
+        playerX: this.playerX,
+        playerZ: this.playerZ,
+      });
+      this.snowmanTaxiState = taxiOut.state;
+      this.container.dataset.snowmanTaxiPhase = this.snowmanTaxiState.phase;
+      if (taxiOut.justMorphed) {
+        this.audio.playIcelandTransform(true);
+      }
+      if (taxiOut.justPickedUp) {
+        this.audio.playDoorChime();
+        this.showNotice(this.snowmanTaxiState.statusMessage);
+        this.emitHudSnapshot();
+      }
+      if (taxiOut.overridePlayerPos) {
+        this.playerX = taxiOut.overridePlayerPos.x;
+        this.playerY = taxiOut.overridePlayerPos.y;
+        this.playerZ = taxiOut.overridePlayerPos.z;
+        this.playerHeading = taxiOut.overridePlayerPos.heading;
+        this.playerVx = 0;
+        this.playerVz = 0;
+        this.isSwimming = false;
+        this.activeVehicle = 'none';
+      }
+      if (taxiOut.justArrived) {
+        this.companionState.x = this.playerX - 1.8;
+        this.companionState.z = this.playerZ + 1.4;
+        this.companionState.y = Math.max(0.2, walkableHeightAt(this.companionState.x, this.companionState.z));
+        this.audio.playStationChime();
+        this.showNotice(this.snowmanTaxiState.statusMessage);
+        this.snapThirdPersonCamera();
+        this.emitHudSnapshot();
+      }
+    }
+    this.snowmanTaxiWorld.update(this.snowmanTaxiState, this.elapsed, dt);
+
+    // Step Flagship Expedition Vehicles (Safari Jeep, Gold/Wood VTOL, Sport & Pro Jet Skis) + Living 22-Species Wildlife Ecosystem
+    if (this.mode !== 'paused') {
+      const expInput = {
+        forward: this.mode === 'playing' ? combined.forward : 0,
+        turn: this.mode === 'playing' ? combined.right : 0,
+        ascend:
+          this.mode === 'playing' &&
+          (this.vtolVerticalAscend || this.keysHeld.has('Space') || this.keysHeld.has('KeyR')),
+        descend:
+          this.mode === 'playing' &&
+          (this.vtolVerticalDescend ||
+            this.keysHeld.has('ControlLeft') ||
+            this.keysHeld.has('ControlRight') ||
+            this.keysHeld.has('KeyQ') ||
+            this.keysHeld.has('KeyF')),
+        brake: this.mode === 'playing' && this.keysHeld.has('Space'),
+        boost: this.mode === 'playing' && isSprinting,
+        cameraPitch: this.camPitch,
+      };
+
+      const jeepInVault = Boolean(this.safariJeepState.inVault);
+      stepSafariJeep(
+        this.safariJeepState,
+        expInput,
+        dt,
+        this.weather,
+        this.activeVehicle === 'safari_jeep',
+        jeepInVault ? vaultFloorYAt : undefined
+      );
+      if (this.activeVehicle === 'safari_jeep') {
+        const jeepTunnel = stepGenericVehicleVaultTunnel({
+          x: this.safariJeepState.x,
+          z: this.safariJeepState.z,
+          heading: this.safariJeepState.heading,
+          speed: this.safariJeepState.speed,
+          inVault: this.homeVaultState.inVault,
+          exitGateProgress: this.homeVaultState.exitGateProgress,
+          hatchOpenProgress: this.homeVaultState.hatchOpenProgress,
+          margin: 1.7,
+        });
+        this.safariJeepState.x = jeepTunnel.x;
+        this.safariJeepState.z = jeepTunnel.z;
+        this.safariJeepState.inVault = jeepTunnel.inVault;
+        if (jeepTunnel.inVault) {
+          this.safariJeepState.y = jeepTunnel.y;
+        }
+        if (jeepTunnel.hitWall) {
+          this.safariJeepState.speed *= -0.18;
+        }
+        this.applyVehicleVaultTransition(
+          '4×4 Safari Jeep',
+          jeepTunnel.y,
+          jeepTunnel.enteredVault,
+          jeepTunnel.exitedToSurface
+        );
+      }
+
+      const bikeInVault = Boolean(this.dirtBikeState.inVault);
+      stepDirtBike(
+        this.dirtBikeState,
+        {
+          ...expInput,
+          rev: this.mode === 'playing' && (this.dirtBikeManualRev || this.keysHeld.has('KeyR')),
+        },
+        dt,
+        this.weather,
+        this.activeVehicle === 'dirt_bike_49cc',
+        this.elapsed,
+        bikeInVault ? vaultFloorYAt : undefined
+      );
+      if (this.activeVehicle === 'dirt_bike_49cc') {
+        const bikeTunnel = stepGenericVehicleVaultTunnel({
+          x: this.dirtBikeState.x,
+          z: this.dirtBikeState.z,
+          heading: this.dirtBikeState.heading,
+          speed: this.dirtBikeState.speed,
+          inVault: this.homeVaultState.inVault,
+          exitGateProgress: this.homeVaultState.exitGateProgress,
+          hatchOpenProgress: this.homeVaultState.hatchOpenProgress,
+          margin: 1.15,
+        });
+        this.dirtBikeState.x = bikeTunnel.x;
+        this.dirtBikeState.z = bikeTunnel.z;
+        this.dirtBikeState.inVault = bikeTunnel.inVault;
+        if (bikeTunnel.inVault) {
+          this.dirtBikeState.y = bikeTunnel.y;
+        }
+        if (bikeTunnel.hitWall) {
+          this.dirtBikeState.speed *= -0.18;
+        }
+        this.applyVehicleVaultTransition(
+          '49cc Petrol Dirt Bike',
+          bikeTunnel.y,
+          bikeTunnel.enteredVault,
+          bikeTunnel.exitedToSurface
+        );
+      }
+
+      const gliderInVault = Boolean(this.hoverGliderState.inVault);
+      stepHoverGlider(
+        this.hoverGliderState,
+        expInput,
+        dt,
+        this.elapsed,
+        this.activeVehicle === 'hover_glider',
+        gliderInVault ? vaultFloorYAt : undefined,
+        gliderInVault ? VAULT_CEILING_Y - 2.0 : undefined
+      );
+      if (this.activeVehicle === 'hover_glider' && (this.homeVaultState.inVault || this.hoverGliderState.y < 5.5)) {
+        const gliderSpd = Math.hypot(this.hoverGliderState.vx, this.hoverGliderState.vz);
+        const gliderVelHeading =
+          gliderSpd > 0.2 ? Math.atan2(this.hoverGliderState.vx, this.hoverGliderState.vz) : this.hoverGliderState.heading;
+        const gliderTunnel = stepGenericVehicleVaultTunnel({
+          x: this.hoverGliderState.x,
+          z: this.hoverGliderState.z,
+          heading: gliderVelHeading,
+          speed: gliderSpd,
+          inVault: this.homeVaultState.inVault,
+          exitGateProgress: this.homeVaultState.exitGateProgress,
+          hatchOpenProgress: this.homeVaultState.hatchOpenProgress,
+          margin: 1.05,
+        });
+        this.hoverGliderState.x = gliderTunnel.x;
+        this.hoverGliderState.z = gliderTunnel.z;
+        this.hoverGliderState.inVault = gliderTunnel.inVault;
+        if (gliderTunnel.enteredVault) {
+          this.hoverGliderState.y = gliderTunnel.y + 0.72;
+        } else if (gliderTunnel.inVault) {
+          this.hoverGliderState.y = Math.max(
+            gliderTunnel.y + 0.35,
+            Math.min(VAULT_CEILING_Y - 2.0, this.hoverGliderState.y)
+          );
+        }
+        this.applyVehicleVaultTransition(
+          'Aero-Ti Hoverboard Glider',
+          gliderTunnel.y,
+          gliderTunnel.enteredVault,
+          gliderTunnel.exitedToSurface
+        );
+      }
+
+      const vtolInVault = Boolean(this.vtolState.inVault);
+      stepVtolAircraft(
+        this.vtolState,
+        expInput,
+        dt,
+        this.elapsed,
+        this.weather,
+        this.activeVehicle === 'vtol_aircraft',
+        vtolInVault ? vaultFloorYAt : undefined,
+        vtolInVault ? VAULT_CEILING_Y - 2.6 : undefined
+      );
+      if (this.activeVehicle === 'vtol_aircraft' && (this.homeVaultState.inVault || this.vtolState.y < 5.5)) {
+        const vtolSpeed = Math.hypot(this.vtolState.vx, this.vtolState.vz);
+        const vtolVelHeading = vtolSpeed > 0.2 ? Math.atan2(this.vtolState.vx, this.vtolState.vz) : this.vtolState.heading;
+        const vtolTunnel = stepGenericVehicleVaultTunnel({
+          x: this.vtolState.x,
+          z: this.vtolState.z,
+          heading: vtolVelHeading,
+          speed: vtolSpeed,
+          inVault: this.homeVaultState.inVault,
+          exitGateProgress: this.homeVaultState.exitGateProgress,
+          hatchOpenProgress: this.homeVaultState.hatchOpenProgress,
+          margin: 1.85,
+        });
+        this.vtolState.x = vtolTunnel.x;
+        this.vtolState.z = vtolTunnel.z;
+        this.vtolState.inVault = vtolTunnel.inVault;
+        if (vtolTunnel.enteredVault) {
+          this.vtolState.y = vtolTunnel.y + 0.6;
+        } else if (vtolTunnel.inVault) {
+          this.vtolState.y = Math.max(vtolTunnel.y, Math.min(VAULT_CEILING_Y - 2.6, this.vtolState.y));
+        }
+        this.applyVehicleVaultTransition(
+          'Gold/Wood VTOL Aircraft',
+          this.vtolState.y,
+          vtolTunnel.enteredVault,
+          vtolTunnel.exitedToSurface
+        );
+      }
+
+      stepJetSki(
+        this.sportJetSkiState,
+        expInput,
+        dt,
+        this.elapsed,
+        this.weather,
+        this.activeVehicle === 'jetski_sport',
+        this.sportJetSkiState.inVault ? vaultFloorYAt : undefined
+      );
+      if (this.activeVehicle === 'jetski_sport') {
+        const skiTunnel = stepGenericVehicleVaultTunnel({
+          x: this.sportJetSkiState.x,
+          z: this.sportJetSkiState.z,
+          heading: this.sportJetSkiState.heading,
+          speed: this.sportJetSkiState.speed,
+          inVault: this.homeVaultState.inVault,
+          exitGateProgress: this.homeVaultState.exitGateProgress,
+          hatchOpenProgress: this.homeVaultState.hatchOpenProgress,
+          margin: 1.3,
+        });
+        this.sportJetSkiState.x = skiTunnel.x;
+        this.sportJetSkiState.z = skiTunnel.z;
+        this.sportJetSkiState.inVault = skiTunnel.inVault;
+        if (skiTunnel.inVault) {
+          this.sportJetSkiState.y = skiTunnel.y + 0.14;
+        }
+        this.applyVehicleVaultTransition(
+          'Sport Jet Ski 310X',
+          skiTunnel.y,
+          skiTunnel.enteredVault,
+          skiTunnel.exitedToSurface
+        );
+      }
+
+      stepJetSki(
+        this.perfJetSkiState,
+        expInput,
+        dt,
+        this.elapsed,
+        this.weather,
+        this.activeVehicle === 'jetski_perf',
+        this.perfJetSkiState.inVault ? vaultFloorYAt : undefined
+      );
+      if (this.activeVehicle === 'jetski_perf') {
+        const skiTunnel = stepGenericVehicleVaultTunnel({
+          x: this.perfJetSkiState.x,
+          z: this.perfJetSkiState.z,
+          heading: this.perfJetSkiState.heading,
+          speed: this.perfJetSkiState.speed,
+          inVault: this.homeVaultState.inVault,
+          exitGateProgress: this.homeVaultState.exitGateProgress,
+          hatchOpenProgress: this.homeVaultState.hatchOpenProgress,
+          margin: 1.3,
+        });
+        this.perfJetSkiState.x = skiTunnel.x;
+        this.perfJetSkiState.z = skiTunnel.z;
+        this.perfJetSkiState.inVault = skiTunnel.inVault;
+        if (skiTunnel.inVault) {
+          this.perfJetSkiState.y = skiTunnel.y + 0.14;
+        }
+        this.applyVehicleVaultTransition(
+          'Apex-K Pro Jet Ski',
+          skiTunnel.y,
+          skiTunnel.enteredVault,
+          skiTunnel.exitedToSurface
+        );
+      }
+
+      if (this.activeVehicle === 'hover_glider') {
+        this.playerX = this.hoverGliderState.x;
+        this.playerY = this.hoverGliderState.y + 0.9;
+        this.playerZ = this.hoverGliderState.z;
+        this.playerHeading = this.hoverGliderState.heading;
+      } else if (this.activeVehicle === 'dirt_bike_49cc') {
+        this.playerX = this.dirtBikeState.x;
+        this.playerY = this.dirtBikeState.y + 0.9;
+        this.playerZ = this.dirtBikeState.z;
+        this.playerHeading = this.dirtBikeState.heading;
+      } else if (this.activeVehicle === 'safari_jeep') {
+        this.playerX = this.safariJeepState.x;
+        this.playerY = this.safariJeepState.y + 1.05;
+        this.playerZ = this.safariJeepState.z;
+        this.playerHeading = this.safariJeepState.heading;
+      } else if (this.activeVehicle === 'vtol_aircraft') {
+        this.playerX = this.vtolState.x;
+        this.playerY = this.vtolState.y + 1.15;
+        this.playerZ = this.vtolState.z;
+        this.playerHeading = this.vtolState.heading;
+      } else if (this.activeVehicle === 'jetski_sport') {
+        this.playerX = this.sportJetSkiState.x;
+        this.playerY = this.sportJetSkiState.y + 0.55;
+        this.playerZ = this.sportJetSkiState.z;
+        this.playerHeading = this.sportJetSkiState.heading;
+      } else if (this.activeVehicle === 'jetski_perf') {
+        this.playerX = this.perfJetSkiState.x;
+        this.playerY = this.perfJetSkiState.y + 0.55;
+        this.playerZ = this.perfJetSkiState.z;
+        this.playerHeading = this.perfJetSkiState.heading;
+      }
+
+      const hideExpeditionRider =
+        this.cameraPerspective === 'cockpit' || this.cameraPerspective === 'first_person';
+      this.expeditionVehiclesWorld.update({
+        dt,
+        elapsed: this.elapsed,
+        jeep: this.safariJeepState,
+        vtol: this.vtolState,
+        sportJetSki: this.sportJetSkiState,
+        perfJetSki: this.perfJetSkiState,
+        dirtBike: this.dirtBikeState,
+        dirtBikeOccupied: this.activeVehicle === 'dirt_bike_49cc',
+        dirtBikeHideRider: hideExpeditionRider,
+        hoverGlider: this.hoverGliderState,
+        hoverGliderOccupied: this.activeVehicle === 'hover_glider',
+        hoverGliderHideRider: hideExpeditionRider,
+      });
+
+      const activeVehicleSpeed =
+        this.activeVehicle === 'hover_glider'
+          ? this.hoverGliderState.speedKmh
+          : this.activeVehicle === 'dirt_bike_49cc'
+          ? this.dirtBikeState.speedKmh
+          : this.activeVehicle === 'safari_jeep'
+          ? this.safariJeepState.speedKmh
+          : this.activeVehicle === 'vtol_aircraft'
+          ? this.vtolState.speedKmh
+          : this.activeVehicle === 'jetski_sport'
+          ? this.sportJetSkiState.speedKmh
+          : this.activeVehicle === 'jetski_perf'
+          ? this.perfJetSkiState.speedKmh
+          : 0;
+
+      stepWildlifeEcosystem(
+        this.wildlifeActors,
+        dt,
+        this.elapsed,
+        this.timeHours,
+        this.playerX,
+        this.playerZ,
+        this.activeVehicle !== 'none',
+        activeVehicleSpeed
+      );
+      this.wildlifeEcosystemWorld.update(this.wildlifeActors, this.elapsed);
+
+      // Update Wildlife Observation Viewfinder target & auto-discover nearby animals (< 28m)
+      const camLookHeading = this.camYaw + Math.PI;
+      this.wildlifeViewfinderTarget = findWildlifeInViewfinder(
+        this.wildlifeActors,
+        this.playerX,
+        this.playerZ,
+        this.activeVehicle !== 'none' ? this.playerHeading : camLookHeading,
+        72
+      );
+      if (this.wildlifeViewfinderTarget && this.wildlifeViewfinderTarget.distanceM < 28) {
+        this.wildlifeDiscoveredIds.add(this.wildlifeViewfinderTarget.speciesId);
+      }
+
+      // Dynamic Expedition Vehicle & Wildlife Spatial Web Audio
+      const expAudioVehicle =
+        this.activeVehicle === 'dirt_bike_49cc' ||
+        this.activeVehicle === 'safari_jeep' ||
+        this.activeVehicle === 'vtol_aircraft' ||
+        this.activeVehicle === 'jetski_sport' ||
+        this.activeVehicle === 'jetski_perf'
+          ? this.activeVehicle
+          : this.activeVehicle === 'hover_glider'
+          ? 'vtol_aircraft'
+          : 'none';
+      const expThrottle =
+        this.activeVehicle === 'hover_glider'
+          ? this.hoverGliderState.turbinePct / 100
+          : this.activeVehicle === 'dirt_bike_49cc'
+          ? this.dirtBikeState.throttle
+          : this.activeVehicle === 'vtol_aircraft'
+          ? this.vtolState.throttle
+          : this.activeVehicle === 'jetski_sport'
+          ? this.sportJetSkiState.throttle
+          : this.activeVehicle === 'jetski_perf'
+          ? this.perfJetSkiState.throttle
+          : Math.abs(expInput.forward);
+      const expSurfaceInt =
+        this.activeVehicle === 'dirt_bike_49cc'
+          ? this.dirtBikeState.dustIntensity
+          : this.activeVehicle === 'safari_jeep'
+          ? Math.max(this.safariJeepState.mudSplashIntensity, this.safariJeepState.dustIntensity)
+          : this.activeVehicle === 'jetski_sport'
+          ? this.sportJetSkiState.sprayIntensity
+          : this.activeVehicle === 'jetski_perf'
+          ? this.perfJetSkiState.sprayIntensity
+          : 0;
+      this.audio.updateExpeditionAudio({
+        dt,
+        vehicle: expAudioVehicle,
+        speedKmh: activeVehicleSpeed,
+        throttle: expThrottle,
+        surfaceOrWaveIntensity: expSurfaceInt,
+        nearestWildlifeSpecies: this.wildlifeViewfinderTarget?.speciesId ?? null,
+        nearestWildlifeDistM: this.wildlifeViewfinderTarget?.distanceM ?? 999,
+      });
     }
 
     // Step Live Underground Subway Train & Active Station Transit Timer
@@ -6236,10 +9174,22 @@ export class DreamlineEngine {
     );
     this.sunLight.target.position.set(this.playerX, 0, this.playerZ);
 
-    // Step smooth sliding floor hatch inside En Illam
+    // Automatically slide open the Superhero House Secret Tunnel exterior blast doors when approaching in ANY vehicle!
+    if (
+      !this.homeVaultState.hatchUnlocked &&
+      isApproachingHouseTunnelExterior(this.playerX, this.playerZ)
+    ) {
+      this.homeVaultState = {
+        ...this.homeVaultState,
+        hatchUnlocked: true,
+      };
+    }
+
+    // Step smooth sliding floor hatch & Secret Tunnel blast doors inside/beside En Illam
     this.homeVaultState = stepSecretHatchAnimation(this.homeVaultState, dt);
 
     if (this.homeVaultState.inVault) {
+      const inMegaNow = isInsideMegaChamber(this.playerX, this.playerZ);
       this.sunLight.color.setHex(0xe2e8f0);
       this.sunLight.intensity = 1.45;
       this.hemiLight.color.setHex(0xbae6fd);
@@ -6247,7 +9197,7 @@ export class DreamlineEngine {
       this.hemiLight.intensity = 1.75;
       this.scene.environmentIntensity = 0.55;
       this.fog.color.setHex(0x0b1220);
-      this.fog.density = 0.0045;
+      this.fog.density = inMegaNow ? 0.0014 : 0.0038;
     } else if (this.inUndergroundMetro) {
       this.sunLight.color.setHex(0xe0f2fe);
       this.sunLight.intensity = 1.25;
@@ -6273,13 +9223,27 @@ export class DreamlineEngine {
         Math.min(1, palette.hemiSky.b + flash * 0.62)
       );
       this.hemiLight.groundColor.setRGB(palette.hemiGround.r, palette.hemiGround.g, palette.hemiGround.b);
-      this.hemiLight.intensity = palette.hemiIntensity + flash * 0.95;
-      this.scene.environmentIntensity = Math.min(0.45, palette.environmentIntensity + flash * 0.25);
+      this.hemiLight.intensity = palette.hemiIntensity + flash * 0.65;
+      this.scene.environmentIntensity = Math.min(0.24, palette.environmentIntensity + flash * 0.14);
+
+      const baseProfile = resolveGraphicsProfile({
+        quality: this.settings.graphicsQuality,
+        isSoftwareGl: this.isSoftwareGl,
+        devicePixelRatio: typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1,
+        resolutionScale: this.settings.resolutionScale,
+        dynamicDprScale: this.dynamicDprScale,
+      });
+      // Soften rim light & exposure cleanly at night so nighttime is calm & serene without glare
+      this.rimLight.intensity = baseProfile.rimLightIntensity * (1 - palette.nightDarkness * 0.85);
+      this.renderer.toneMappingExposure =
+        baseProfile.toneMappingExposureBase *
+        this.settings.brightness *
+        (1 - palette.nightDarkness * 0.14);
 
       this.fog.color.setRGB(
-        Math.min(1, palette.fogColor.r + flash * 0.25),
-        Math.min(1, palette.fogColor.g + flash * 0.3),
-        Math.min(1, palette.fogColor.b + flash * 0.4)
+        Math.min(1, palette.fogColor.r + flash * 0.2),
+        Math.min(1, palette.fogColor.g + flash * 0.24),
+        Math.min(1, palette.fogColor.b + flash * 0.32)
       );
       this.fog.density = palette.fogDensity;
     }
@@ -6292,17 +9256,74 @@ export class DreamlineEngine {
       this.trainState.worldZ - CROSSING_POINT.z
     );
     const worldGlow = palette.worldLanternStrength;
+    const trainGradeNow = sampleRailway(this.trainState.t).gradeType;
+    const ridingTrainInSubwayTunnel =
+      this.activeVehicle === 'train' && trainGradeNow === 'subway_tunnel';
 
     if (!this.inUndergroundCave && !this.inUndergroundMetro && !this.homeVaultState.inVault) {
-      this.sceneBgColor.setRGB(palette.midSky.r, palette.midSky.g, palette.midSky.b);
-      this.skyWater.update(
-        this.elapsed,
-        dt,
-        palette,
-        _sunDir,
-        this.camera.position.x,
-        this.camera.position.z
+      // Underwater Ocean Atmosphere & Living Marine Ecosystem
+      const inOceanZone = isOceanAt(this.camera.position.x, this.camera.position.z);
+      this.underwaterAtmo = computeUnderwaterAtmosphere(
+        this.camera.position.y,
+        inOceanZone,
+        palette.nightDarkness
       );
+      if (this.mode !== 'paused') {
+        stepMarineLifeActors(
+          this.marineLifeActors,
+          dt,
+          this.elapsed,
+          this.submarineState.x,
+          this.submarineState.y,
+          this.submarineState.z,
+          this.activeVehicle === 'submarine'
+        );
+      }
+      this.underwaterOceanWorld.update({
+        elapsed: this.elapsed,
+        dt,
+        atmosphere: this.underwaterAtmo,
+        actors: this.marineLifeActors,
+        cameraX: this.camera.position.x,
+        cameraY: this.camera.position.y,
+        cameraZ: this.camera.position.z,
+      });
+
+      if (this.underwaterAtmo.submerged) {
+        this.skyWater.group.visible = false;
+        this.sceneBgColor.setHex(this.underwaterAtmo.fogHex);
+        this.fog.color.setHex(this.underwaterAtmo.fogHex);
+        this.fog.density = this.underwaterAtmo.fogDensity;
+        this.hemiLight.color.setHex(this.underwaterAtmo.ambientSkyHex);
+        this.hemiLight.groundColor.setHex(this.underwaterAtmo.ambientGroundHex);
+        this.hemiLight.intensity = 0.48 + this.underwaterAtmo.causticsStrength * 0.42;
+        this.sunLight.intensity *= this.underwaterAtmo.sunIntensityScale;
+        this.scene.environmentIntensity = 0.14;
+        this.audio.updateUnderwaterAmbience(1.0, this.underwaterAtmo.depthM, dt);
+      } else if (ridingTrainInSubwayTunnel) {
+        this.skyWater.group.visible = false;
+        this.sceneBgColor.setHex(0x0b1525);
+        this.fog.color.setHex(0x0b1525);
+        this.fog.density = 0.0085;
+        this.hemiLight.color.setHex(0x7dd3fc);
+        this.hemiLight.groundColor.setHex(0x1e293b);
+        this.hemiLight.intensity = 0.65;
+        this.sunLight.intensity = 0.12;
+        this.scene.environmentIntensity = 0.12;
+        this.audio.updateUnderwaterAmbience(0, 0, dt);
+      } else {
+        this.skyWater.group.visible = true;
+        this.sceneBgColor.setRGB(palette.midSky.r, palette.midSky.g, palette.midSky.b);
+        this.skyWater.update(
+          this.elapsed,
+          dt,
+          palette,
+          _sunDir,
+          this.camera.position.x,
+          this.camera.position.z
+        );
+        this.audio.updateUnderwaterAmbience(0, 0, dt);
+      }
       this.architecture.update({
         elapsed: this.elapsed,
         dt,
@@ -6390,7 +9411,8 @@ export class DreamlineEngine {
         worldGlow,
         this.campingState,
         this.playerX,
-        this.playerZ
+        this.playerZ,
+        this.weather
       );
       this.vehiclesWorld.syncBus(this.busState, this.elapsed, worldGlow);
       this.vehiclesWorld.syncBoats(this.boats, this.elapsed);
@@ -6519,8 +9541,9 @@ export class DreamlineEngine {
         this.playerX - AIRPORT_CENTER.x,
         this.playerZ - AIRPORT_CENTER.z
       );
+      const distToCentralMetro = Math.hypot(this.playerX - 16, this.playerZ - 22.8);
       this.airportMetroWorld.surfaceGroup.visible =
-        isHighAltitude || distToAirport < 230 || this.elapsed < 0.25;
+        isHighAltitude || distToAirport < 230 || distToCentralMetro < 150 || this.elapsed < 0.25;
 
       const distToExhibition = Math.hypot(
         this.playerX - EXHIBITION_ISLAND_CENTER.x,
@@ -6551,35 +9574,42 @@ export class DreamlineEngine {
         );
       }
 
-      // Step Offshore SSJ Dinosaur Island (chasing T-Rex, wall shatters 1->4, Safari Car & AK-47 tracer)
+      // Animate Dreamline Vehicle Spawning Garage beacon & screen pulse
+      this.vehicleGarageWorld.update(this.elapsed);
+
+      // Step Offshore Enormous Jurassic Park · SSJ Dinosaur Island (18 dinosaurs + 21 wildlife + swinging gate)
       const distToDino = Math.hypot(
         this.playerX - DINOSAUR_ISLAND_CENTER.x,
         this.playerZ - DINOSAUR_ISLAND_CENTER.z
       );
       const onDinoIslandNow = isOnDinosaurIsland(this.playerX, this.playerZ);
       const safariActive = this.activeVehicle === 'safari_car';
-      this.dinosaurIslandWorld.group.visible = onDinoIslandNow || safariActive || isHighAltitude || distToDino < 210;
-      if (onDinoIslandNow || safariActive || distToDino < 210 || this.elapsed < 0.25) {
+      const safariNearPlayer =
+        Math.hypot(
+          this.playerX - this.dinosaurIslandState.safariCar.x,
+          this.playerZ - this.dinosaurIslandState.safariCar.z
+        ) < 95;
+      this.dinosaurIslandWorld.group.visible =
+        onDinoIslandNow || safariActive || safariNearPlayer || isHighAltitude || distToDino < 980;
+      if (onDinoIslandNow || safariActive || safariNearPlayer || distToDino < 980 || this.elapsed < 0.25) {
         if (this.mode !== 'paused') {
           const dinoStep = stepDinosaurIslandState(
             this.dinosaurIslandState,
             this.playerX,
             this.playerZ,
             onDinoIslandNow,
-            dt
+            dt,
+            this.timeHours
           );
           this.dinosaurIslandState = dinoStep.state;
-          if (dinoStep.events.wallJustBrokenStage !== null) {
-            this.dinosaurIslandWorld.triggerWallShatter(dinoStep.events.wallJustBrokenStage);
-            this.audio.playWallBreakBoom(dinoStep.events.wallJustBrokenStage);
-            this.refreshDynamicColliders();
-            if (dinoStep.events.wallJustBrokenStage === 4) {
-              this.showNotice('ALL 4 WALLS BROKEN! Open-island Endless T-Rex Chase unlocked!');
-            }
-            this.emitHudSnapshot();
-          }
           if (dinoStep.events.dinoRoared) {
             this.audio.playDinoRoar();
+          }
+          if (dinoStep.events.trianglePlaceDiscovered) {
+            const p = dinoStep.events.trianglePlaceDiscovered;
+            this.showNotice(
+              `Triangle Track ${p.order}/6 · ${p.name} — ${p.subtitle}`
+            );
           }
         }
         this.dinosaurIslandWorld.update(
@@ -6592,6 +9622,33 @@ export class DreamlineEngine {
 
     } else if (this.homeVaultState.inVault) {
       this.sceneBgColor.setHex(0x0b1220);
+      // Keep ANY vehicle driven or spawned underground cleanly synced & visible!
+      if (this.busState.inVault || this.activeVehicle === 'bus') {
+        this.vehiclesWorld.group.visible = true;
+        this.vehiclesWorld.syncBus(this.busState, this.elapsed, 0.95);
+      }
+      if (this.boats.some((b) => b.inVault) || this.activeVehicle === 'boat') {
+        this.vehiclesWorld.group.visible = true;
+        this.vehiclesWorld.syncBoats(this.boats, this.elapsed);
+      }
+      if (this.camperState.inVault || this.activeVehicle === 'camper') {
+        this.enchantedForest.group.visible = true;
+        this.enchantedForest.setCamperOnlyVisible(true);
+        this.enchantedForest.update(this.camperState, this.elapsed, dt, this.playerX, this.playerZ, 0.95);
+      }
+      if (this.dinosaurIslandState.safariCar.inVault || this.activeVehicle === 'safari_car') {
+        this.dinosaurIslandWorld.group.visible = true;
+        this.dinosaurIslandWorld.setSafariCarOnlyVisible(true);
+        this.dinosaurIslandWorld.update(this.dinosaurIslandState, this.elapsed, dt, 0.95);
+      }
+      if (this.skyExplorerState.inVault || this.activeVehicle === 'sky_explorer') {
+        this.skyExplorerWorld.group.visible = true;
+        this.skyExplorerWorld.sync(this.skyExplorerState, this.elapsed, this.activeVehicle === 'sky_explorer');
+      }
+      if (this.orangeHeliState.inVault || this.activeVehicle === 'orange_heli') {
+        this.orangeHeliWorld.group.visible = true;
+        this.orangeHeliWorld.sync(this.orangeHeliState, this.elapsed, this.activeVehicle === 'orange_heli');
+      }
     } else if (this.inUndergroundMetro) {
       this.sceneBgColor.setHex(0x0b1322);
     } else {
@@ -6648,11 +9705,27 @@ export class DreamlineEngine {
     this.heroVfxWorld.update(heroVfx);
 
     const hasSurfaceVaultCar = this.homeVaultState.cars.some((c) => !c.inVault);
-    if (this.homeVaultState.inVault || hasSurfaceVaultCar || this.elapsed < 0.25) {
+    const nearEnIllamPortal =
+      Math.hypot(this.playerX - HOME_CENTER.x, this.playerZ - HOME_CENTER.z) < 95;
+    if (
+      this.homeVaultState.inVault ||
+      this.homeVaultState.elevatorPhase !== 'idle' ||
+      hasSurfaceVaultCar ||
+      nearEnIllamPortal ||
+      this.homeVaultState.hatchUnlocked ||
+      this.homeVaultState.hatchOpenProgress > 0.001 ||
+      this.homeVaultState.exitGateProgress > 0.001 ||
+      this.elapsed < 0.25
+    ) {
       this.homeVaultWorld.update({
         inVault: this.homeVaultState.inVault,
+        elevatorPhase: this.homeVaultState.elevatorPhase,
+        elevatorY: this.homeVaultState.elevatorY,
         activeHeroId: this.heroState.activeHeroId,
         cars: this.homeVaultState.cars,
+        exitGateProgress: this.homeVaultState.exitGateProgress,
+        hatchOpenProgress: this.homeVaultState.hatchOpenProgress,
+        playerZ: this.playerZ,
         elapsed: this.elapsed,
         dt,
       });
@@ -6670,7 +9743,7 @@ export class DreamlineEngine {
       );
     }
 
-    // Update Underground Metro Station, Dreamline International Airport, Airliner & 3D Parachute only when relevant
+    // Update Underground Metro Station, Simultaneous Surface-to-Tunnel Subway, Airport, Airliner & Parachute
     if (!this.inUndergroundCave && !this.homeVaultState.inVault) {
       this.airportMetroWorld.update(
         this.elapsed,
@@ -6686,6 +9759,20 @@ export class DreamlineEngine {
       );
     }
 
+    // Update Kadalkarai Submarine Service, Ocean Superhero Suits Building, Snowman Island & Rescue Jet Ski
+    if (!this.inUndergroundCave && !this.inUndergroundMetro && !this.homeVaultState.inVault) {
+      this.oceanServicesWorld.update({
+        elapsed: this.elapsed,
+        dt,
+        nightFactor: worldGlow,
+        submarine: this.submarineState,
+        rescue: this.snowmanRescueState,
+        activeHeroId: this.heroState.activeHeroId,
+        playerX: this.playerX,
+        playerZ: this.playerZ,
+      });
+    }
+
     // Re-evaluate <= 3 active nearest dynamic lights at 4Hz (slashes fragment shader cost!)
     this.lightBudgetTimer += dt;
     if (this.lightBudgetTimer >= 0.25) {
@@ -6698,6 +9785,23 @@ export class DreamlineEngine {
         this.skyExplorerState,
         this.elapsed,
         this.activeVehicle === 'sky_explorer'
+      );
+      if (this.activeVehicle !== 'orange_heli' && this.mode !== 'paused') {
+        this.orangeHeliState = stepOrangeHeliState(
+          this.orangeHeliState,
+          0,
+          0,
+          false,
+          false,
+          false,
+          false,
+          dt
+        );
+      }
+      this.orangeHeliWorld.sync(
+        this.orangeHeliState,
+        this.elapsed,
+        this.activeVehicle === 'orange_heli'
       );
       this.skyTaxiWorld.sync(
         {
@@ -6841,6 +9945,35 @@ export class DreamlineEngine {
         lanternStrength: palette.lanternStrength,
         dt,
       });
+    } else if (this.activeVehicle === 'orange_heli') {
+      const dSeat = this.orangeHeliWorld.getPilotSeatTransform();
+      const cSeat = this.orangeHeliWorld.getCompanionSeatTransform();
+      this.playerRig.setPose({
+        x: dSeat.position.x,
+        y: dSeat.position.y,
+        z: dSeat.position.z,
+        heading: dSeat.heading,
+        speed: 0,
+        turnRate: 0,
+        transportMode: 'walk',
+        isSitting: true,
+        visible: true,
+        lanternStrength: palette.lanternStrength,
+        elapsed: this.elapsed,
+        dt,
+      });
+      this.companionState.activity = 'boat';
+      this.companionState.restingInIgloo = false;
+      this.companionState.x = cSeat.position.x;
+      this.companionState.y = cSeat.position.y;
+      this.companionState.z = cSeat.position.z;
+      this.companionRig.setPose(this.companionState, this.elapsed, {
+        worldPos: cSeat.position,
+        worldHeading: cSeat.heading,
+        visible: true,
+        lanternStrength: palette.lanternStrength,
+        dt,
+      });
     } else if (this.activeVehicle === 'boat' && this.activeBoatId) {
       const pSeat = this.vehiclesWorld.getBoatPlayerTransform(this.activeBoatId);
       const cBow = this.vehiclesWorld.getBoatCompanionBowTransform(this.activeBoatId);
@@ -6907,7 +10040,17 @@ export class DreamlineEngine {
           dt,
         });
       }
-    } else if (this.activeVehicle === 'batmobile' || this.activeVehicle === 'vault_car') {
+    } else if (
+      this.activeVehicle === 'batmobile' ||
+      this.activeVehicle === 'vault_car' ||
+      this.activeVehicle === 'submarine' ||
+      this.activeVehicle === 'safari_jeep' ||
+      this.activeVehicle === 'vtol_aircraft' ||
+      this.activeVehicle === 'jetski_sport' ||
+      this.activeVehicle === 'jetski_perf' ||
+      this.activeVehicle === 'dirt_bike_49cc' ||
+      this.activeVehicle === 'hover_glider'
+    ) {
       this.playerRig.setPose({
         x: this.playerX,
         y: this.playerY,
@@ -6975,6 +10118,7 @@ export class DreamlineEngine {
           isFlying: this.heroState.isFlying,
           isGliding: this.heroState.isGliding,
           isWebSwinging: this.heroState.isWebSwinging,
+          isDiving: this.heroState.isDiving,
           isSitting: this.isSitting,
           helmetOpen: this.heroState.helmetOpen,
           energyShieldActive: this.heroState.energyShieldActive,
@@ -6982,11 +10126,30 @@ export class DreamlineEngine {
           spiderSenseActive: this.heroState.spiderSenseActive,
           attackTimer: this.heroState.attackAnimTimer,
           webHandSide: this.webSwingState.handSide,
+          swingAngleRad: this.webSwingState.swingAngleRad,
+          airTrickKind: this.heroState.airTrickKind,
+          airTrickAngle: this.heroState.airTrickAngle,
+          dodgeTimer: this.heroState.dodgeTimer,
+          dodgeKind: this.heroState.dodgeKind,
           dt,
           bankRad: this.smoothBankRad,
           pitchLeanRad: this.smoothPitchLeanRad,
           flightSurgeBlend: this.smoothFlightSurge,
         });
+      }
+
+      // Dynamic Insomniac Speed FOV Kick during high-speed Web-Swinging, Diving & Supersonic Flight!
+      const targetFov = this.heroState.isWebSwinging
+        ? Math.min(64, 51 + moveSpeed * 0.34)
+        : this.heroState.isDiving
+          ? 62
+          : this.heroState.isFlying && moveSpeed > 20
+            ? Math.min(62, 50 + (moveSpeed - 20) * 0.25)
+            : 50;
+      if (Math.abs(targetFov - this.smoothCameraFov) > 0.08) {
+        this.smoothCameraFov += (targetFov - this.smoothCameraFov) * Math.min(1, dt * 5.2);
+        this.camera.fov = this.smoothCameraFov;
+        this.camera.updateProjectionMatrix();
       }
 
       if (
@@ -7083,7 +10246,8 @@ export class DreamlineEngine {
       this.activeVehicle === 'vault_car' ||
       this.activeVehicle === 'airliner' ||
       this.activeVehicle === 'sky_explorer' ||
-      this.activeVehicle === 'safari_car';
+      this.activeVehicle === 'safari_car' ||
+      this.activeVehicle === 'submarine';
     this.playerLanternState = stepPlayerLantern(this.playerLanternState, {
       dt,
       elapsed: this.elapsed,
@@ -7152,14 +10316,20 @@ export class DreamlineEngine {
     this.updateCamera(dt);
   }
 
-  private updateCamera(dt: number): void {
+  private updateCamera(dt: number, snap = false): void {
     // Sync any external direct assignments to camYaw/camPitch/camDistance (e.g. boarding vehicles/teleports)
     if (
+      snap ||
       Math.abs(this.camYaw - this.lastCamYawSynced) > 1e-5 ||
       Math.abs(this.camPitch - this.lastCamPitchSynced) > 1e-5 ||
       Math.abs(this.camDistance - this.lastCamDistSynced) > 1e-5
     ) {
       syncSmoothCameraOrbitTargets(this.smoothCam, this.camYaw, this.camPitch, this.camDistance);
+      if (snap) {
+        this.smoothCam.yaw = this.camYaw;
+        this.smoothCam.pitch = this.camPitch;
+        this.smoothCam.distance = this.camDistance;
+      }
     }
 
     // Gentle auto-align behind moving hero/player when not manually dragging screen
@@ -7170,14 +10340,16 @@ export class DreamlineEngine {
         : null;
     const autoFollowStrength = this.heroState.isFlying || this.heroState.isWebSwinging ? 0.65 : 0.28;
 
-    stepSmoothCameraOrbit(this.smoothCam, {
-      dt,
-      isDragging: this.isDragging,
-      autoFollowYaw,
-      autoFollowStrength,
-      minPitch: -0.18,
-      maxPitch: 1.05,
-    });
+    if (!snap) {
+      stepSmoothCameraOrbit(this.smoothCam, {
+        dt,
+        isDragging: this.isDragging,
+        autoFollowYaw,
+        autoFollowStrength,
+        minPitch: this.isLookToFlyActive() ? -0.78 : -0.18,
+        maxPitch: 1.05,
+      });
+    }
     this.camYaw = this.smoothCam.yaw;
     this.camPitch = this.smoothCam.pitch;
     this.camDistance = this.smoothCam.distance;
@@ -7185,7 +10357,7 @@ export class DreamlineEngine {
     this.lastCamPitchSynced = this.camPitch;
     this.lastCamDistSynced = this.camDistance;
 
-    const damp = 1 - Math.exp(-7.2 * dt);
+    const damp = snap ? 1 : 1 - Math.exp(-7.2 * dt);
 
     if (this.mode === 'title') {
       const swayZ = Math.sin(this.elapsed * 0.16) * 0.65;
@@ -7271,6 +10443,338 @@ export class DreamlineEngine {
       return;
     }
 
+    // Multi-Perspective Expedition Camera System (8 perspectives: Chase, 1st-Person, Cockpit, Free-Roam, Cinematic, Wildlife Obs, Drone)
+    const isExpeditionVeh =
+      this.activeVehicle === 'hover_glider' ||
+      this.activeVehicle === 'dirt_bike_49cc' ||
+      this.activeVehicle === 'safari_jeep' ||
+      this.activeVehicle === 'vtol_aircraft' ||
+      this.activeVehicle === 'jetski_sport' ||
+      this.activeVehicle === 'jetski_perf';
+    if (isExpeditionVeh || this.cameraPerspective === 'drone' || this.cameraPerspective === 'wildlife_obs' || this.cameraPerspective === 'cinematic') {
+      const vehX =
+        this.activeVehicle === 'hover_glider'
+          ? this.hoverGliderState.x
+          : this.activeVehicle === 'dirt_bike_49cc'
+          ? this.dirtBikeState.x
+          : this.activeVehicle === 'safari_jeep'
+          ? this.safariJeepState.x
+          : this.activeVehicle === 'vtol_aircraft'
+          ? this.vtolState.x
+          : this.activeVehicle === 'jetski_sport'
+          ? this.sportJetSkiState.x
+          : this.activeVehicle === 'jetski_perf'
+          ? this.perfJetSkiState.x
+          : this.playerX;
+      const vehY =
+        this.activeVehicle === 'hover_glider'
+          ? this.hoverGliderState.y
+          : this.activeVehicle === 'dirt_bike_49cc'
+          ? this.dirtBikeState.y
+          : this.activeVehicle === 'safari_jeep'
+          ? this.safariJeepState.y
+          : this.activeVehicle === 'vtol_aircraft'
+          ? this.vtolState.y
+          : this.activeVehicle === 'jetski_sport'
+          ? this.sportJetSkiState.y
+          : this.activeVehicle === 'jetski_perf'
+          ? this.perfJetSkiState.y
+          : this.playerY;
+      const vehZ =
+        this.activeVehicle === 'hover_glider'
+          ? this.hoverGliderState.z
+          : this.activeVehicle === 'dirt_bike_49cc'
+          ? this.dirtBikeState.z
+          : this.activeVehicle === 'safari_jeep'
+          ? this.safariJeepState.z
+          : this.activeVehicle === 'vtol_aircraft'
+          ? this.vtolState.z
+          : this.activeVehicle === 'jetski_sport'
+          ? this.sportJetSkiState.z
+          : this.activeVehicle === 'jetski_perf'
+          ? this.perfJetSkiState.z
+          : this.playerZ;
+      const vehH =
+        this.activeVehicle === 'hover_glider'
+          ? this.hoverGliderState.heading
+          : this.activeVehicle === 'dirt_bike_49cc'
+          ? this.dirtBikeState.heading
+          : this.activeVehicle === 'safari_jeep'
+          ? this.safariJeepState.heading
+          : this.activeVehicle === 'vtol_aircraft'
+          ? this.vtolState.heading
+          : this.activeVehicle === 'jetski_sport'
+          ? this.sportJetSkiState.heading
+          : this.activeVehicle === 'jetski_perf'
+          ? this.perfJetSkiState.heading
+          : this.playerHeading;
+      const vehSpd =
+        this.activeVehicle === 'hover_glider'
+          ? this.hoverGliderState.speedKmh
+          : this.activeVehicle === 'dirt_bike_49cc'
+          ? this.dirtBikeState.speedKmh
+          : this.activeVehicle === 'safari_jeep'
+          ? this.safariJeepState.speedKmh
+          : this.activeVehicle === 'vtol_aircraft'
+          ? this.vtolState.speedKmh
+          : this.activeVehicle === 'jetski_sport'
+          ? this.sportJetSkiState.speedKmh
+          : this.activeVehicle === 'jetski_perf'
+          ? this.perfJetSkiState.speedKmh
+          : 0;
+
+      const sinH = Math.sin(vehH);
+      const cosH = Math.cos(vehH);
+      let targetFov = 54 + Math.min(14, vehSpd * 0.12);
+
+      if (this.cameraPerspective === 'cockpit' && isExpeditionVeh) {
+        const seatFwd =
+          this.activeVehicle === 'hover_glider'
+            ? -0.05
+            : this.activeVehicle === 'dirt_bike_49cc'
+            ? -0.08
+            : this.activeVehicle === 'vtol_aircraft'
+            ? 1.1
+            : this.activeVehicle === 'safari_jeep'
+            ? -0.1
+            : -0.15;
+        const seatUp =
+          this.activeVehicle === 'hover_glider'
+            ? 1.52
+            : this.activeVehicle === 'dirt_bike_49cc'
+            ? 1.54
+            : this.activeVehicle === 'vtol_aircraft'
+            ? 1.62
+            : this.activeVehicle === 'safari_jeep'
+            ? 1.72
+            : 1.12;
+        const seatRight = this.activeVehicle === 'safari_jeep' ? 0.36 : 0;
+        _camTargetPos.set(
+          vehX + sinH * seatFwd + cosH * seatRight,
+          vehY + seatUp,
+          vehZ + cosH * seatFwd - sinH * seatRight
+        );
+        const pitchAim =
+          this.activeVehicle === 'hover_glider' || this.activeVehicle === 'vtol_aircraft'
+            ? -Math.sin(this.camPitch - 0.16) * 8.0
+            : 0;
+        const lookDrop = this.activeVehicle === 'dirt_bike_49cc' ? 0.85 : 0.55;
+        _camTargetLook.set(vehX + sinH * 14, vehY + seatUp - lookDrop + pitchAim, vehZ + cosH * 14);
+        targetFov = this.activeVehicle === 'dirt_bike_49cc' || this.activeVehicle === 'hover_glider' ? 66 : 62;
+      } else if (this.cameraPerspective === 'first_person' && isExpeditionVeh) {
+        const hoodFwd =
+          this.activeVehicle === 'hover_glider'
+            ? 0.62
+            : this.activeVehicle === 'dirt_bike_49cc'
+            ? 0.52
+            : this.activeVehicle === 'vtol_aircraft'
+            ? 2.4
+            : this.activeVehicle === 'safari_jeep'
+            ? 1.55
+            : 1.05;
+        const hoodUp =
+          this.activeVehicle === 'hover_glider'
+            ? 0.52
+            : this.activeVehicle === 'dirt_bike_49cc'
+            ? 1.32
+            : this.activeVehicle === 'vtol_aircraft'
+            ? 1.48
+            : this.activeVehicle === 'safari_jeep'
+            ? 1.62
+            : 0.96;
+        const pitchAim =
+          this.activeVehicle === 'hover_glider' || this.activeVehicle === 'vtol_aircraft'
+            ? -Math.sin(this.camPitch - 0.16) * 12.0
+            : 0;
+        _camTargetPos.set(vehX + sinH * hoodFwd, vehY + hoodUp, vehZ + cosH * hoodFwd);
+        _camTargetLook.set(vehX + sinH * 24, vehY + hoodUp - 0.25 + pitchAim, vehZ + cosH * 24);
+        targetFov = 66;
+      } else if (this.cameraPerspective === 'drone') {
+        const orbitAng = this.isDragging ? this.camYaw : this.elapsed * 0.14 + vehH + Math.PI;
+        _camTargetPos.set(
+          vehX + Math.sin(orbitAng) * 26,
+          vehY + 22,
+          vehZ + Math.cos(orbitAng) * 26
+        );
+        _camTargetLook.set(vehX, vehY + 1.2, vehZ);
+        targetFov = 50;
+      } else if (this.cameraPerspective === 'cinematic') {
+        const sweep = this.elapsed * 0.24;
+        const rad =
+          this.activeVehicle === 'vtol_aircraft'
+            ? 14
+            : this.activeVehicle === 'hover_glider'
+            ? 3.85
+            : this.activeVehicle === 'dirt_bike_49cc'
+            ? 5.2
+            : 9.5;
+        const angleOff =
+          this.activeVehicle === 'hover_glider'
+            ? vehH + 0.65 + Math.sin(sweep) * 0.55
+            : vehH + Math.PI + Math.sin(sweep) * 0.95;
+        _camTargetPos.set(
+          vehX + Math.sin(angleOff) * rad,
+          vehY +
+            (this.activeVehicle === 'hover_glider'
+              ? 1.35
+              : this.activeVehicle === 'dirt_bike_49cc'
+              ? 1.85
+              : 3.6) +
+            Math.sin(sweep * 1.4) * (this.activeVehicle === 'hover_glider' ? 0.35 : 1.1),
+          vehZ + Math.cos(angleOff) * rad
+        );
+        _camTargetLook.set(
+          vehX + sinH * (this.activeVehicle === 'hover_glider' ? 0.2 : 1.8),
+          vehY + (this.activeVehicle === 'hover_glider' ? 0.45 : 0.95),
+          vehZ + cosH * (this.activeVehicle === 'hover_glider' ? 0.2 : 1.8)
+        );
+        targetFov = 46;
+      } else if (this.cameraPerspective === 'wildlife_obs') {
+        const t = this.wildlifeViewfinderTarget;
+        const eyeY = vehY + 2.1;
+        _camTargetPos.set(
+          vehX + Math.sin(this.camYaw) * 4.5,
+          eyeY + 0.6,
+          vehZ + Math.cos(this.camYaw) * 4.5
+        );
+        if (t) {
+          _camTargetLook.set(t.x, t.y + 0.9, t.z);
+          targetFov = 32; // Crisp wildlife telephoto zoom!
+        } else {
+          _camTargetLook.set(
+            vehX - Math.sin(this.camYaw) * 22,
+            eyeY,
+            vehZ - Math.cos(this.camYaw) * 22
+          );
+          targetFov = 36;
+        }
+      } else if (this.cameraPerspective === 'free_roam') {
+        const dist =
+          this.activeVehicle === 'vtol_aircraft'
+            ? 12.5
+            : this.activeVehicle === 'hover_glider'
+            ? 3.4
+            : this.activeVehicle === 'dirt_bike_49cc'
+            ? 3.8
+            : 8.2;
+        _camTargetPos.set(
+          vehX + Math.sin(this.camYaw) * Math.cos(this.camPitch) * dist,
+          Math.max(
+            vehY + (this.activeVehicle === 'hover_glider' ? 0.15 : 0.6),
+            vehY +
+              Math.sin(this.camPitch) * dist +
+              (this.activeVehicle === 'hover_glider'
+                ? 0.72
+                : this.activeVehicle === 'dirt_bike_49cc'
+                ? 1.05
+                : 2.2)
+          ),
+          vehZ + Math.cos(this.camYaw) * Math.cos(this.camPitch) * dist
+        );
+        _camTargetLook.set(
+          vehX,
+          vehY + (this.activeVehicle === 'hover_glider' ? 0.45 : this.activeVehicle === 'dirt_bike_49cc' ? 0.82 : 1.35),
+          vehZ
+        );
+        targetFov = 48;
+      } else {
+        // Default smooth Rear Chase Camera (with skyward/earthward Look-to-Fly pitch tracking for flying craft!)
+        if (!this.isDragging) {
+          const desiredYaw = vehH + Math.PI;
+          if (snap) {
+            this.camYaw = desiredYaw;
+            this.smoothCam.yaw = desiredYaw;
+            this.smoothCam.targetYaw = desiredYaw;
+            this.lastCamYawSynced = desiredYaw;
+          } else {
+            let diff = desiredYaw - this.camYaw;
+            while (diff > Math.PI) diff -= Math.PI * 2;
+            while (diff < -Math.PI) diff += Math.PI * 2;
+            this.camYaw += diff * (1 - Math.exp(-4.2 * dt));
+          }
+        }
+        const isFlyingExp = this.activeVehicle === 'hover_glider' || this.activeVehicle === 'vtol_aircraft';
+        const chaseDist =
+          this.activeVehicle === 'hover_glider'
+            ? 4.1
+            : this.activeVehicle === 'dirt_bike_49cc'
+            ? 3.85
+            : this.activeVehicle === 'vtol_aircraft'
+            ? 10.6
+            : this.activeVehicle === 'safari_jeep'
+            ? 6.6
+            : 5.5;
+        const chaseH =
+          this.activeVehicle === 'hover_glider'
+            ? 1.42
+            : this.activeVehicle === 'dirt_bike_49cc'
+            ? 1.75
+            : this.activeVehicle === 'vtol_aircraft'
+            ? 3.1
+            : this.activeVehicle === 'safari_jeep'
+            ? 2.65
+            : 2.05;
+        const lookAhead =
+          this.activeVehicle === 'hover_glider'
+            ? 1.35
+            : this.activeVehicle === 'dirt_bike_49cc'
+            ? 1.15
+            : this.activeVehicle === 'vtol_aircraft'
+            ? 2.2
+            : this.activeVehicle === 'safari_jeep'
+            ? 1.6
+            : 1.8;
+        const lookY =
+          this.activeVehicle === 'hover_glider'
+            ? 0.72
+            : this.activeVehicle === 'dirt_bike_49cc'
+            ? 0.85
+            : this.activeVehicle === 'vtol_aircraft'
+            ? 1.35
+            : this.activeVehicle === 'safari_jeep'
+            ? 1.15
+            : 0.7;
+        const camX = vehX + Math.sin(this.camYaw) * Math.cos(isFlyingExp ? this.camPitch * 0.65 : 0) * chaseDist;
+        const camZ = vehZ + Math.cos(this.camYaw) * Math.cos(isFlyingExp ? this.camPitch * 0.65 : 0) * chaseDist;
+        const camGroundFloor = this.homeVaultState.inVault
+          ? vaultFloorYAt(camX, camZ) + 0.85
+          : Math.max(WATER_LEVEL + 0.75, walkableHeightAt(camX, camZ) + 0.75);
+        const pitchVerticalOffset = isFlyingExp
+          ? Math.sin(this.camPitch) * chaseDist * 0.78
+          : Math.sin(this.camPitch) * 1.4;
+        const rawChaseY = isFlyingExp
+          ? Math.max(camGroundFloor, vehY + chaseH + pitchVerticalOffset)
+          : this.homeVaultState.inVault
+          ? Math.max(vehY + 0.95, vehY + chaseH + pitchVerticalOffset)
+          : Math.max(WATER_LEVEL + 0.85, vehY + chaseH + pitchVerticalOffset);
+        const vaultMaxCamY =
+          vehY > VAULT_FLOOR_Y + 0.8 ? vehY + 3.1 : VAULT_CEILING_Y - 1.0;
+        const pitchLookShift = isFlyingExp ? -Math.sin(this.camPitch - 0.16) * 2.2 : 0;
+        _camTargetPos.set(
+          camX,
+          this.homeVaultState.inVault ? Math.min(vaultMaxCamY, rawChaseY) : rawChaseY,
+          camZ
+        );
+        _camTargetLook.set(vehX + sinH * lookAhead, vehY + lookY + pitchLookShift, vehZ + cosH * lookAhead);
+      }
+
+      if (this.homeVaultState.inVault) {
+        const vaultCeilCap =
+          vehY > VAULT_FLOOR_Y + 0.8 ? vehY + 3.4 : VAULT_CEILING_Y - 1.0;
+        _camTargetPos.y = Math.min(vaultCeilCap, _camTargetPos.y);
+      }
+
+      const camSmooth = snap ? 1 : 1 - Math.exp(-9.5 * dt);
+      this.camera.position.lerp(_camTargetPos, camSmooth);
+      _camCurrentLook.lerp(_camTargetLook, camSmooth);
+      this.camera.lookAt(_camCurrentLook);
+      if (Math.abs(this.camera.fov - targetFov) > 0.08) {
+        this.camera.fov = THREE.MathUtils.lerp(this.camera.fov, targetFov, camSmooth);
+        this.camera.updateProjectionMatrix();
+      }
+      return;
+    }
+
     if (this.activeVehicle === 'train') {
       if (this.trainViewMode === 'window') {
         // Exact same clean, unobstructed scenic window framing as the Dreamline Bus!
@@ -7298,9 +10802,13 @@ export class DreamlineEngine {
       } else {
         this.trainRig.getExteriorAnchor(_extAnchor);
         const dist = 14.5;
+        const sampleGrade = sampleRailway(this.trainState.t).gradeType;
+        const rawY = Math.max(_extAnchor.y + 0.6, _extAnchor.y + Math.sin(this.camPitch) * dist + 2.4);
+        const clampedTrainCamY =
+          sampleGrade === 'subway_tunnel' ? Math.min(_extAnchor.y + 3.2, rawY) : rawY;
         _camTargetPos.set(
           _extAnchor.x + Math.sin(this.camYaw) * Math.cos(this.camPitch) * dist,
-          Math.max(2.0, _extAnchor.y + Math.sin(this.camPitch) * dist + 2.4),
+          clampedTrainCamY,
           _extAnchor.z + Math.cos(this.camYaw) * Math.cos(this.camPitch) * dist
         );
         this.camera.position.lerp(_camTargetPos, damp);
@@ -7331,9 +10839,14 @@ export class DreamlineEngine {
           this.camYaw += diff * (1 - Math.exp(-2.8 * dt));
         }
         const dist = 11.5;
+        const rawBusY = this.homeVaultState.inVault
+          ? Math.max(anchor.y + 1.0, anchor.y + Math.sin(this.camPitch) * dist + 2.2)
+          : Math.max(2.2, anchor.y + Math.sin(this.camPitch) * dist + 2.2);
+        const busMaxY =
+          anchor.y > VAULT_FLOOR_Y + 1.6 ? anchor.y + 3.1 : VAULT_CEILING_Y - 1.0;
         _camTargetPos.set(
           anchor.x + Math.sin(this.camYaw) * Math.cos(this.camPitch) * dist,
-          Math.max(2.2, anchor.y + Math.sin(this.camPitch) * dist + 2.2),
+          this.homeVaultState.inVault ? Math.min(busMaxY, rawBusY) : rawBusY,
           anchor.z + Math.cos(this.camYaw) * Math.cos(this.camPitch) * dist
         );
         this.camera.position.lerp(_camTargetPos, damp);
@@ -7353,7 +10866,10 @@ export class DreamlineEngine {
         // Smooth behind-the-van follow camera with mouse orbit support!
         const cx = this.camperState.x;
         const cz = this.camperState.z;
-        const cy = walkableHeightAt(cx, cz) + 1.55;
+        const baseY = this.homeVaultState.inVault
+          ? vaultFloorYAt(cx, cz)
+          : walkableHeightAt(cx, cz);
+        const cy = baseY + 1.55;
         if (!this.isDragging && Math.abs(this.camperState.speed) > 0.6) {
           const desiredYaw = this.camperState.heading + Math.PI;
           let diff = desiredYaw - this.camYaw;
@@ -7362,10 +10878,12 @@ export class DreamlineEngine {
           this.camYaw += diff * (1 - Math.exp(-2.6 * dt));
         }
         const dist = 7.4;
+        const rawCamperY = Math.max(cy + 0.6, cy + Math.sin(this.camPitch) * dist + 1.1);
+        const camperMaxY = baseY > VAULT_FLOOR_Y + 0.8 ? baseY + 3.2 : VAULT_CEILING_Y - 1.0;
         _camTargetLook.set(cx, cy, cz);
         _camTargetPos.set(
           cx + Math.sin(this.camYaw) * Math.cos(this.camPitch) * dist,
-          Math.max(cy + 0.6, cy + Math.sin(this.camPitch) * dist + 1.1),
+          this.homeVaultState.inVault ? Math.min(camperMaxY, rawCamperY) : rawCamperY,
           cz + Math.cos(this.camYaw) * Math.cos(this.camPitch) * dist
         );
         this.camera.position.lerp(_camTargetPos, damp);
@@ -7446,9 +10964,62 @@ export class DreamlineEngine {
       }
     }
 
+    if (this.activeVehicle === 'submarine') {
+      const sub = this.submarineState;
+      if (!this.isDragging && Math.abs(sub.speed) > 0.6) {
+        const desiredYaw = sub.heading + Math.PI;
+        let diff = desiredYaw - this.camYaw;
+        while (diff > Math.PI) diff -= Math.PI * 2;
+        while (diff < -Math.PI) diff += Math.PI * 2;
+        this.camYaw += diff * (1 - Math.exp(-3.0 * dt));
+      }
+      const dist = 13.5;
+      _camTargetLook.set(
+        sub.x + Math.sin(sub.heading) * 3.5,
+        sub.y + 0.8,
+        sub.z + Math.cos(sub.heading) * 3.5
+      );
+      const camX = sub.x + Math.sin(this.camYaw) * Math.cos(this.camPitch) * dist;
+      const camZ = sub.z + Math.cos(this.camYaw) * Math.cos(this.camPitch) * dist;
+      const seabedFloorY = groundHeightAt(camX, camZ) + 1.45;
+      const desiredSubCamY = Math.max(seabedFloorY, sub.y + Math.sin(this.camPitch) * dist + 3.4);
+      _camTargetPos.set(camX, desiredSubCamY, camZ);
+      this.camera.position.lerp(_camTargetPos, damp);
+      _camCurrentLook.lerp(_camTargetLook, damp);
+      this.camera.lookAt(_camCurrentLook);
+      return;
+    }
+
+    if (this.snowmanRescueState.phase === 'boarding' || this.snowmanRescueState.phase === 'transporting') {
+      const rx = this.snowmanRescueState.jetSkiX;
+      const rz = this.snowmanRescueState.jetSkiZ;
+      const h = this.snowmanRescueState.jetSkiHeading;
+      const desiredYaw = h + Math.PI;
+      if (!this.isDragging) {
+        let diff = desiredYaw - this.camYaw;
+        while (diff > Math.PI) diff -= Math.PI * 2;
+        while (diff < -Math.PI) diff += Math.PI * 2;
+        this.camYaw += diff * (1 - Math.exp(-3.2 * dt));
+      }
+      const dist = 8.4;
+      _camTargetLook.set(rx + Math.sin(h) * 2.5, 1.0, rz + Math.cos(h) * 2.5);
+      _camTargetPos.set(
+        rx + Math.sin(this.camYaw) * dist,
+        3.2,
+        rz + Math.cos(this.camYaw) * dist
+      );
+      this.camera.position.lerp(_camTargetPos, damp);
+      _camCurrentLook.lerp(_camTargetLook, damp);
+      this.camera.lookAt(_camCurrentLook);
+      return;
+    }
+
     if (this.activeVehicle === 'safari_car') {
       const car = this.dinosaurIslandState.safariCar;
-      const cy = walkableHeightAt(car.x, car.z) + 1.5;
+      const baseCarY = this.homeVaultState.inVault
+        ? vaultFloorYAt(car.x, car.z)
+        : walkableHeightAt(car.x, car.z);
+      const cy = baseCarY + 1.5;
       if (!this.isDragging && Math.abs(car.speed) > 0.6) {
         const desiredYaw = car.heading + Math.PI;
         let diff = desiredYaw - this.camYaw;
@@ -7462,18 +11033,23 @@ export class DreamlineEngine {
       let tz = car.z + Math.cos(this.camYaw) * Math.cos(this.camPitch) * dist;
 
       // Prevent camera from clipping behind intact PAD-01N containment walls when driving inside arena
-      const acx = DINOSAUR_ARENA_CENTER.x;
-      const acz = DINOSAUR_ARENA_CENTER.z;
-      const ahs = 13.5;
-      const insideArena =
-        Math.abs(car.x - acx) < ahs - 0.5 && Math.abs(car.z - acz) < ahs - 0.5;
-      if (insideArena) {
-        const margin = 1.25;
-        if (this.dinosaurIslandState.wallsIntact[0]) tx = Math.max(acx - ahs + margin, tx);
-        if (this.dinosaurIslandState.wallsIntact[1]) tz = Math.max(acz - ahs + margin, tz);
-        if (this.dinosaurIslandState.wallsIntact[2]) tx = Math.min(acx + ahs - margin, tx);
-        if (this.dinosaurIslandState.wallsIntact[3]) tz = Math.min(acz + ahs - margin, tz);
-        ty = Math.max(ty, cy + 2.1);
+      if (!this.homeVaultState.inVault) {
+        const acx = DINOSAUR_ARENA_CENTER.x;
+        const acz = DINOSAUR_ARENA_CENTER.z;
+        const ahs = 13.5;
+        const insideArena =
+          Math.abs(car.x - acx) < ahs - 0.5 && Math.abs(car.z - acz) < ahs - 0.5;
+        if (insideArena) {
+          const margin = 1.25;
+          if (this.dinosaurIslandState.wallsIntact[0]) tx = Math.max(acx - ahs + margin, tx);
+          if (this.dinosaurIslandState.wallsIntact[1]) tz = Math.max(acz - ahs + margin, tz);
+          if (this.dinosaurIslandState.wallsIntact[2]) tx = Math.min(acx + ahs - margin, tx);
+          if (this.dinosaurIslandState.wallsIntact[3]) tz = Math.min(acz + ahs - margin, tz);
+          ty = Math.max(ty, cy + 2.1);
+        }
+      } else {
+        const maxCamY = baseCarY > VAULT_FLOOR_Y + 0.8 ? baseCarY + 3.2 : VAULT_CEILING_Y - 1.0;
+        ty = Math.min(maxCamY, ty);
       }
 
       _camTargetLook.set(car.x, cy + 0.25, car.z);
@@ -7494,15 +11070,18 @@ export class DreamlineEngine {
         while (diff < -Math.PI) diff += Math.PI * 2;
         this.camYaw += diff * (1 - Math.exp(-3.4 * dt));
       }
+      const airCamX = a.x + Math.sin(this.camYaw) * Math.cos(this.camPitch) * airDist;
+      const airCamZ = a.z + Math.cos(this.camYaw) * Math.cos(this.camPitch) * airDist;
+      const airFloor = Math.max(WATER_LEVEL + 1.8, walkableHeightAt(airCamX, airCamZ) + 1.8);
       _camTargetLook.set(
         a.x + Math.sin(a.heading) * 6.0,
-        a.y + 3.2,
+        a.y + 3.2 - Math.sin(this.camPitch - 0.2) * 3.5,
         a.z + Math.cos(a.heading) * 6.0
       );
       _camTargetPos.set(
-        a.x + Math.sin(this.camYaw) * Math.cos(this.camPitch) * airDist,
-        Math.max(a.y + 2.8, a.y + Math.sin(this.camPitch) * airDist + 5.6),
-        a.z + Math.cos(this.camYaw) * Math.cos(this.camPitch) * airDist
+        airCamX,
+        Math.max(airFloor, a.y + Math.sin(this.camPitch) * airDist + 4.8),
+        airCamZ
       );
       this.camera.position.lerp(_camTargetPos, damp);
       _camCurrentLook.lerp(_camTargetLook, damp);
@@ -7520,15 +11099,55 @@ export class DreamlineEngine {
         while (diff < -Math.PI) diff += Math.PI * 2;
         this.camYaw += diff * (1 - Math.exp(-3.4 * dt));
       }
+      const skyCamX = anchor.x + Math.sin(this.camYaw) * Math.cos(this.camPitch) * skyDist;
+      const skyCamZ = anchor.z + Math.cos(this.camYaw) * Math.cos(this.camPitch) * skyDist;
+      const skyFloor = this.homeVaultState.inVault
+        ? vaultFloorYAt(skyCamX, skyCamZ) + 0.9
+        : Math.max(WATER_LEVEL + 1.0, walkableHeightAt(skyCamX, skyCamZ) + 1.0);
       _camTargetLook.set(
         anchor.x + Math.sin(this.skyExplorerState.heading) * 3.0,
-        anchor.y + 0.4,
+        anchor.y + 0.4 - Math.sin(this.camPitch - 0.22) * 2.6,
         anchor.z + Math.cos(this.skyExplorerState.heading) * 3.0
       );
+      const rawSkyY = Math.max(skyFloor, anchor.y + Math.sin(this.camPitch) * skyDist + 2.2);
+      const skyMaxY = anchor.y > VAULT_FLOOR_Y + 2.0 ? anchor.y + 3.2 : VAULT_CEILING_Y - 1.0;
       _camTargetPos.set(
-        anchor.x + Math.sin(this.camYaw) * Math.cos(this.camPitch) * skyDist,
-        Math.max(2.0, anchor.y + Math.sin(this.camPitch) * skyDist + 2.2),
-        anchor.z + Math.cos(this.camYaw) * Math.cos(this.camPitch) * skyDist
+        skyCamX,
+        this.homeVaultState.inVault ? Math.min(skyMaxY, rawSkyY) : rawSkyY,
+        skyCamZ
+      );
+      this.camera.position.lerp(_camTargetPos, damp);
+      _camCurrentLook.lerp(_camTargetLook, damp);
+      this.camera.lookAt(_camCurrentLook);
+      return;
+    }
+
+    if (this.activeVehicle === 'orange_heli') {
+      const anchor = this.orangeHeliWorld.getFollowAnchor();
+      const heliDist = 12.6;
+      const desiredYaw = this.orangeHeliState.heading + Math.PI;
+      if (!this.isDragging) {
+        let diff = desiredYaw - this.camYaw;
+        while (diff > Math.PI) diff -= Math.PI * 2;
+        while (diff < -Math.PI) diff += Math.PI * 2;
+        this.camYaw += diff * (1 - Math.exp(-3.4 * dt));
+      }
+      const heliCamX = anchor.x + Math.sin(this.camYaw) * Math.cos(this.camPitch) * heliDist;
+      const heliCamZ = anchor.z + Math.cos(this.camYaw) * Math.cos(this.camPitch) * heliDist;
+      const heliFloor = this.homeVaultState.inVault
+        ? vaultFloorYAt(heliCamX, heliCamZ) + 1.0
+        : Math.max(WATER_LEVEL + 1.2, walkableHeightAt(heliCamX, heliCamZ) + 1.2);
+      _camTargetLook.set(
+        anchor.x + Math.sin(this.orangeHeliState.heading) * 3.0,
+        anchor.y + 0.6 - Math.sin(this.camPitch - 0.22) * 2.8,
+        anchor.z + Math.cos(this.orangeHeliState.heading) * 3.0
+      );
+      const rawHeliY = Math.max(heliFloor, anchor.y + Math.sin(this.camPitch) * heliDist + 2.6);
+      const heliMaxY = anchor.y > VAULT_FLOOR_Y + 2.0 ? anchor.y + 3.2 : VAULT_CEILING_Y - 1.0;
+      _camTargetPos.set(
+        heliCamX,
+        this.homeVaultState.inVault ? Math.min(heliMaxY, rawHeliY) : rawHeliY,
+        heliCamZ
       );
       this.camera.position.lerp(_camTargetPos, damp);
       _camCurrentLook.lerp(_camTargetLook, damp);
@@ -7553,12 +11172,28 @@ export class DreamlineEngine {
           : this.activeBoatId === 'bamboo_catamaran' || this.activeBoatId === 'tribal_outrigger'
           ? 10.6
           : 7.4;
-      _camTargetLook.set(bx, this.activeBoatId === 'sovereign_ship' ? 4.2 : 1.45, bz);
-      _camTargetPos.set(
-        bx + Math.sin(this.camYaw) * Math.cos(this.camPitch) * boatDist,
-        Math.max(1.8, (this.activeBoatId === 'sovereign_ship' ? 4.6 : 1.85) + Math.sin(this.camPitch) * boatDist),
-        bz + Math.cos(this.camYaw) * Math.cos(this.camPitch) * boatDist
-      );
+      if (this.homeVaultState.inVault) {
+        const boatFloorY = vaultFloorYAt(bx, bz);
+        const lookY = boatFloorY + (this.activeBoatId === 'sovereign_ship' ? 3.2 : 1.45);
+        const rawBoatY = Math.max(
+          boatFloorY + 1.2,
+          boatFloorY + 2.0 + Math.sin(this.camPitch) * boatDist
+        );
+        const boatMaxY = boatFloorY > VAULT_FLOOR_Y + 0.8 ? boatFloorY + 3.2 : VAULT_CEILING_Y - 1.0;
+        _camTargetLook.set(bx, lookY, bz);
+        _camTargetPos.set(
+          bx + Math.sin(this.camYaw) * Math.cos(this.camPitch) * boatDist,
+          Math.min(boatMaxY, rawBoatY),
+          bz + Math.cos(this.camYaw) * Math.cos(this.camPitch) * boatDist
+        );
+      } else {
+        _camTargetLook.set(bx, this.activeBoatId === 'sovereign_ship' ? 4.2 : 1.45, bz);
+        _camTargetPos.set(
+          bx + Math.sin(this.camYaw) * Math.cos(this.camPitch) * boatDist,
+          Math.max(1.8, (this.activeBoatId === 'sovereign_ship' ? 4.6 : 1.85) + Math.sin(this.camPitch) * boatDist),
+          bz + Math.cos(this.camYaw) * Math.cos(this.camPitch) * boatDist
+        );
+      }
       this.camera.position.lerp(_camTargetPos, damp);
       _camCurrentLook.lerp(_camTargetLook, damp);
       this.camera.lookAt(_camCurrentLook);
@@ -7783,6 +11418,12 @@ export class DreamlineEngine {
         altitudeM: this.skyExplorerState.altitudeM,
         boostActive: this.skyExplorerState.boostActive,
       },
+      orangeHeli: {
+        name: this.orangeHeliState.name,
+        speedKmh: this.orangeHeliState.speedKmh,
+        altitudeM: this.orangeHeliState.altitudeM,
+        boostActive: this.orangeHeliState.boostActive,
+      },
       camping: { ...this.campingState },
       home: { ...this.homeState },
       companion: { ...this.companionState },
@@ -7797,7 +11438,7 @@ export class DreamlineEngine {
       recentNotice: this.recentNotice,
       canExitTrain:
         this.activeVehicle === 'train' &&
-        (this.trainState.phase === 'stopped' || (this.trainDriverMode && this.trainState.speedKmh < 3)),
+        (this.trainState.phase === 'stopped' || this.trainDriverMode),
       canExitBus:
         this.activeVehicle === 'bus' &&
         (this.busState.phase === 'stopped' || (this.busDriverMode && this.busState.speedKmh < 3)),
@@ -7869,6 +11510,13 @@ export class DreamlineEngine {
         const activeCar = this.homeVaultState.activeVaultCarId
           ? this.homeVaultState.cars.find((c) => c.id === this.homeVaultState.activeVaultCarId)
           : null;
+        const inMega =
+          this.homeVaultState.inVault && isInsideMegaChamber(this.playerX, this.playerZ);
+        const megaDistM = inMega
+          ? getVaultMegaChamberDistanceM(this.playerX, this.playerZ)
+          : 0;
+        this.container.dataset.megaChamberDistM = String(megaDistM);
+        this.container.dataset.inMegaChamber = String(inMega);
         return {
           inPersonalHome: isPlayerInsidePersonalHome(
             this.playerX,
@@ -7879,11 +11527,69 @@ export class DreamlineEngine {
           hatchUnlocked: this.homeVaultState.hatchUnlocked,
           hatchOpenProgress: this.homeVaultState.hatchOpenProgress,
           inVault: this.homeVaultState.inVault,
+          elevatorPhase: this.homeVaultState.elevatorPhase,
+          elevatorProgress: this.homeVaultState.elevatorProgress,
+          elevatorY: this.homeVaultState.elevatorY,
+          exitGateOpen: this.homeVaultState.exitGateOpen,
+          exitGateProgress: this.homeVaultState.exitGateProgress,
           activeVaultCarName: activeCar ? getVaultCarSpec(activeCar.id).name : null,
           activeVaultCarSpeedKmh: activeCar ? activeCar.speedKmh : 0,
           activeVaultCarBoost: activeCar ? activeCar.boostActive : false,
+          megaChamberDistanceM: megaDistM,
+          inMegaChamber: inMega,
         };
       })(),
+      submarine: {
+        active: this.activeVehicle === 'submarine',
+        depthM: Number(this.submarineState.depth.toFixed(1)),
+        speedKmh: this.submarineState.speedKmh,
+        submerged: this.submarineState.submerged,
+        searchlightOn: this.submarineState.searchlightOn,
+      },
+      snowmanRescue: {
+        phase: this.snowmanRescueState.phase,
+        oceanSwimSeconds: this.snowmanRescueState.oceanSwimSeconds,
+        thresholdSeconds: this.snowmanRescueState.thresholdSeconds,
+        inOceanWater:
+          this.activeVehicle === 'none' &&
+          this.isSwimming &&
+          !this.inUndergroundCave &&
+          !this.inUndergroundMetro &&
+          !this.homeVaultState.inVault &&
+          isOceanAt(this.playerX, this.playerZ),
+        rescuesCompleted: this.snowmanRescueState.rescuesCompleted,
+      },
+      snowmanTaxi: this.snowmanTaxiState,
+      cameraPerspective: this.cameraPerspective,
+      expedition: {
+        jeep: { ...this.safariJeepState },
+        vtol: { ...this.vtolState },
+        sportJetSki: { ...this.sportJetSkiState },
+        perfJetSki: { ...this.perfJetSkiState },
+        dirtBike: { ...this.dirtBikeState },
+        hoverGlider: { ...this.hoverGliderState },
+      },
+      wildlife: {
+        totalSpecies: WILDLIFE_SPECIES_CATALOG.length,
+        discoveredIds: Array.from(this.wildlifeDiscoveredIds),
+        photographedIds: Array.from(this.wildlifePhotographedIds),
+        nearestTarget: this.wildlifeViewfinderTarget,
+        activeCount: this.wildlifeActors.length,
+      },
+      underwater: {
+        submerged: this.underwaterAtmo.submerged,
+        depthM: Number(this.underwaterAtmo.depthM.toFixed(1)),
+        vignetteAlpha: this.underwaterAtmo.vignetteAlpha,
+        reefZoneName: this.underwaterAtmo.submerged
+          ? (OCEAN_REEF_ZONES.find(
+              (z) =>
+                Math.hypot(this.camera.position.x - z.x, this.camera.position.z - z.z) <=
+                z.radius * 1.45
+            )?.name ?? 'Kadalkarai Deep Ocean')
+          : null,
+      },
+      trainDriverNotch: this.trainDriverNotch,
+      trainGradeType: sampleRailway(this.trainState.t).gradeType,
     };
     this.callbacks.onHudUpdate(snapshot);
   }
@@ -7950,15 +11656,15 @@ export class DreamlineEngine {
 
     this.updateSimulation(dt);
 
-    // Refresh directional shadow map every 3rd frame (cuts full-scene shadow pass draw calls by 66%!)
+    // Refresh directional shadow map based on quality profile (every frame on Ultra/High, every 2nd on Medium)
     if (this.renderer.shadowMap.enabled) {
-      this.shadowFrameCounter = (this.shadowFrameCounter + 1) % 3;
+      this.shadowFrameCounter = (this.shadowFrameCounter + 1) % Math.max(1, this.targetShadowRefreshInterval);
       if (this.shadowFrameCounter === 0) {
         this.renderer.shadowMap.needsUpdate = true;
       }
     }
 
-    this.renderer.render(this.scene, this.camera);
+    this.renderSceneFrame();
 
     this.hudEmitTimer += dt;
     if (this.hudEmitTimer >= 0.32) {
@@ -8006,6 +11712,9 @@ export class DreamlineEngine {
     this.heroVfxWorld.dispose();
     this.homeVaultWorld.dispose();
     this.airportMetroWorld.dispose();
+    this.oceanServicesWorld.dispose();
+    this.underwaterOceanWorld.dispose();
+    this.snowmanTaxiWorld.dispose();
     this.dinosaurIslandWorld.dispose();
     this.peopleSystem.dispose();
     this.navigationGuide.dispose();
@@ -8013,6 +11722,8 @@ export class DreamlineEngine {
     this.avsSnowHouse.dispose();
     this.frozenKingdom.dispose();
     this.skyExplorerWorld.dispose();
+    this.orangeHeliWorld.dispose();
+    this.vehicleGarageWorld.dispose();
     this.skyTaxiWorld.dispose();
     this.exhibitionComplexWorld.dispose();
     this.desertOasisWorld.dispose();
@@ -8022,6 +11733,8 @@ export class DreamlineEngine {
     this.architecture.dispose();
     this.skyWater.dispose();
     this.textures.dispose();
+    this.composer?.dispose();
+    this.composerRenderTarget?.dispose();
     this.renderer.dispose();
     if (dom.parentElement === this.container) {
       this.container.removeChild(dom);

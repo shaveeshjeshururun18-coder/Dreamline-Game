@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Check, Smartphone, Snowflake, X } from 'lucide-react';
+import { Check, Phone, Smartphone, Snowflake, X } from 'lucide-react';
 import type {
   DayCyclePreference,
   GameSettings,
@@ -20,6 +20,7 @@ interface PauseSettingsModalProps {
   onChangeSeason: (season: SeasonType) => void;
   onSetSizeMode: (mode: SizeMode) => void;
   onToggleGiantSmall: () => void;
+  onOpenMobilePhone?: () => void;
   onOpenAndroidApp: () => void;
   onResume: () => void;
   onSaveJourney: () => void;
@@ -35,6 +36,7 @@ export const PauseSettingsModal: React.FC<PauseSettingsModalProps> = ({
   onChangeSeason,
   onSetSizeMode,
   onToggleGiantSmall,
+  onOpenMobilePhone,
   onOpenAndroidApp,
   onResume,
   onSaveJourney,
@@ -162,6 +164,18 @@ export const PauseSettingsModal: React.FC<PauseSettingsModalProps> = ({
                 )}
               </button>
 
+              {onOpenMobilePhone && (
+                <button
+                  type="button"
+                  data-testid="pause-mobile-phone-btn"
+                  onClick={onOpenMobilePhone}
+                  className="w-full py-2.5 px-4 rounded-md bg-[#122628] hover:bg-[#1A383B] border border-emerald-400/45 text-emerald-100 text-sm font-medium flex items-center justify-center gap-2 transition-colors cursor-pointer"
+                >
+                  <Phone className="w-4 h-4 text-emerald-300" />
+                  <span>Dreamline Mobile Phone (P)</span>
+                </button>
+              )}
+
               <button
                 type="button"
                 onClick={onOpenAndroidApp}
@@ -194,12 +208,13 @@ export const PauseSettingsModal: React.FC<PauseSettingsModalProps> = ({
             <div className="flex items-center justify-between gap-4">
               <span className="text-[#E6D3C8]">Graphics Quality</span>
               <div className="flex items-center gap-1 bg-[#120E20] p-1 rounded-md border border-[#F5D6C0]/14">
-                {(['low', 'medium', 'high'] as GraphicsQuality[]).map((q) => (
+                {(['low', 'medium', 'high', 'ultra'] as GraphicsQuality[]).map((q) => (
                   <button
                     key={q}
                     type="button"
+                    data-testid={`settings-quality-${q}`}
                     onClick={() => patch({ graphicsQuality: q })}
-                    className={`px-3 py-1 text-xs rounded capitalize cursor-pointer ${
+                    className={`px-2.5 py-1 text-xs rounded capitalize cursor-pointer ${
                       settings.graphicsQuality === q
                         ? 'bg-[#F4BE98] text-[#1D162E] font-medium'
                         : 'text-[#D6C7DC] hover:text-white'
@@ -218,7 +233,7 @@ export const PauseSettingsModal: React.FC<PauseSettingsModalProps> = ({
                 <input
                   type="range"
                   min={0.6}
-                  max={1.0}
+                  max={1.25}
                   step={0.05}
                   value={settings.resolutionScale}
                   onChange={(e) => patch({ resolutionScale: parseFloat(e.target.value) })}

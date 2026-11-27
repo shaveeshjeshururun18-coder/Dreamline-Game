@@ -70,16 +70,21 @@ interface MobilePhoneModalProps {
   onLaunchParachuteTower: () => void;
   onTeleportMidnightFrontier: () => void;
   onOpenHouseSecretTunnel: () => void;
+  onGoOutsideSuperheroHouse: () => void;
   onEnterHouseSecretVault: () => void;
   onExitHouseSecretVault: () => void;
   onClose: () => void;
 }
 
 function renderVehicleIcon(entry: CatalogueVehicleEntry) {
-  if (entry.id === 'sovereign_ship') return <Ship className="w-5 h-5 text-sky-200" />;
+  if (entry.id === 'sovereign_ship' || entry.id === 'kadalkarai_submarine') {
+    return <Ship className="w-5 h-5 text-sky-200" />;
+  }
   if (entry.category === 'ships') return <Anchor className="w-5 h-5 text-cyan-200" />;
   if (entry.category === 'bikes') return <Bike className="w-5 h-5 text-rose-200" />;
-  if (entry.id === 'sky_explorer') return <Plane className="w-5 h-5 text-sky-200" />;
+  if (entry.id === 'sky_explorer' || entry.id === 'vtol_aircraft') {
+    return <Plane className="w-5 h-5 text-amber-200" />;
+  }
   if (entry.id === 'dreamline_train') return <TrainFront className="w-5 h-5 text-amber-200" />;
   if (entry.id === 'rural_bus') return <Bus className="w-5 h-5 text-emerald-200" />;
   return <Car className="w-5 h-5 text-amber-200" />;
@@ -87,10 +92,10 @@ function renderVehicleIcon(entry: CatalogueVehicleEntry) {
 
 const CATEGORY_TABS: Array<{ id: CatalogueCategory; label: string }> = [
   { id: 'all', label: `All (${VEHICLE_CATALOGUE.length})` },
-  { id: 'cars', label: 'Cars & Bus' },
+  { id: 'cars', label: 'Cars & Jeep' },
   { id: 'bikes', label: 'Bikes' },
-  { id: 'ships', label: 'Ships & Boats' },
-  { id: 'air_rail', label: 'Air & Rail' },
+  { id: 'ships', label: 'Jet Skis & Ships' },
+  { id: 'air_rail', label: 'VTOL, Air & Rail' },
 ];
 
 export const MobilePhoneModal: React.FC<MobilePhoneModalProps> = ({
@@ -113,6 +118,7 @@ export const MobilePhoneModal: React.FC<MobilePhoneModalProps> = ({
   onLaunchParachuteTower,
   onTeleportMidnightFrontier,
   onOpenHouseSecretTunnel,
+  onGoOutsideSuperheroHouse,
   onEnterHouseSecretVault,
   onExitHouseSecretVault,
   onClose,
@@ -260,7 +266,7 @@ export const MobilePhoneModal: React.FC<MobilePhoneModalProps> = ({
             </button>
           </div>
 
-          {/* Direct 1-Tap House Secret Underground Superhero Tunnel Control */}
+          {/* Direct 1-Tap House Secret Underground Superhero Tunnel Remote Control (ZERO Teleport!) */}
           <div
             data-testid="mobile-house-tunnel-card"
             className="rounded-2xl p-3 bg-gradient-to-r from-cyan-500/20 via-indigo-500/20 to-amber-500/15 border border-cyan-300/45 shadow-lg space-y-2"
@@ -272,10 +278,10 @@ export const MobilePhoneModal: React.FC<MobilePhoneModalProps> = ({
                 </span>
                 <div className="min-w-0">
                   <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-cyan-200 truncate">
-                    En Illam · House Underground Tunnel
+                    En Illam · Real Secret Tunnel Remote
                   </div>
                   <div className="text-xs font-bold text-white truncate">
-                    Secret Superhero Vault &amp; 4-Car Garage
+                    House Portal + 1 KM Superhero Mega-Chamber
                   </div>
                 </div>
               </div>
@@ -288,11 +294,13 @@ export const MobilePhoneModal: React.FC<MobilePhoneModalProps> = ({
                       : 'bg-slate-800/90 text-slate-300 border-white/15'
                 }`}
               >
-                {hud.homeVault.inVault
-                  ? 'Inside Vault'
-                  : hud.homeVault.hatchUnlocked
-                    ? 'Tunnel Open'
-                    : 'Hidden'}
+                {hud.homeVault.inMegaChamber
+                  ? `${hud.homeVault.megaChamberDistanceM}m / 1KM`
+                  : hud.homeVault.inVault
+                    ? 'Inside Base'
+                    : hud.homeVault.hatchUnlocked
+                      ? 'Doors Open'
+                      : 'Sealed'}
               </span>
             </div>
 
@@ -304,9 +312,13 @@ export const MobilePhoneModal: React.FC<MobilePhoneModalProps> = ({
                   onOpenHouseSecretTunnel();
                   onClose();
                 }}
-                className="flex items-center justify-center gap-1.5 py-2.5 px-2.5 rounded-xl bg-cyan-400 hover:bg-cyan-300 text-slate-950 font-bold text-[11px] cursor-pointer shadow-sm transition-colors"
+                className={`flex items-center justify-center gap-1.5 py-2.5 px-2.5 rounded-xl font-bold text-[11px] cursor-pointer shadow-sm transition-colors ${
+                  hud.homeVault.hatchUnlocked
+                    ? 'bg-emerald-400 hover:bg-emerald-300 text-slate-950'
+                    : 'bg-cyan-400 hover:bg-cyan-300 text-slate-950'
+                }`}
               >
-                {hud.homeVault.hatchUnlocked && hud.homeVault.inPersonalHome ? (
+                {hud.homeVault.hatchUnlocked ? (
                   <>
                     <Lock className="w-3.5 h-3.5 shrink-0" />
                     <span>Close House Tunnel</span>
@@ -324,7 +336,8 @@ export const MobilePhoneModal: React.FC<MobilePhoneModalProps> = ({
                 data-testid="mobile-house-tunnel-enter-btn"
                 onClick={() => {
                   if (hud.homeVault.inVault) onExitHouseSecretVault();
-                  else onEnterHouseSecretVault();
+                  else if (hud.homeVault.inPersonalHome) onEnterHouseSecretVault();
+                  else onGoOutsideSuperheroHouse();
                   onClose();
                 }}
                 className="flex items-center justify-center gap-1.5 py-2.5 px-2.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-bold text-[11px] cursor-pointer shadow-sm transition-colors"
@@ -332,15 +345,23 @@ export const MobilePhoneModal: React.FC<MobilePhoneModalProps> = ({
                 {hud.homeVault.inVault ? (
                   <>
                     <ArrowUp className="w-3.5 h-3.5 shrink-0" />
-                    <span>Go Up to House</span>
+                    <span>Elevator Up</span>
+                  </>
+                ) : hud.homeVault.inPersonalHome ? (
+                  <>
+                    <ArrowDown className="w-3.5 h-3.5 shrink-0" />
+                    <span>Ride Elevator Down</span>
                   </>
                 ) : (
                   <>
-                    <ArrowDown className="w-3.5 h-3.5 shrink-0" />
-                    <span>Enter Superhero Tunnel</span>
+                    <Navigation className="w-3.5 h-3.5 shrink-0" />
+                    <span>Go Outside House</span>
                   </>
                 )}
               </button>
+            </div>
+            <div className="text-[10px] text-cyan-100/80 leading-snug">
+              Tap <strong>Open House Tunnel</strong> from outside to watch the armored doors slide open — walk, fly, or drive straight in &amp; out (no teleporting) into the 1,000 m chamber!
             </div>
           </div>
 

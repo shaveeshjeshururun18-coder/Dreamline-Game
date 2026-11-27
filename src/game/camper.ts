@@ -92,42 +92,44 @@ export function stepCamperState(
   let nextX = x + Math.sin(heading) * speed * cdt;
   let nextZ = z + Math.cos(heading) * speed * cdt;
 
-  // Keep inside playable world radius
-  const distOrigin = Math.hypot(nextX, nextZ);
-  if (distOrigin > WORLD_PLAYABLE_RADIUS - 3.0) {
-    const f = (WORLD_PLAYABLE_RADIUS - 3.0) / distOrigin;
-    nextX *= f;
-    nextZ *= f;
-    speed *= -0.2;
-  }
+  if (!prev.inVault) {
+    // Keep inside playable world radius
+    const distOrigin = Math.hypot(nextX, nextZ);
+    if (distOrigin > WORLD_PLAYABLE_RADIUS - 3.0) {
+      const f = (WORLD_PLAYABLE_RADIUS - 3.0) / distOrigin;
+      nextX *= f;
+      nextZ *= f;
+      speed *= -0.2;
+    }
 
-  // Keep camper van dry on land
-  if (isWaterAt(nextX, nextZ)) {
-    nextX = x;
-    nextZ = z;
-    speed *= -0.22;
-  }
+    // Keep camper van dry on land
+    if (isWaterAt(nextX, nextZ)) {
+      nextX = x;
+      nextZ = z;
+      speed *= -0.22;
+    }
 
-  // Soft AABB collision resolution (radius 1.45m)
-  const vanR = 1.45;
-  for (let i = 0; i < colliders.length; i++) {
-    const c = colliders[i];
-    if (c.minY !== undefined && c.minY > 2.2) continue;
-    const minX = c.minX - vanR;
-    const maxX = c.maxX + vanR;
-    const minZ = c.minZ - vanR;
-    const maxZ = c.maxZ + vanR;
-    if (nextX > minX && nextX < maxX && nextZ > minZ && nextZ < maxZ) {
-      const pL = Math.abs(nextX - minX);
-      const pR = Math.abs(maxX - nextX);
-      const pT = Math.abs(nextZ - minZ);
-      const pB = Math.abs(maxZ - nextZ);
-      const m = Math.min(pL, pR, pT, pB);
-      if (m === pL) nextX = minX;
-      else if (m === pR) nextX = maxX;
-      else if (m === pT) nextZ = minZ;
-      else nextZ = maxZ;
-      speed *= 0.35;
+    // Soft AABB collision resolution (radius 1.45m)
+    const vanR = 1.45;
+    for (let i = 0; i < colliders.length; i++) {
+      const c = colliders[i];
+      if (c.minY !== undefined && c.minY > 2.2) continue;
+      const minX = c.minX - vanR;
+      const maxX = c.maxX + vanR;
+      const minZ = c.minZ - vanR;
+      const maxZ = c.maxZ + vanR;
+      if (nextX > minX && nextX < maxX && nextZ > minZ && nextZ < maxZ) {
+        const pL = Math.abs(nextX - minX);
+        const pR = Math.abs(maxX - nextX);
+        const pT = Math.abs(nextZ - minZ);
+        const pB = Math.abs(maxZ - nextZ);
+        const m = Math.min(pL, pR, pT, pB);
+        if (m === pL) nextX = minX;
+        else if (m === pR) nextX = maxX;
+        else if (m === pT) nextZ = minZ;
+        else nextZ = maxZ;
+        speed *= 0.35;
+      }
     }
   }
 

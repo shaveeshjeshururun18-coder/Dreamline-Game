@@ -57,8 +57,8 @@ export function togglePlayerLantern(state: PlayerLanternState): PlayerLanternSta
     ...state,
     isOn: nextOn,
     manualOverride: nextOn,
-    brightness: nextOn ? Math.max(0.85, state.brightness) : 0,
-    effectiveIntensity: nextOn ? Math.max(6.5, state.effectiveIntensity) : 0,
+    brightness: nextOn ? 1.0 : 0,
+    effectiveIntensity: nextOn ? 7.2 : 0,
   };
 }
 

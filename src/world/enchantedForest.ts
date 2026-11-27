@@ -7,6 +7,7 @@ import {
   groundHeightAt,
   type AabbCollider,
 } from '../game/terrain';
+import { vaultFloorYAt } from '../game/homeUndergroundVault';
 
 const PALETTE = {
   mainBodyPink: 0xe8add7,
@@ -212,6 +213,7 @@ export interface EnchantedForestWorld {
   getCamperViewTransform: (
     viewMode: 'window' | 'cabin' | 'exterior'
   ) => { position: THREE.Vector3; lookAt: THREE.Vector3 };
+  setCamperOnlyVisible: (onlyCamper: boolean) => void;
   dispose: () => void;
 }
 
@@ -1453,15 +1455,17 @@ export function buildEnchantedForestWorld(isSoftwareGl: boolean): EnchantedFores
     campCatGroup.scale.y = 1 + Math.sin(elapsed * 2.8) * 0.025;
 
     // 2. Sync Olga Camper Van position, terrain tilt, suspension, doors, pop-roof & lights
+    const sampleH = (sx: number, sz: number) =>
+      camper.inVault ? vaultFloorYAt(sx, sz) : groundHeightAt(sx, sz);
     const sinH = Math.sin(camper.heading);
     const cosH = Math.cos(camper.heading);
     const fz = 1.44;
     const rz = -1.48;
     const hw = 0.96;
-    const hFL = groundHeightAt(camper.x + sinH * fz + cosH * hw, camper.z + cosH * fz - sinH * hw);
-    const hFR = groundHeightAt(camper.x + sinH * fz - cosH * hw, camper.z + cosH * fz + sinH * hw);
-    const hRL = groundHeightAt(camper.x + sinH * rz + cosH * hw, camper.z + cosH * rz - sinH * hw);
-    const hRR = groundHeightAt(camper.x + sinH * rz - cosH * hw, camper.z + cosH * rz + sinH * hw);
+    const hFL = sampleH(camper.x + sinH * fz + cosH * hw, camper.z + cosH * fz - sinH * hw);
+    const hFR = sampleH(camper.x + sinH * fz - cosH * hw, camper.z + cosH * fz + sinH * hw);
+    const hRL = sampleH(camper.x + sinH * rz + cosH * hw, camper.z + cosH * rz - sinH * hw);
+    const hRR = sampleH(camper.x + sinH * rz - cosH * hw, camper.z + cosH * rz + sinH * hw);
     const avgY = (hFL + hFR + hRL + hRR) * 0.25;
 
     const terrainPitch = Math.atan2(((hRL + hRR) - (hFL + hFR)) * 0.5, fz - rz);
@@ -1563,11 +1567,18 @@ export function buildEnchantedForestWorld(isSoftwareGl: boolean): EnchantedFores
     return { position, lookAt };
   };
 
+  const setCamperOnlyVisible = (onlyCamper: boolean) => {
+    for (const child of group.children) {
+      child.visible = onlyCamper ? child === vanRoot : true;
+    }
+  };
+
   return {
     group,
     colliders,
     interactables,
     update,
+    setCamperOnlyVisible,
     getDriverSeatTransform,
     getCompanionSeatTransform,
     getCamperViewTransform,

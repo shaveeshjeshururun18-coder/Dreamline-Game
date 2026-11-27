@@ -44,58 +44,70 @@ export function createWorldArchitecture(
   const warmGlowMaterials: THREE.MeshStandardMaterial[] = [];
   const warmPointLights: Array<{ light: THREE.PointLight; maxIntensity: number }> = [];
 
-  // Shared PBR Materials with calibrated roughness/metalness contrast
+  // Shared High-Definition PBR Materials with tangent-space normal maps & calibrated roughness/metalness contrast
   const woodMat = new THREE.MeshStandardMaterial({
     color: 0xffffff,
     map: textures.woodAlbedo,
-    bumpMap: textures.woodBump,
-    bumpScale: 0.04,
-    roughness: 0.82,
+    normalMap: textures.woodNormal,
+    normalScale: new THREE.Vector2(0.65, 0.65),
+    roughness: 0.78,
     metalness: 0.04,
   });
   const darkTimberMat = new THREE.MeshStandardMaterial({
     color: 0x3b2c26,
-    roughness: 0.84,
+    normalMap: textures.woodNormal,
+    normalScale: new THREE.Vector2(0.45, 0.45),
+    roughness: 0.82,
     metalness: 0.05,
   });
   const plasterMat = new THREE.MeshStandardMaterial({
     color: 0xffffff,
     map: textures.plasterWall,
-    roughness: 0.9,
+    normalMap: textures.plasterNormal,
+    normalScale: new THREE.Vector2(0.45, 0.45),
+    roughness: 0.88,
     metalness: 0.0,
   });
   const roofMat = new THREE.MeshStandardMaterial({
     color: 0xffffff,
     map: textures.roofTile,
-    roughness: 0.65,
-    metalness: 0.16,
+    normalMap: textures.roofTileNormal,
+    normalScale: new THREE.Vector2(0.85, 0.85),
+    roughness: 0.48,
+    metalness: 0.24,
+    envMapIntensity: 1.15,
   });
   const canopyMetalMat = new THREE.MeshStandardMaterial({
     color: 0x2c3040,
-    roughness: 0.45,
-    metalness: 0.55,
+    roughness: 0.36,
+    metalness: 0.68,
+    envMapIntensity: 1.15,
   });
   const steelMat = new THREE.MeshStandardMaterial({
-    color: 0x5f6473,
-    roughness: 0.36,
-    metalness: 0.78,
+    color: 0x676d7e,
+    roughness: 0.28,
+    metalness: 0.86,
+    envMapIntensity: 1.25,
   });
   const railSteelMat = new THREE.MeshStandardMaterial({
-    color: 0x878d9c,
-    roughness: 0.25,
-    metalness: 0.88,
+    color: 0x9aa2b2,
+    roughness: 0.18,
+    metalness: 0.94,
+    envMapIntensity: 1.45,
   });
   const concreteMat = new THREE.MeshStandardMaterial({
     color: 0xffffff,
     map: textures.concretePlatform,
-    roughness: 0.88,
-    metalness: 0.04,
+    normalMap: textures.concreteNormal,
+    normalScale: new THREE.Vector2(0.65, 0.65),
+    roughness: 0.84,
+    metalness: 0.05,
   });
   const tactileMat = new THREE.MeshStandardMaterial({
     color: 0xffffff,
     map: textures.tactileStrip,
-    roughness: 0.75,
-    metalness: 0.02,
+    roughness: 0.68,
+    metalness: 0.04,
     polygonOffset: true,
     polygonOffsetFactor: -1,
     polygonOffsetUnits: -1,
@@ -103,13 +115,17 @@ export function createWorldArchitecture(
   const ballastMat = new THREE.MeshStandardMaterial({
     color: 0xffffff,
     map: textures.gravelBallast,
-    roughness: 0.95,
-    metalness: 0.0,
+    normalMap: textures.gravelNormal,
+    normalScale: new THREE.Vector2(0.95, 0.95),
+    roughness: 0.94,
+    metalness: 0.02,
   });
   const sleeperMat = new THREE.MeshStandardMaterial({
     color: 0x453429,
-    roughness: 0.92,
-    metalness: 0.02,
+    normalMap: textures.woodNormal,
+    normalScale: new THREE.Vector2(0.55, 0.55),
+    roughness: 0.88,
+    metalness: 0.03,
   });
   const stoneMat = new THREE.MeshStandardMaterial({
     color: 0x6f6c74,
@@ -398,7 +414,8 @@ export function createWorldArchitecture(
   for (let i = 0; i < sleeperCount; i++) {
     const s = sampleRailway(i / sleeperCount);
     dummy.position.set(s.x, s.y + 0.01, s.z);
-    dummy.rotation.set(0, s.angle, 0);
+    dummy.rotation.order = 'YXZ';
+    dummy.rotation.set(-s.pitch, s.angle, 0);
     dummy.scale.set(1, 1, 1);
     dummy.updateMatrix();
     sleepersMesh.setMatrixAt(i, dummy.matrix);
@@ -406,6 +423,184 @@ export function createWorldArchitecture(
   sleepersMesh.instanceMatrix.needsUpdate = true;
   sleepersMesh.computeBoundingSphere();
   group.add(sleepersMesh);
+
+  // =========================================================================
+  // 1B. REAL-LIFE ELEVATED SKY VIADUCT (+7.4m) & UNDERGROUND METRO SUBWAY TUNNEL (-7.2m)
+  //     Allows the Normal Dreamline Train to climb above ground onto concrete skyway piers
+  //     and descend smoothly through real portals into an illuminated Metro Subway Tunnel!
+  // =========================================================================
+  const gradeCheckCount = 720;
+  const gradeSegLen = (RAILWAY_TOTAL_LENGTH / gradeCheckCount) * 1.24;
+  const elevatedSamples: Array<{ x: number; y: number; z: number; angle: number; pitch: number; nx: number; nz: number }> = [];
+  const subwaySamples: Array<{ x: number; y: number; z: number; angle: number; pitch: number; nx: number; nz: number; t: number }> = [];
+
+  for (let i = 0; i < gradeCheckCount; i++) {
+    const t = i / gradeCheckCount;
+    const s = sampleRailway(t);
+    const nx = -s.tz;
+    const nz = s.tx;
+    if (s.y > 0.45) {
+      elevatedSamples.push({ x: s.x, y: s.y, z: s.z, angle: s.angle, pitch: s.pitch, nx, nz });
+    } else if (s.y < -0.35) {
+      subwaySamples.push({ x: s.x, y: s.y, z: s.z, angle: s.angle, pitch: s.pitch, nx, nz, t });
+    }
+  }
+
+  // Elevated Sky Viaduct Deck, Safety Guardrails & Grounded Concrete T-Piers
+  if (elevatedSamples.length > 0) {
+    const viaDeckGeo = new THREE.BoxGeometry(4.9, 0.72, gradeSegLen);
+    const viaRailGeo = new THREE.BoxGeometry(0.24, 0.96, gradeSegLen);
+    const viaPierGeo = new THREE.CylinderGeometry(0.48, 0.62, 1.0, 10);
+    const viaCapGeo = new THREE.BoxGeometry(4.4, 0.55, 1.25);
+    disposables.push(viaDeckGeo, viaRailGeo, viaPierGeo, viaCapGeo);
+
+    const viaDeckInst = new THREE.InstancedMesh(viaDeckGeo, concreteMat, elevatedSamples.length);
+    const viaRailInst = new THREE.InstancedMesh(viaRailGeo, steelMat, elevatedSamples.length * 2);
+    const pierIdxs: number[] = [];
+
+    elevatedSamples.forEach((b, idx) => {
+      dummy.position.set(b.x, b.y - 0.42, b.z);
+      dummy.rotation.order = 'YXZ';
+      dummy.rotation.set(-b.pitch, b.angle, 0);
+      dummy.scale.set(1, 1, 1);
+      dummy.updateMatrix();
+      viaDeckInst.setMatrixAt(idx, dummy.matrix);
+
+      for (let sideIdx = 0; sideIdx < 2; sideIdx++) {
+        const side = sideIdx === 0 ? -1 : 1;
+        dummy.position.set(b.x + b.nx * 2.38 * side, b.y + 0.36, b.z + b.nz * 2.38 * side);
+        dummy.rotation.order = 'YXZ';
+        dummy.rotation.set(-b.pitch, b.angle, 0);
+        dummy.scale.set(1, 1, 1);
+        dummy.updateMatrix();
+        viaRailInst.setMatrixAt(idx * 2 + sideIdx, dummy.matrix);
+      }
+
+      if (idx % 5 === 2 && b.y > 1.2) pierIdxs.push(idx);
+    });
+    viaDeckInst.instanceMatrix.needsUpdate = true;
+    viaDeckInst.receiveShadow = true;
+    viaRailInst.instanceMatrix.needsUpdate = true;
+    group.add(viaDeckInst, viaRailInst);
+
+    if (pierIdxs.length > 0) {
+      const pierInst = new THREE.InstancedMesh(viaPierGeo, concreteMat, pierIdxs.length);
+      const capInst = new THREE.InstancedMesh(viaCapGeo, concreteMat, pierIdxs.length);
+      pierIdxs.forEach((idx, p) => {
+        const b = elevatedSamples[idx];
+        const gY = Math.min(-0.8, groundHeightAt(b.x, b.z) - 0.8);
+        const topY = b.y - 0.72;
+        const h = Math.max(1.2, topY - gY);
+        dummy.position.set(b.x, gY + h * 0.5, b.z);
+        dummy.rotation.set(0, b.angle, 0);
+        dummy.scale.set(1, h, 1);
+        dummy.updateMatrix();
+        pierInst.setMatrixAt(p, dummy.matrix);
+
+        dummy.position.set(b.x, topY, b.z);
+        dummy.rotation.set(0, b.angle, 0);
+        dummy.scale.set(1, 1, 1);
+        dummy.updateMatrix();
+        capInst.setMatrixAt(p, dummy.matrix);
+      });
+      pierInst.instanceMatrix.needsUpdate = true;
+      capInst.instanceMatrix.needsUpdate = true;
+      group.add(pierInst, capInst);
+    }
+  }
+
+  // Enclosed Illuminated Underground Metro Subway Tunnel + Entry/Exit Portals + Combined Metro Platform
+  if (subwaySamples.length > 4) {
+    const tunnelWallMat = new THREE.MeshStandardMaterial({ color: 0x263244, roughness: 0.78, metalness: 0.14 });
+    const tunnelFloorMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.86, metalness: 0.08 });
+    const metroLedMat = new THREE.MeshStandardMaterial({
+      color: 0xe0f2fe,
+      emissive: new THREE.Color(0x38bdf8),
+      emissiveIntensity: 2.2,
+      roughness: 0.2,
+    });
+    const metroStripeMat = new THREE.MeshStandardMaterial({
+      color: 0x0ea5e9,
+      emissive: new THREE.Color(0x0284c7),
+      emissiveIntensity: 1.2,
+      roughness: 0.3,
+    });
+    const portalMat = new THREE.MeshStandardMaterial({ color: 0x334155, roughness: 0.65, metalness: 0.22 });
+    disposables.push(tunnelWallMat, tunnelFloorMat, metroLedMat, metroStripeMat, portalMat);
+
+    const floorGeo = new THREE.BoxGeometry(7.2, 0.42, gradeSegLen);
+    const roofGeo = new THREE.BoxGeometry(7.6, 0.52, gradeSegLen);
+    const wallGeo = new THREE.BoxGeometry(0.48, 5.8, gradeSegLen);
+    const ledGeo = new THREE.BoxGeometry(0.32, 0.12, gradeSegLen * 0.72);
+    const stripeGeo = new THREE.BoxGeometry(0.08, 0.24, gradeSegLen);
+    disposables.push(floorGeo, roofGeo, wallGeo, ledGeo, stripeGeo);
+
+    const floorInst = new THREE.InstancedMesh(floorGeo, tunnelFloorMat, subwaySamples.length);
+    const roofInst = new THREE.InstancedMesh(roofGeo, tunnelWallMat, subwaySamples.length);
+    const wallInst = new THREE.InstancedMesh(wallGeo, tunnelWallMat, subwaySamples.length * 2);
+    const ledInst = new THREE.InstancedMesh(ledGeo, metroLedMat, subwaySamples.length);
+    const stripeInst = new THREE.InstancedMesh(stripeGeo, metroStripeMat, subwaySamples.length * 2);
+
+    subwaySamples.forEach((b, idx) => {
+      dummy.rotation.order = 'YXZ';
+      dummy.rotation.set(-b.pitch, b.angle, 0);
+      dummy.scale.set(1, 1, 1);
+
+      dummy.position.set(b.x, b.y - 0.28, b.z);
+      dummy.updateMatrix();
+      floorInst.setMatrixAt(idx, dummy.matrix);
+
+      dummy.position.set(b.x, b.y + 5.55, b.z);
+      dummy.updateMatrix();
+      roofInst.setMatrixAt(idx, dummy.matrix);
+
+      dummy.position.set(b.x, b.y + 5.22, b.z);
+      dummy.updateMatrix();
+      ledInst.setMatrixAt(idx, dummy.matrix);
+
+      for (let sideIdx = 0; sideIdx < 2; sideIdx++) {
+        const side = sideIdx === 0 ? -1 : 1;
+        dummy.position.set(b.x + b.nx * 3.55 * side, b.y + 2.65, b.z + b.nz * 3.55 * side);
+        dummy.updateMatrix();
+        wallInst.setMatrixAt(idx * 2 + sideIdx, dummy.matrix);
+
+        dummy.position.set(b.x + b.nx * 3.25 * side, b.y + 2.25, b.z + b.nz * 3.25 * side);
+        dummy.updateMatrix();
+        stripeInst.setMatrixAt(idx * 2 + sideIdx, dummy.matrix);
+      }
+    });
+    floorInst.instanceMatrix.needsUpdate = true;
+    roofInst.instanceMatrix.needsUpdate = true;
+    wallInst.instanceMatrix.needsUpdate = true;
+    ledInst.instanceMatrix.needsUpdate = true;
+    stripeInst.instanceMatrix.needsUpdate = true;
+    group.add(floorInst, roofInst, wallInst, ledInst, stripeInst);
+
+    // Bold Architectural Subway Tunnel Portals at Entry & Exit
+    for (const endSample of [subwaySamples[0], subwaySamples[subwaySamples.length - 1]]) {
+      const portalGroup = new THREE.Group();
+      portalGroup.position.set(endSample.x, Math.max(0.1, endSample.y + 0.5), endSample.z);
+      portalGroup.rotation.y = endSample.angle;
+      addBox(portalGroup, 8.6, 1.35, 1.4, portalMat, 0, 5.65, 0, false, false);
+      addBox(portalGroup, 1.2, 6.2, 1.4, portalMat, -3.9, 2.8, 0, false, false);
+      addBox(portalGroup, 1.2, 6.2, 1.4, portalMat, 3.9, 2.8, 0, false, false);
+      addBox(portalGroup, 6.4, 0.24, 1.5, metroLedMat, 0, 5.15, 0, false, false);
+      group.add(portalGroup);
+    }
+
+    // Illuminated Combined Underground Metro Platform at tunnel midpoint
+    const midSub = subwaySamples[Math.floor(subwaySamples.length * 0.5)];
+    const metroPlatGroup = new THREE.Group();
+    metroPlatGroup.position.set(midSub.x, midSub.y, midSub.z);
+    metroPlatGroup.rotation.y = midSub.angle;
+    addBox(metroPlatGroup, 2.4, 0.85, 22.0, concreteMat, 2.55, 0.4, 0, false, true);
+    addBox(metroPlatGroup, 0.24, 0.04, 22.0, tactileMat, 1.48, 0.84, 0, false, false);
+    addBox(metroPlatGroup, 0.14, 0.45, 18.0, metroLedMat, 3.3, 3.4, 0, false, false);
+    const subLight = new THREE.PointLight(0xbae6fd, 8.5, 34, 1.2);
+    subLight.position.set(1.2, 4.4, 0);
+    metroPlatGroup.add(subLight);
+    group.add(metroPlatGroup);
+  }
 
   // Ocean Railway Bridge / Sea Viaduct spanning across open sea water to SSJ Dinosaur Island!
   const seaBridgeDeckSamples: Array<{ x: number; z: number; angle: number; nx: number; nz: number }> = [];
@@ -480,7 +675,8 @@ export function createWorldArchitecture(
   for (let i = 0; i < poleCount; i++) {
     const t = i / poleCount;
     const s = sampleRailway(t);
-    // Skip poles inside the stone tunnel region
+    // Skip poles inside the stone tunnel or underground metro subway tunnel
+    if (s.gradeType === 'subway_tunnel' || s.y < -0.25) continue;
     if (s.z < -56 && s.x > -4 && s.x < 24) continue;
     const nx = -s.tz;
     const nz = s.tx;
@@ -491,7 +687,7 @@ export function createWorldArchitecture(
     if (STATIONS.some((st) => Math.hypot(px - st.platformX, pz - st.platformZ) < 9.2)) continue;
 
     const pg = new THREE.Group();
-    pg.position.set(px, 0, pz);
+    pg.position.set(px, Math.max(0, s.y - 0.14), pz);
     pg.rotation.y = s.angle;
 
     const pole = new THREE.Mesh(catPoleGeo, steelMat);

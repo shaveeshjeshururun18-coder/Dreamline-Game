@@ -116,6 +116,13 @@ export interface TrafficVehicle {
   isTaxi: boolean;
 }
 
+export type SpiderAirTrickKind =
+  | 'none'
+  | 'front_flip'
+  | 'corkscrew_spin'
+  | 'back_tuck'
+  | 'web_cyclone';
+
 export interface WebSwingState {
   active: boolean;
   anchorX: number;
@@ -127,6 +134,11 @@ export interface WebSwingState {
   vz: number;
   swingTime: number;
   handSide: 1 | -1;
+  swingAngleRad: number;
+  diveSlingshotBoost: number;
+  isDiving: boolean;
+  lastTrickKind: SpiderAirTrickKind;
+  comboCount: number;
 }
 
 export interface MetroDestructionState {
@@ -183,6 +195,11 @@ export function createInitialWebSwingState(): WebSwingState {
     vz: 0,
     swingTime: 0,
     handSide: 1,
+    swingAngleRad: 0,
+    diveSlingshotBoost: 0,
+    isDiving: false,
+    lastTrickKind: 'none',
+    comboCount: 0,
   };
 }
 
@@ -778,7 +795,8 @@ export function findBestWebOrGrappleAnchor(
 }
 
 /**
- * Initiates a momentum-based pendulum web swing anchored to a skyscraper or elevated point.
+ * Initiates an Insomniac-style momentum pendulum web swing anchored to a skyscraper or elevated point.
+ * Converts downward dive velocity (currentVy < 0) directly into forward tangential slingshot speed!
  */
 export function startWebSwing(
   state: MetroDestructionState,
@@ -788,30 +806,94 @@ export function startWebSwing(
   heading: number,
   currentVx: number,
   currentVz: number,
-  prevHandSide: 1 | -1
+  prevHandSide: 1 | -1,
+  currentVy = 0,
+  prevCombo = 0
 ): WebSwingState {
   const anchor = findBestWebOrGrappleAnchor(state, px, py, pz, heading);
-  const dist = Math.hypot(anchor.x - px, anchor.y - (py + 1.5), anchor.z - pz);
-  const ropeLength = Math.max(10, Math.min(34, dist * 0.92));
+  // Insomniac GDC rule: ensure anchor is always comfortably ahead & above so the arc curves upward!
   const fwdX = Math.sin(heading);
   const fwdZ = Math.cos(heading);
-  const initSpeed = Math.max(13.5, Math.hypot(currentVx, currentVz) + 6.5);
+  const adjustedAnchorY = Math.max(anchor.y, py + 14.5, 22.0);
+  const dist = Math.hypot(anchor.x - px, adjustedAnchorY - (py + 1.5), anchor.z - pz);
+  const ropeLength = Math.max(11.5, Math.min(36.0, dist * 0.94));
+
+  // Dive-to-swing slingshot conversion: falling fast converts vertical energy into huge horizontal swing boost!
+  const diveBonus = currentVy < -3.0 ? Math.min(18.0, Math.abs(currentVy) * 0.85) : 0;
+  const horizCur = Math.hypot(currentVx, currentVz);
+  const initSpeed = Math.max(16.5, horizCur + 5.8 + diveBonus);
+
   return {
     active: true,
     anchorX: anchor.x,
-    anchorY: anchor.y,
+    anchorY: adjustedAnchorY,
     anchorZ: anchor.z,
     ropeLength,
     vx: fwdX * initSpeed,
-    vy: Math.max(2.2, (anchor.y - py) * 0.14),
+    vy: Math.max(-4.5, Math.min(3.5, currentVy * 0.35)),
     vz: fwdZ * initSpeed,
     swingTime: 0,
     handSide: prevHandSide === 1 ? -1 : 1,
+    swingAngleRad: -0.55,
+    diveSlingshotBoost: diveBonus,
+    isDiving: false,
+    lastTrickKind: 'none',
+    comboCount: prevCombo + 1,
   };
 }
 
 /**
- * Advances real pendulum web-swinging physics (gravity + taut rope radial constraint + swing pump + air resistance).
+ * Releases a web-swing near the ascending arc or apex, triggering an Insomniac-style
+ * high-arc launch burst + procedural 360° acrobatic spin/flip!
+ */
+export function releaseWebSwingWithSpin(
+  swing: WebSwingState,
+  heading: number,
+  trickIndex?: number
+): {
+  vx: number;
+  vy: number;
+  vz: number;
+  trickKind: SpiderAirTrickKind;
+  apexBonus: boolean;
+} {
+  const fwdX = Math.sin(heading);
+  const fwdZ = Math.cos(heading);
+  const horizSpd = Math.hypot(swing.vx, swing.vz);
+  // Reward releasing on the upward swing (Insomniac "apex release" window!)
+  const apexBonus = swing.vy > 1.2 || swing.swingAngleRad > 0.15;
+  const launchFwd = Math.min(44.0, Math.max(18.0, horizSpd * (apexBonus ? 1.18 : 1.06)));
+  const launchVy = apexBonus
+    ? Math.max(13.5, Math.min(22.0, swing.vy + 8.5))
+    : Math.max(8.5, Math.min(15.5, swing.vy + 5.5));
+
+  const tricks: readonly SpiderAirTrickKind[] = [
+    'front_flip',
+    'corkscrew_spin',
+    'back_tuck',
+    'web_cyclone',
+  ];
+  const idx =
+    trickIndex !== undefined
+      ? Math.abs(trickIndex) % tricks.length
+      : (swing.comboCount + (swing.handSide === 1 ? 0 : 1)) % tricks.length;
+  const trickKind = tricks[idx];
+
+  return {
+    vx: horizSpd > 1.5 ? (swing.vx / horizSpd) * launchFwd : fwdX * launchFwd,
+    vy: launchVy,
+    vz: horizSpd > 1.5 ? (swing.vz / horizSpd) * launchFwd : fwdZ * launchFwd,
+    trickKind,
+    apexBonus,
+  };
+}
+
+/**
+ * Advances Insomniac-inspired pendulum web-swinging physics:
+ * - True spherical distance constraint + exact tangential velocity projection
+ * - Bottom-of-arc kinetic surge (feels weighty and exhilarating through the lowest point!)
+ * - Ground safety net (automatically curves upward near streets so Spider-Man never slams flat)
+ * - Auto-re-anchor hint when passing high past the apex so players can chain effortlessly
  */
 export function stepWebSwingPhysics(
   swing: WebSwingState,
@@ -823,25 +905,43 @@ export function stepWebSwingPhysics(
   camYaw: number,
   boost: boolean,
   dt: number
-): { x: number; y: number; z: number; swing: WebSwingState; heading: number; speed: number } {
+): {
+  x: number;
+  y: number;
+  z: number;
+  swing: WebSwingState;
+  heading: number;
+  speed: number;
+  shouldAutoReanchor: boolean;
+} {
   const safeDt = Math.min(Math.max(dt, 0.001), 0.06);
-  const gravity = 20.5;
+  const gravity = 25.5;
   let vx = swing.vx;
   let vy = swing.vy - gravity * safeDt;
   let vz = swing.vz;
 
-  // Forward pump & lateral carve during swing
+  // Forward pump & sweeping lateral carve during swing
   const fwdX = -Math.sin(camYaw);
   const fwdZ = -Math.cos(camYaw);
   const rightX = Math.cos(camYaw);
   const rightZ = -Math.sin(camYaw);
 
-  const pumpAccel = (boost ? 24.0 : 15.5) * Math.max(0.25, forwardInput);
-  vx += (fwdX * pumpAccel + rightX * rightInput * 11.0) * safeDt;
-  vz += (fwdZ * pumpAccel + rightZ * rightInput * 11.0) * safeDt;
+  // Measure pendulum progress relative to anchor
+  const curRx = px - swing.anchorX;
+  const curRy = py - swing.anchorY;
+  const curRz = pz - swing.anchorZ;
+  const curHorizAlongFwd = curRx * fwdX + curRz * fwdZ;
+  const swingAngleRad = Math.atan2(curHorizAlongFwd, Math.max(2.0, -curRy));
 
-  // Air drag
-  const drag = Math.max(0.94, 1 - 0.18 * safeDt);
+  // Bottom-of-arc Insomniac speed surge: maximum pump right at the bottom of the pendulum!
+  const bottomFactor = Math.exp(-Math.pow(swingAngleRad * 2.2, 2));
+  const basePump = (boost ? 28.0 : 18.5) * Math.max(0.35, forwardInput);
+  const arcBoost = bottomFactor * (boost ? 16.5 : 10.5);
+  vx += (fwdX * (basePump + arcBoost) + rightX * rightInput * 14.5) * safeDt;
+  vz += (fwdZ * (basePump + arcBoost) + rightZ * rightInput * 14.5) * safeDt;
+
+  // Gentle air drag so high-speed arcs remain fluid and controllable
+  const drag = Math.max(0.955, 1 - 0.12 * safeDt);
   vx *= drag;
   vy *= drag;
   vz *= drag;
@@ -850,7 +950,7 @@ export function stepWebSwingPhysics(
   let ny = py + vy * safeDt;
   let nz = pz + vz * safeDt;
 
-  // Pendulum rope constraint: project back onto sphere of radius ropeLength around anchor
+  // Pendulum rope constraint: project cleanly onto sphere of radius ropeLength around anchor
   const rx = nx - swing.anchorX;
   const ry = ny - swing.anchorY;
   const rz = nz - swing.anchorZ;
@@ -863,7 +963,7 @@ export function stepWebSwingPhysics(
     ny = swing.anchorY + uy * swing.ropeLength;
     nz = swing.anchorZ + uz * swing.ropeLength;
 
-    // Remove outward radial velocity so energy converts cleanly into tangential swing arc!
+    // Remove outward radial velocity component -> 100% conserved into tangential forward swing!
     const radialVel = vx * ux + vy * uy + vz * uz;
     if (radialVel > 0) {
       vx -= radialVel * ux;
@@ -872,15 +972,15 @@ export function stepWebSwingPhysics(
     }
   }
 
-  // Keep cleanly above city streets during low swing swoops
-  if (ny < 2.2) {
-    ny = 2.2;
-    if (vy < 0) vy = Math.abs(vy) * 0.35 + 2.5;
+  // Insomniac Ground Safety Net: smoothly skim 2.6m above rooftops/streets with upward curve!
+  if (ny < 2.6) {
+    ny = 2.6;
+    if (vy < 0) vy = Math.abs(vy) * 0.45 + 3.2;
   }
 
-  // Clamp top swing speed so movement stays exhilarating yet controllable
+  // Clamp top swing speed (high enough for thrilling NYC skyline sprints!)
   const totalSpd = Math.hypot(vx, vy, vz);
-  const maxSpd = boost ? 38.0 : 28.5;
+  const maxSpd = boost ? 46.0 : 35.0;
   if (totalSpd > maxSpd) {
     const s = maxSpd / totalSpd;
     vx *= s;
@@ -890,6 +990,8 @@ export function stepWebSwingPhysics(
 
   const horizSpd = Math.hypot(vx, vz);
   const heading = horizSpd > 0.4 ? Math.atan2(vx, vz) : Math.atan2(fwdX, fwdZ);
+  // Suggest auto-re-anchor once Spider-Man swings past the high forward apex (~45° ahead of anchor)
+  const shouldAutoReanchor = swing.swingTime > 0.72 && swingAngleRad > 0.72;
 
   return {
     x: nx,
@@ -897,12 +999,15 @@ export function stepWebSwingPhysics(
     z: nz,
     heading,
     speed: horizSpd,
+    shouldAutoReanchor,
     swing: {
       ...swing,
       vx,
       vy,
       vz,
       swingTime: swing.swingTime + safeDt,
+      swingAngleRad,
+      diveSlingshotBoost: Math.max(0, swing.diveSlingshotBoost - safeDt * 10),
     },
   };
 }

@@ -1,6 +1,21 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  ATLAS_BASE_H,
+  ATLAS_BASE_W,
+  ATLAS_BOUNDS,
+  ATLAS_PINS,
+  ATLAS_REGION_PRESETS,
+  atlasToWorldX,
+  atlasToWorldZ,
+  clampAtlasCamera,
+  computeAtlasScaleBar,
+  computeAtlasViewBox,
+  sampleAtlasPixelRGB,
+  worldToAtlasX,
+  worldToAtlasY,
+} from './worldAtlas';
+import {
   HERO_CHARACTERS,
   getHeroById,
   getHeroOutfitById,
@@ -8,7 +23,43 @@ import {
   createInitialHeroRuntimeState,
   getAllWearableSuits,
   filterWearableSuits,
+  getHeroPowerOptions,
 } from './heroCharacters';
+import {
+  CAMERA_PERSPECTIVES,
+  createInitialJetSkiState,
+  createInitialSafariJeepState,
+  createInitialVtolAircraftState,
+  cycleCameraPerspective,
+  getSurfacePhysicsParams,
+  getTerrainSurfaceAt,
+  sampleWaterWaveHeight,
+  stepJetSki,
+  stepSafariJeep,
+  stepVtolAircraft,
+  VTOL_AIRCRAFT_SPAWN,
+} from './expeditionVehicles';
+import {
+  computeUnderwaterAtmosphere,
+  createMarineLifeActors,
+  stepMarineLifeActors,
+} from './underwaterOcean';
+import {
+  WILDLIFE_SPECIES_CATALOG,
+  createInitialWildlifeEcosystem,
+  findWildlifeInViewfinder,
+  stepWildlifeEcosystem,
+} from './wildlifeEcosystem';
+import {
+  LAND_TRANSPORT_OPTIONS,
+  SNOWMAN_TRANSPORTS,
+  WATER_TRANSPORT_OPTIONS,
+  createInitialSnowmanTaxiState,
+  dispatchSnowmanTaxi,
+  stepSnowmanTaxi,
+  triggerInstantCycleJetSkiMorph,
+} from './snowmanTaxi';
+import { resolveGraphicsProfile } from './graphicsQuality';
 import {
   createWeatherOverlayParticles,
   resolveWeatherOverlayConfig,
@@ -39,19 +90,39 @@ import {
 import {
   VAULT_BATMOBILE_BAY,
   VAULT_CAR_SPECS,
+  VAULT_CONNECTOR_MAX_X,
+  VAULT_CONNECTOR_MIN_X,
+  VAULT_EXIT_GATE_X,
   VAULT_EXIT_TUNNEL_POS,
   VAULT_FLOOR_Y,
   VAULT_HALF_X,
   VAULT_HALF_Z,
+  VAULT_HEIGHT,
   VAULT_HERO_PODS,
+  VAULT_HOME_INTERIOR_DOOR_WORLD,
+  VAULT_HOME_TUNNEL_MOUTH_Z,
+  VAULT_HOME_TUNNEL_RAMP_BOTTOM_Z,
+  VAULT_HOME_TUNNEL_RAMP_TOP_Z,
+  VAULT_HOME_TUNNEL_X,
+  VAULT_MEGA_CHAMBER_LENGTH,
+  VAULT_MEGA_END_Z,
+  VAULT_MEGA_START_Z,
+  VAULT_PASSAGE_END_X,
   VAULT_SURFACE_DRIVE_EXIT,
   clampVaultPosition,
   createInitialHomeVaultState,
+  getVaultMegaChamberDistanceM,
+  isEnteringHouseSecretTunnelFromSurface,
+  isExitingHouseSecretTunnelToSurface,
+  isInsideMegaChamber,
   isInsideVaultDriveExitTunnel,
   isPlayerInsidePersonalHome,
   stepSecretHatchAnimation,
   stepVaultCarState,
+  stepGenericVehicleVaultTunnel,
   toggleSecretVaultHatch,
+  toggleVaultExitGate,
+  vaultFloorYAt,
   type VaultCarRuntimeState,
 } from './homeUndergroundVault';
 import {
@@ -65,6 +136,7 @@ import {
   METRO_SURFACE_ENTRANCES,
   PARACHUTE_TOWER_POS,
   clampUndergroundMetroPosition,
+  computeSimultaneousSubwayState,
   createInitialAirlinerState,
   createInitialParachuteState,
   createInitialSubwayTrainState,
@@ -75,6 +147,21 @@ import {
   stepParachuteGlide,
   stepSubwayTrainState,
 } from './airportMetro';
+import {
+  OCEAN_HERO_SUIT_PODS,
+  OCEAN_HERO_TOWER_CENTER,
+  OCEAN_RESCUE_THRESHOLD_SECONDS,
+  SNOWMAN_ISLAND_CENTER,
+  SNOWMAN_ISLAND_SPAWN,
+  SUBMARINE_DOCK_POS,
+  SUBMARINE_MAX_DEPTH,
+  createInitialSnowmanRescueState,
+  createInitialSubmarineState,
+  isInsideOceanHeroTowerLand,
+  isInsideSnowmanIsland,
+  stepOceanSnowmanRescue,
+  stepSubmarineState,
+} from './oceanWorldSystems';
 import {
   createInitialBatmobileState,
   stepBatmobileState,
@@ -169,19 +256,44 @@ import {
   LAKE_CENTER,
   LOCATIONS,
   WATER_LEVEL,
+  WILDLIFE_FOREST_SANCTUARY_CENTER,
   WORLD_PLAYABLE_RADIUS,
 } from './terrain';
 import {
   DINOSAUR_ARENA_CENTER,
   DINOSAUR_ISLAND_CENTER,
+  DINOSAUR_ISLAND_LAND_RADIUS,
+  DINOSAUR_ISLAND_RADIUS,
+  DINOSAUR_MARINA_BOAT_BERTH,
+  DINOSAUR_MARINA_PIER_BOUNDS,
+  SSJ_DINOSAUR_SPECIES,
+  SSJ_ISLAND_LANDMARKS,
   createInitialDinosaurIslandState,
   fireDinosaurIslandAk47,
   getActiveArenaWallColliders,
   isOnDinosaurIsland,
+  isOnDinosaurMarinaPier,
   spawnNextDinoWave,
   stepDinosaurIslandState,
   stepSafariCarState,
+  toggleJurassicGate,
 } from './dinosaurIsland';
+import {
+  AIRPORT_AIRCRAFT_STANDS,
+  ORANGE_HELI_HOME_POS,
+  ORANGE_HELI_ISLAND_POS,
+  VEHICLE_GARAGE_CENTER,
+  VEHICLE_GARAGE_SPAWN_BAY,
+  createInitialOrangeHeliState,
+  getOrangeHeliExitPosition,
+  stepOrangeHeliState,
+} from './skyExplorer';
+import {
+  HOVER_GLIDER_SPAWN,
+  computeLookToFlyVerticalRate,
+  createInitialHoverGliderState,
+  stepHoverGlider,
+} from './hoverGlider';
 import {
   BUS_STOPS,
   canBoardBus,
@@ -211,6 +323,8 @@ import {
   stepTrainState,
   canBoardTrain,
   getDisembarkPosition,
+  getRailwayGradeProfile,
+  TRAIN_DRIVER_NOTCH_MPS,
 } from './railway';
 import {
   generateDigitalTicket,
@@ -243,6 +357,10 @@ import {
   createInitialJumpState,
   requestJump,
   stepJumpState,
+  createInitialScreenTouchState,
+  beginScreenPointer,
+  moveScreenPointer,
+  endScreenPointer,
 } from './locomotion';
 import {
   buildDreamlineAndroidProjectFiles,
@@ -976,12 +1094,12 @@ test('SSJ Dinosaur Island sits far offshore in the sea, linked by extended railw
   // Surrounded by wide open ocean water on West (between coast & island), East, and South!
   assert.equal(isOceanAt(190, 96), true, 'Wide open sea should separate Kadalkarai Coast and Dinosaur Island');
   assert.equal(
-    isOceanAt(DINOSAUR_ISLAND_CENTER.x + 48, DINOSAUR_ISLAND_CENTER.z),
+    isOceanAt(DINOSAUR_ISLAND_CENTER.x + DINOSAUR_ISLAND_RADIUS + 18, DINOSAUR_ISLAND_CENTER.z),
     true,
     'Open sea should lie east of Dinosaur Island'
   );
   assert.equal(
-    isOceanAt(DINOSAUR_ISLAND_CENTER.x, DINOSAUR_ISLAND_CENTER.z + 48),
+    isOceanAt(DINOSAUR_ISLAND_CENTER.x, DINOSAUR_ISLAND_CENTER.z + DINOSAUR_ISLAND_RADIUS + 18),
     true,
     'Open sea should lie south of Dinosaur Island'
   );
@@ -997,11 +1115,13 @@ test('SSJ Dinosaur Island sits far offshore in the sea, linked by extended railw
   assert.ok(platY >= 0.7, `Expected elevated Dinosaur Island station platform, got ${platY}`);
 });
 
-test('Dinosaur Island AK-47 kills T-Rex, shatters walls 1->4 sequentially, spawns endless waves, and drives Safari Car', () => {
+test('Exact SSJ Dinosaur Island starts completely open (zero wall-breaking sequence), has 18 species, AK-47 endless waves, and drivable Safari Tour Cruiser', () => {
   let state = createInitialDinosaurIslandState();
   assert.equal(state.dinoHp, 350);
-  assert.equal(state.brokenWalls, 0);
-  assert.equal(getActiveArenaWallColliders(state).length, 4);
+  assert.equal(state.brokenWalls, 4, 'Island must start completely open with zero wall-breaking sequence');
+  assert.deepEqual(state.wallsIntact, [false, false, false, false]);
+  assert.equal(getActiveArenaWallColliders(state).length, 0, 'Must have zero containment wall colliders');
+  assert.equal(SSJ_DINOSAUR_SPECIES.length, 18, 'Exact SSJ Dinosaur Island must include all 18 dinosaur species');
 
   // Burst 1 deals 175 damage
   const shot1 = fireDinosaurIslandAk47(state, DINOSAUR_ARENA_CENTER.x - 4, 1.5, DINOSAUR_ARENA_CENTER.z - 4);
@@ -1010,18 +1130,8 @@ test('Dinosaur Island AK-47 kills T-Rex, shatters walls 1->4 sequentially, spawn
   assert.equal(shot1.state.dinoHp, 175);
   state = shot1.state;
 
-  // Cooldown passes, Burst 2 finishes T-Rex (0 HP, kills=1) and starts sequential 1->4 wall destruction
+  // Cooldown passes, Burst 2 finishes T-Rex (0 HP, kills=1) with zero wall-shatter events
   for (let i = 0; i < 8; i++) {
-    state = stepDinosaurIslandState(state, DINOSAUR_ARENA_CENTER.x - 4, DINOSAUR_ARENA_CENTER.z - 4, true, 0.05).state;
-  }
-  const shot2 = fireDinosaurIslandAk47(state, DINOSAUR_ARENA_CENTER.x - 4, 1.5, DINOSAUR_ARENA_CENTER.z - 4);
-  assert.equal(shot2.killedDino, true);
-  assert.equal(shot2.state.dinoAlive, false);
-  assert.equal(shot2.state.kills, 1);
-  state = shot2.state;
-
-  const brokenStages: number[] = [];
-  for (let i = 0; i < 60; i++) {
     const stepped = stepDinosaurIslandState(
       state,
       DINOSAUR_ARENA_CENTER.x - 4,
@@ -1029,30 +1139,30 @@ test('Dinosaur Island AK-47 kills T-Rex, shatters walls 1->4 sequentially, spawn
       true,
       0.05
     );
+    assert.equal(stepped.events.wallJustBrokenStage, null, 'No wall-breaking sequence should trigger');
     state = stepped.state;
-    if (stepped.events.wallJustBrokenStage !== null) {
-      brokenStages.push(stepped.events.wallJustBrokenStage);
-    }
   }
-  assert.deepEqual(brokenStages, [1, 2, 3, 4], 'All 4 containment walls should break one by one in order');
-  assert.equal(state.brokenWalls, 4);
-  assert.equal(getActiveArenaWallColliders(state).length, 0, 'Broken walls must have zero remaining colliders');
+  const shot2 = fireDinosaurIslandAk47(state, DINOSAUR_ARENA_CENTER.x - 4, 1.5, DINOSAUR_ARENA_CENTER.z - 4);
+  assert.equal(shot2.killedDino, true);
+  assert.equal(shot2.state.dinoAlive, false);
+  assert.equal(shot2.state.kills, 1);
+  state = shot2.state;
 
   // Spawn Endless Wave #2
   state = spawnNextDinoWave(state, DINOSAUR_ARENA_CENTER.x, DINOSAUR_ARENA_CENTER.z);
   assert.equal(state.dinoAlive, true);
   assert.equal(state.dinoHp, 350);
 
-  // Safari Car drives smoothly across the island and stays on dry island landmass
+  // Safari Tour Cruiser drives smoothly across the island and stays on dry island landmass
   let car = state.safariCar;
   const startCarX = car.x;
   const startCarZ = car.z;
   for (let i = 0; i < 40; i++) {
-    car = stepSafariCarState(car, 1.0, 0.2, false, state.wallsIntact, 0.05);
+    car = stepSafariCarState(car, 1.0, 0.12, false, state.wallsIntact, 0.05, isWaterAt);
   }
   const carMoved = Math.hypot(car.x - startCarX, car.z - startCarZ);
-  assert.ok(carMoved > 8.0, `Expected Safari Car to drive smoothly, moved=${carMoved}`);
-  assert.ok(isOnDinosaurIsland(car.x, car.z), 'Safari Car must remain safely on Dinosaur Island');
+  assert.ok(carMoved > 8.0, `Expected Safari Tour Cruiser to drive smoothly, moved=${carMoved}`);
+  assert.ok(isOnDinosaurIsland(car.x, car.z), 'Safari Tour Cruiser must remain safely on Dinosaur Island');
 });
 
 test('fireflies appear exclusively in forested regions during twilight and night hours when weather is clear', () => {
@@ -1329,7 +1439,7 @@ test('SSJ Tropical Sky Explorer flies smoothly in 3D, climbs, boosts, turns, and
 
 test('Bamboo Catamaran, Tribal Outrigger, and Sovereign of the Tides spawn in navigable ocean water and sail cleanly', () => {
   const boats = createInitialBoats();
-  assert.equal(boats.length, 5);
+  assert.equal(boats.length, 6);
 
   const catamaran = boats.find((b) => b.id === 'bamboo_catamaran');
   const outrigger = boats.find((b) => b.id === 'tribal_outrigger');
@@ -1798,26 +1908,42 @@ test('Sovereign of the Tides is moored near Kadalkarai Shore with a walkable boa
   assert.equal(isNavigableBoatWater('ocean', sailing.x, sailing.z), true);
 });
 
-test('Mobile Vehicle Catalogue includes all cars, bikes, ships, aircraft, train & Armoured Batmobile with safe spawn coordinates', () => {
-  assert.equal(VEHICLE_CATALOGUE.length, 13, 'Catalogue must include all 13 playable vehicles including Batmobile');
-  assert.ok(VEHICLE_CATALOGUE.some((v) => v.id === 'batmobile'), 'Catalogue must include Armoured Batmobile');
-  assert.ok(getCatalogueVehiclesByCategory('cars').length >= 4);
-  assert.ok(getCatalogueVehiclesByCategory('bikes').length >= 2);
-  assert.ok(getCatalogueVehiclesByCategory('ships').length >= 5);
-  assert.ok(getCatalogueVehiclesByCategory('air_rail').length >= 2);
+test('Mobile Vehicle Catalogue includes all 22 vehicles (including Aero-Ti Hoverboard Glider, 49cc Petrol Dirt Bike, Orange Rescue Helicopter & SSJ Expedition Cruiser) and spawns EVERY vehicle at exact player location', () => {
+  assert.equal(VEHICLE_CATALOGUE.length, 22, 'Catalogue must include all 22 playable vehicles including Aero-Ti Hoverboard Glider, 49cc Petrol Dirt Bike, Orange Rescue Helicopter & SSJ Expedition Cruiser');
+  for (const requiredId of [
+    'safari_jeep',
+    'hover_glider',
+    'vtol_aircraft',
+    'jetski_sport',
+    'jetski_perf',
+    'dirt_bike_49cc',
+    'kadalkarai_submarine',
+    'batmobile',
+    'orange_heli',
+    'ssj_expedition_boat',
+    'safari_car',
+  ] as const) {
+    assert.ok(
+      VEHICLE_CATALOGUE.some((v) => v.id === requiredId),
+      `Catalogue must include ${requiredId}`
+    );
+  }
+  assert.ok(getCatalogueVehiclesByCategory('cars').length >= 5);
+  assert.ok(getCatalogueVehiclesByCategory('bikes').length >= 3);
+  assert.ok(getCatalogueVehiclesByCategory('ships').length >= 9);
+  assert.ok(getCatalogueVehiclesByCategory('air_rail').length >= 5);
 
-  for (const v of VEHICLE_CATALOGUE) {
-    const pt = computeCatalogueSpawnPoint(v.id, 0, 14, 0);
-    assert.ok(Number.isFinite(pt.x) && Number.isFinite(pt.z), `Spawn point for ${v.id} must be finite`);
-    if (v.boatId) {
-      const zone = v.boatId === 'lake_boat' ? 'lake' : 'ocean';
-      assert.equal(
-        isNavigableBoatWater(zone, pt.x, pt.z),
-        true,
-        `Watercraft ${v.id} must spawn inside navigable ${zone} water`
-      );
-    } else {
-      assert.equal(isWaterAt(pt.x, pt.z), false, `Land/air vehicle ${v.id} must spawn on dry ground`);
+  const testPositions = [
+    { x: -12.4, z: -18.7, h: 0.72 },
+    { x: 348.2, z: 184.5, h: -1.15 },
+    { x: 12.0, z: 22.0, h: 2.4 },
+  ];
+  for (const pos of testPositions) {
+    for (const v of VEHICLE_CATALOGUE) {
+      const pt = computeCatalogueSpawnPoint(v.id, pos.x, pos.z, pos.h);
+      assert.equal(pt.x, pos.x, `${v.id} must spawn at exact player X (${pos.x}), got ${pt.x}`);
+      assert.equal(pt.z, pos.z, `${v.id} must spawn at exact player Z (${pos.z}), got ${pt.z}`);
+      assert.equal(pt.heading, pos.h, `${v.id} must inherit exact player heading`);
     }
   }
 });
@@ -2416,18 +2542,22 @@ test('Night mode maintains a deep starry night sky while lighting up both world 
   const sunsetClear = computeSkyPalette(TIME_PRESET_HOURS.sunset, 'clear', 'spring');
   const middayClear = computeSkyPalette(TIME_PRESET_HOURS.afternoon, 'clear', 'spring');
 
-  // At full night, sky stays dark & starry while BOTH world street/station lamps and train lights shine at 1.0
+  // At full night, sky stays genuinely dark & starry with calm, non-overbright world lamps and warm train lights
   assert.equal(nightClear.nightDarkness, 1);
-  assert.ok(nightClear.hemiIntensity <= 0.2, `Expected dark night hemiIntensity <= 0.2, got ${nightClear.hemiIntensity}`);
-  assert.ok(nightClear.sunIntensity <= 0.12, `Expected subtle moonlight sunIntensity <= 0.12, got ${nightClear.sunIntensity}`);
+  assert.ok(nightClear.hemiIntensity <= 0.12, `Expected calm dark night hemiIntensity <= 0.12, got ${nightClear.hemiIntensity}`);
+  assert.ok(nightClear.sunIntensity <= 0.08, `Expected subtle moonlight sunIntensity <= 0.08, got ${nightClear.sunIntensity}`);
+  assert.ok(nightClear.environmentIntensity <= 0.06, `Expected low night environmentIntensity <= 0.06, got ${nightClear.environmentIntensity}`);
   assert.ok(nightClear.starOpacity > 0.9, 'Stars should shine vividly at night');
-  assert.equal(nightClear.worldLanternStrength, 1.0, 'World streetlamps & station lights must illuminate at night');
-  assert.equal(nightClear.lanternStrength, 1.0, 'Train lighting must remain at full 1.0 strength at night');
+  assert.ok(
+    nightClear.worldLanternStrength >= 0.4 && nightClear.worldLanternStrength <= 0.65,
+    `World lamps must be calm and non-overbright at night, got ${nightClear.worldLanternStrength}`
+  );
+  assert.ok(nightClear.lanternStrength >= 0.75, 'Train lighting must shine clearly at night');
 
-  // Winter snow at night also keeps world lamps brightly illuminated
+  // Winter snow at night also keeps world lamps softly illuminated without overbrightness
   assert.equal(nightWinterSnow.nightDarkness, 1);
-  assert.equal(nightWinterSnow.worldLanternStrength, 1.0);
-  assert.equal(nightWinterSnow.lanternStrength, 1.0);
+  assert.ok(nightWinterSnow.worldLanternStrength >= 0.4 && nightWinterSnow.worldLanternStrength <= 0.65);
+  assert.ok(nightWinterSnow.lanternStrength >= 0.75);
 
   // Midday turns world lamps off, while sunset warms them up cleanly
   assert.equal(middayClear.worldLanternStrength, 0);
@@ -2676,13 +2806,28 @@ test('Secret Underground House Floor stays hidden until house button is pressed,
   }
   assert.equal(vault.hatchOpenProgress, 1, 'Secret floor hatch must open fully to 1.0');
 
-  // 3. Large 56m x 48m underground bunker clamps walking/driving cleanly within walls
-  const clamped = clampVaultPosition(99, -99, 1.4);
+  // 3. Tall 22m underground base + 94m East Driving Passage clamps walking/driving cleanly with closed vs open blast gate
+  assert.ok(VAULT_HEIGHT >= 22, `Expected much taller secret base >= 22m, got ${VAULT_HEIGHT}m`);
+  const clamped = clampVaultPosition(99, -99, 1.4, false);
   assert.equal(clamped.hitWall, true);
   assert.equal(clamped.x, VAULT_HALF_X - 1.4);
   assert.equal(clamped.z, -VAULT_HALF_Z + 1.4);
 
-  // 4. Driving an underground vault car inside the garage and straight out the East Exit Tunnel onto the surface
+  // Inside the long East Driving Passage (z=0), closed gate stops vehicles before VAULT_EXIT_GATE_X; opening the gate lets them drive all the way to VAULT_PASSAGE_END_X
+  const closedGateClamp = clampVaultPosition(VAULT_EXIT_GATE_X + 5, 0, 1.4, false);
+  assert.equal(closedGateClamp.hitWall, true);
+  assert.ok(closedGateClamp.x < VAULT_EXIT_GATE_X, 'Closed blast gate must block exiting passage');
+
+  vault = toggleVaultExitGate(vault);
+  assert.equal(vault.exitGateOpen, true);
+  for (let i = 0; i < 30; i++) {
+    vault = stepSecretHatchAnimation(vault, 0.05);
+  }
+  assert.equal(vault.exitGateProgress, 1, 'Outside blast exit gate must slide fully open to 1.0');
+  const openGateClamp = clampVaultPosition(VAULT_EXIT_GATE_X + 5, 0, 1.4, true);
+  assert.ok(openGateClamp.x > VAULT_EXIT_GATE_X, 'Open blast gate must allow driving past exit threshold');
+
+  // 4. Driving an underground vault car down the 94m East Passage and straight out the open Blast Gate onto the surface
   let car: VaultCarRuntimeState = {
     ...vault.cars[0],
     x: VAULT_EXIT_TUNNEL_POS.x - 4.0,
@@ -2691,25 +2836,26 @@ test('Secret Underground House Floor stays hidden until house button is pressed,
     inVault: true,
   };
   let exitedSurface = false;
-  for (let i = 0; i < 40; i++) {
-    const res = stepVaultCarState(car, 1, 0, true, false, 0.05);
+  for (let i = 0; i < 50; i++) {
+    const res = stepVaultCarState(car, 1, 0, true, false, 0.05, 1.0);
     car = res.state;
     if (res.exitedToSurface) {
       exitedSurface = true;
       break;
     }
   }
-  assert.equal(exitedSurface, true, 'Driving a Vault Car through the East Exit Tunnel must seamlessly emerge onto the surface');
+  assert.equal(exitedSurface, true, 'Driving a Vault Car through the open East Driving Passage must emerge onto the surface');
   assert.equal(car.inVault, false);
   assert.equal(Math.round(car.x), Math.round(VAULT_SURFACE_DRIVE_EXIT.x));
   assert.equal(Math.round(car.z), Math.round(VAULT_SURFACE_DRIVE_EXIT.z));
 
-  // 5. Batmobile starts parked in Underground Vault Bay 4 and can also drive seamlessly out through East Exit Tunnel
+  // 5. Batmobile starts parked in Underground Vault Bay 4 and can drive seamlessly out through open East Exit Gate
   let bat = createInitialBatmobileState();
   assert.equal(bat.inVault, true);
   assert.equal(bat.x, VAULT_BATMOBILE_BAY.x);
   assert.equal(bat.y, VAULT_FLOOR_Y);
-  assert.equal(isInsideVaultDriveExitTunnel(VAULT_EXIT_TUNNEL_POS.x, VAULT_EXIT_TUNNEL_POS.z), true);
+  assert.equal(isInsideVaultDriveExitTunnel(VAULT_PASSAGE_END_X - 2, 0, 1.0), true);
+  assert.equal(isInsideVaultDriveExitTunnel(VAULT_PASSAGE_END_X - 2, 0, 0.0), false);
   bat = {
     ...bat,
     x: VAULT_EXIT_TUNNEL_POS.x - 4.0,
@@ -2718,21 +2864,1415 @@ test('Secret Underground House Floor stays hidden until house button is pressed,
     inVault: true,
   };
   let batExited = false;
-  for (let i = 0; i < 40; i++) {
-    const res = stepBatmobileState(bat, 1, 0, true, false, 0.05);
+  for (let i = 0; i < 50; i++) {
+    const res = stepBatmobileState(bat, 1, 0, true, false, 0.05, 1.0);
     bat = res.state;
     if (res.exitedToSurface) {
       batExited = true;
       break;
     }
   }
-  assert.equal(batExited, true, 'Driving Batmobile through East Exit Tunnel must emerge onto surface driveway');
+  assert.equal(batExited, true, 'Driving Batmobile through open East Driving Passage must emerge onto surface driveway');
   assert.equal(bat.inVault, false);
 });
 
+test('Simultaneous subway trains climb above the surface AND dive inside the tunnel concurrently', () => {
+  let sawAscendingElevated = false;
+  let sawAscendingTunnel = false;
+  let sawDescendingElevated = false;
+  let sawDescendingTunnel = false;
+  let sawSimultaneousOppositeSlope = false;
 
+  for (let t = 0; t < 24; t += 0.25) {
+    const s = computeSimultaneousSubwayState(t);
+    if (s.ascendingTrain.elevation > 4.0) sawAscendingElevated = true;
+    if (s.ascendingTrain.elevation < -2.0) sawAscendingTunnel = true;
+    if (s.descendingTrain.elevation > 4.0) sawDescendingElevated = true;
+    if (s.descendingTrain.elevation < -2.0) sawDescendingTunnel = true;
+    if (s.ascendingTrain.pitch > 0.05 && s.descendingTrain.pitch < -0.05) {
+      sawSimultaneousOppositeSlope = true;
+    }
+  }
 
+  assert.equal(sawAscendingElevated, true, 'Ascending subway train must rise above the surface onto the elevated viaduct');
+  assert.equal(sawAscendingTunnel, true, 'Ascending subway train must emerge from inside the underground tunnel');
+  assert.equal(sawDescendingElevated, true, 'Descending subway train must travel above the surface');
+  assert.equal(sawDescendingTunnel, true, 'Descending subway train must dive back inside the underground tunnel');
+  assert.equal(
+    sawSimultaneousOppositeSlope,
+    true,
+    'Ascending and descending trains must travel upward and downward simultaneously'
+  );
+});
 
+test('Submarine cruises ocean & dives underwater, Ocean Superhero Suits Building holds 7 suits, and >1min ocean swim triggers Snowman Jet Ski rescue to Snowman Island', () => {
+  // 1. Kadalkarai Submarine Service cruises across open ocean and dives underwater smoothly
+  let sub = createInitialSubmarineState();
+  assert.equal(isOceanAt(SUBMARINE_DOCK_POS.x, SUBMARINE_DOCK_POS.z), true);
+  const startSubX = sub.x;
+  const startSubZ = sub.z;
+  for (let i = 0; i < 60; i++) {
+    sub = stepSubmarineState(
+      sub,
+      { throttle: 1.0, steer: 0.15, diveDelta: 1.0, boost: true },
+      0.05,
+      isOceanAt
+    );
+  }
+  assert.ok(Math.hypot(sub.x - startSubX, sub.z - startSubZ) > 12, 'Submarine must cruise forward through ocean');
+  assert.ok(sub.depth > 4.0 && sub.depth <= SUBMARINE_MAX_DEPTH, `Submarine must dive smoothly underwater, depth=${sub.depth}`);
+  assert.equal(sub.submerged, true);
+  assert.ok(sub.speedKmh > 15, `Expected submarine speed > 15 km/h, got ${sub.speedKmh}`);
+
+  // 2. Ocean Superhero Suits Building sits offshore in ocean as dry walkable structure with all 7 hero suit pods
+  assert.equal(isInsideOceanHeroTowerLand(OCEAN_HERO_TOWER_CENTER.x, OCEAN_HERO_TOWER_CENTER.z), true);
+  assert.equal(isOceanAt(OCEAN_HERO_TOWER_CENTER.x, OCEAN_HERO_TOWER_CENTER.z), false);
+  assert.equal(isWaterAt(OCEAN_HERO_TOWER_CENTER.x, OCEAN_HERO_TOWER_CENTER.z), false);
+  assert.ok(walkableHeightAt(OCEAN_HERO_TOWER_CENTER.x, OCEAN_HERO_TOWER_CENTER.z) >= 0.8);
+  assert.equal(OCEAN_HERO_SUIT_PODS.length, HERO_CHARACTERS.length, 'Ocean Superhero Suits Building must showcase all 7 hero suits');
+
+  // 3. New Snowman Island sits offshore in ocean as dry snowy land
+  assert.equal(isInsideSnowmanIsland(SNOWMAN_ISLAND_CENTER.x, SNOWMAN_ISLAND_CENTER.z), true);
+  assert.equal(isOceanAt(SNOWMAN_ISLAND_CENTER.x, SNOWMAN_ISLAND_CENTER.z), false);
+  assert.equal(isWaterAt(SNOWMAN_ISLAND_CENTER.x, SNOWMAN_ISLAND_CENTER.z), false);
+  assert.ok(walkableHeightAt(SNOWMAN_ISLAND_SPAWN.x, SNOWMAN_ISLAND_SPAWN.z) > 0.5);
+
+  // 4. Staying in ocean water > 30 seconds triggers Snowman Jet Ski rescue and moves player directly to Snowman Island
+  let rescue = createInitialSnowmanRescueState();
+  let playerX = 165;
+  let playerZ = 95;
+  assert.equal(isOceanAt(playerX, playerZ), true);
+  assert.equal(OCEAN_RESCUE_THRESHOLD_SECONDS, 30);
+
+  // 25 seconds in ocean -> still counting, not triggered yet
+  for (let i = 0; i < 250; i++) {
+    const r = stepOceanSnowmanRescue(rescue, { dt: 0.1, inOceanWater: true, playerX, playerZ });
+    rescue = r.state;
+  }
+  assert.equal(rescue.phase, 'idle', 'Rescue must not trigger before 30 seconds');
+  assert.ok(rescue.oceanSwimSeconds >= 24.5 && rescue.oceanSwimSeconds < 30);
+
+  // Past 30 seconds -> Snowman Jet Ski dispatches, picks up player, and drops them safely on Snowman Island!
+  let sawApproaching = false;
+  let sawTransporting = false;
+  let delivered = false;
+  for (let i = 0; i < 600; i++) {
+    const r = stepOceanSnowmanRescue(rescue, { dt: 0.1, inOceanWater: true, playerX, playerZ });
+    rescue = r.state;
+    if (r.overridePlayerPos) {
+      playerX = r.overridePlayerPos.x;
+      playerZ = r.overridePlayerPos.z;
+    }
+    if (rescue.phase === 'approaching') sawApproaching = true;
+    if (rescue.phase === 'transporting') sawTransporting = true;
+    if (r.justArrivedAtIsland) {
+      delivered = true;
+      break;
+    }
+  }
+  assert.equal(sawApproaching, true, 'Snowman on Jet Ski must approach player after >30 seconds in ocean water');
+  assert.equal(sawTransporting, true, 'Snowman on Jet Ski must pick up player and ride to Snowman Island');
+  assert.equal(delivered, true, 'Snowman Jet Ski must deliver player onto the new Snowman Island');
+  assert.equal(isInsideSnowmanIsland(playerX, playerZ), true, 'Delivered player must stand safely on Snowman Island');
+});
+
+test('Flagship Expedition Vehicles: 4x4 Safari Jeep, Gold/Wood VTOL, Sport & Pro Jet Skis, and 7 Camera Perspectives', () => {
+  // 1. Safari Jeep surface physics & 4WD suspension
+  const asphaltGrip = getSurfacePhysicsParams('asphalt');
+  const mudGrip = getSurfacePhysicsParams('mud');
+  assert.ok(asphaltGrip.maxSpeed > mudGrip.maxSpeed, 'Asphalt must permit higher top speed than mud');
+  assert.ok(mudGrip.mudFactor > 0.5, 'Mud surface must emit strong mud splash');
+  assert.equal(getTerrainSurfaceAt(0, 15, 'clear'), 'asphalt');
+
+  const jeep = createInitialSafariJeepState();
+  const jeepStartX = jeep.x;
+  const jeepStartZ = jeep.z;
+  for (let i = 0; i < 60; i++) {
+    stepSafariJeep(
+      jeep,
+      { forward: 1, turn: 0.25, ascend: false, descend: false, brake: false, boost: true },
+      0.05,
+      'clear',
+      true
+    );
+  }
+  assert.ok(Math.hypot(jeep.x - jeepStartX, jeep.z - jeepStartZ) > 10, 'Safari Jeep must accelerate strongly in 4WD');
+  assert.ok(jeep.speedKmh > 25, `Expected Safari Jeep > 25 km/h, got ${jeep.speedKmh}`);
+  assert.ok(jeep.gear !== 'N' && jeep.gear !== 'R', `Expected forward gear, got ${jeep.gear}`);
+  assert.ok(jeep.rpm > 1200, `Expected revving diesel RPM > 1200, got ${jeep.rpm}`);
+
+  // 2. Advanced Gold/Wood VTOL vertical hover takeoff + forward cruise nacelle tilt transition
+  const vtol = createInitialVtolAircraftState();
+  assert.equal(vtol.onGround, true);
+  for (let i = 0; i < 50; i++) {
+    stepVtolAircraft(
+      vtol,
+      { forward: 0, turn: 0, ascend: true, descend: false, brake: false, boost: false },
+      0.05,
+      i * 0.05,
+      'clear',
+      true
+    );
+  }
+  assert.equal(vtol.onGround, false, 'VTOL must lift off vertically');
+  assert.ok(vtol.aglM > 6, `Expected VTOL hover climb > 6m AGL, got ${vtol.aglM}`);
+  assert.ok(vtol.nacelleTilt < 0.25, 'VTOL hover mode must keep ducted fans near vertical');
+
+  // Switch to forward cruise -> nacelles tilt toward 1.0 and forward speed builds
+  vtol.hoverMode = false;
+  for (let i = 0; i < 80; i++) {
+    stepVtolAircraft(
+      vtol,
+      { forward: 1, turn: 0.1, ascend: false, descend: false, brake: false, boost: true },
+      0.05,
+      2.5 + i * 0.05,
+      'breeze',
+      true
+    );
+  }
+  assert.ok(vtol.nacelleTilt > 0.7, `Expected tilted cruise nacelles > 0.7, got ${vtol.nacelleTilt}`);
+  assert.ok(vtol.speedKmh > 60, `Expected VTOL cruise speed > 60 km/h, got ${vtol.speedKmh}`);
+
+  // 3. Sport Yellow & Pro Green Jet Skis Gerstner wave buoyancy & carving lean
+  const calmWave = sampleWaterWaveHeight(43, -15.5, 1.2, 'clear');
+  const stormWave = sampleWaterWaveHeight(140, 60, 1.2, 'thunderstorm');
+  assert.ok(Number.isFinite(calmWave.y) && Number.isFinite(stormWave.y));
+  assert.ok(stormWave.roughness > calmWave.roughness, 'Storm waves must be rougher than calm lake waves');
+
+  const sportSki = createInitialJetSkiState('sport_yellow');
+  const perfSki = createInitialJetSkiState('perf_green');
+  assert.equal(sportSki.model, 'sport_yellow');
+  assert.equal(perfSki.model, 'perf_green');
+  for (let i = 0; i < 35; i++) {
+    stepJetSki(
+      sportSki,
+      { forward: 1, turn: 0.85, ascend: false, descend: false, brake: false, boost: false },
+      0.05,
+      i * 0.05,
+      'clear',
+      true
+    );
+    stepJetSki(
+      perfSki,
+      { forward: 1, turn: -0.45, ascend: false, descend: false, brake: false, boost: true },
+      0.05,
+      i * 0.05,
+      'breeze',
+      true
+    );
+  }
+  assert.ok(sportSki.speedKmh > 25, `Sport Jet Ski must plane cleanly, got ${sportSki.speedKmh} km/h`);
+  assert.ok(perfSki.speedKmh > sportSki.speedKmh, 'Boosted Pro Jet Ski must exceed Sport cruise speed');
+  assert.ok(Math.abs(sportSki.leanRoll) > 0.05, 'Jet Ski must carve/lean into turns');
+  assert.ok(perfSki.sprayIntensity > 0.3, 'High-speed Jet Ski must kick up spray');
+
+  // 4. All 7 camera perspectives cycle cleanly back to chase
+  assert.equal(CAMERA_PERSPECTIVES.length, 7);
+  let cam = CAMERA_PERSPECTIVES[0].id;
+  const visited = new Set<string>();
+  for (let i = 0; i < CAMERA_PERSPECTIVES.length; i++) {
+    visited.add(cam);
+    cam = cycleCameraPerspective(cam);
+  }
+  assert.equal(visited.size, CAMERA_PERSPECTIVES.length);
+  assert.equal(cam, CAMERA_PERSPECTIVES[0].id);
+});
+
+test('Separate Panimalai Wildlife Forest Sanctuary (21 species, zero snakes, off railway) with independent AI, vehicle avoidance & viewfinder photography', () => {
+  assert.equal(WILDLIFE_SPECIES_CATALOG.length, 21, 'Must include all 21 wildlife species (zero snakes)');
+  assert.equal(
+    WILDLIFE_SPECIES_CATALOG.some((s) => (s.id as string) === 'snake' || s.name.toLowerCase().includes('python') || s.name.toLowerCase().includes('snake')),
+    false,
+    'Snakes must be completely removed from the wildlife catalog'
+  );
+  const mammals = WILDLIFE_SPECIES_CATALOG.filter((s) => s.category === 'mammal');
+  const birds = WILDLIFE_SPECIES_CATALOG.filter((s) => s.category === 'bird');
+  const reptiles = WILDLIFE_SPECIES_CATALOG.filter((s) => s.category === 'reptile_amphibian');
+  assert.equal(mammals.length, 10, 'Must include 10 mammal species');
+  assert.equal(birds.length, 8, 'Must include 8 bird species');
+  assert.equal(reptiles.length, 3, 'Must include 3 reptile/amphibian species (zero snakes)');
+
+  const actors = createInitialWildlifeEcosystem();
+  assert.ok(actors.length >= 45, `Expected living multi-individual ecosystem >= 45 animals, got ${actors.length}`);
+  assert.equal(
+    actors.some((a) => (a.speciesId as string) === 'snake'),
+    false,
+    'Zero snake actors may exist in the world'
+  );
+  for (const a of actors) {
+    const distSanctuary = Math.hypot(
+      a.x - WILDLIFE_FOREST_SANCTUARY_CENTER.x,
+      a.z - WILDLIFE_FOREST_SANCTUARY_CENTER.z
+    );
+    assert.ok(
+      distSanctuary < 65,
+      `Wildlife ${a.speciesId} must stay in separated Panimalai Wildlife Forest Sanctuary, dist=${distSanctuary.toFixed(1)}m`
+    );
+    assert.ok(
+      distanceToRail(a.x, a.z) > 12,
+      `Wildlife ${a.speciesId} must stay clear of railway tracks, railDist=${distanceToRail(a.x, a.z).toFixed(1)}m`
+    );
+  }
+
+  // Verify animals advance independent gait/breathing & flee when a fast vehicle approaches
+  const prey = actors.find((a) => a.speciesId === 'sambar_deer');
+  assert.ok(prey, 'Sambar deer must exist in ecosystem');
+  const startPreyX = prey.x;
+  const startPreyZ = prey.z;
+
+  for (let i = 0; i < 40; i++) {
+    stepWildlifeEcosystem(
+      actors,
+      0.05,
+      i * 0.05,
+      14,
+      startPreyX + 4,
+      startPreyZ + 4,
+      true,
+      45
+    );
+  }
+  const movedDist = Math.hypot(prey.x - startPreyX, prey.z - startPreyZ);
+  assert.ok(movedDist > 2.5, `Prey must actively flee approaching vehicle, moved=${movedDist}m`);
+  assert.ok(
+    prey.behavior === 'fleeing_vehicle' || movedDist > 4.0,
+    `Expected fleeing_vehicle reaction, got ${prey.behavior}`
+  );
+
+  // Viewfinder lock detects an animal cleanly in front of the observer
+  const elephant = actors.find((a) => a.speciesId === 'elephant');
+  assert.ok(elephant);
+  const camX = elephant.x - 4.5;
+  const camZ = elephant.z;
+  const lookAngle = Math.atan2(elephant.x - camX, elephant.z - camZ);
+  const locked = findWildlifeInViewfinder(actors, camX, camZ, lookAngle, 45);
+  assert.ok(locked, 'Wildlife viewfinder must lock onto animal in line of sight');
+  assert.equal(locked.speciesId, 'elephant');
+});
+
+test('Snowman Multi-Transport Taxi (zero ships, exact coords, Cycle <-> JetSki morph), Ultra Graphics & Hero Power Options', () => {
+  // Zero ships in Snowman Taxi transport options
+  assert.equal(
+    SNOWMAN_TRANSPORTS.some(
+      (t) => t.id.includes('ship') || t.name.toLowerCase().includes('ship')
+    ),
+    false,
+    'Snowman Taxi must never include ships'
+  );
+  assert.ok(LAND_TRANSPORT_OPTIONS.includes('cycle_jetski'));
+  assert.ok(WATER_TRANSPORT_OPTIONS.includes('cycle_jetski'));
+
+  let taxi = createInitialSnowmanTaxiState();
+  taxi = dispatchSnowmanTaxi(taxi, {
+    playerX: 10,
+    playerZ: 15,
+    targetX: 145.5,
+    targetZ: 62.25,
+    landTransport: 'cycle_jetski',
+    waterTransport: 'cycle_jetski',
+    instantExpress: false,
+  });
+  assert.equal(taxi.phase, 'approaching');
+  assert.equal(taxi.targetX, 145.5);
+  assert.equal(taxi.targetZ, 62.3);
+
+  // Instant Cycle <-> JetSki morph toggles form cleanly
+  const beforeForm = taxi.cycleMorphedToJetSki;
+  taxi = triggerInstantCycleJetSkiMorph(taxi);
+  assert.notEqual(taxi.cycleMorphedToJetSki, beforeForm);
+
+  // Step Snowman Taxi to pick up player and deliver to exact coordinates
+  let delivered = false;
+  let px = 10;
+  let pz = 15;
+  for (let i = 0; i < 600; i++) {
+    const res = stepSnowmanTaxi(taxi, { dt: 0.1, playerX: px, playerZ: pz });
+    taxi = res.state;
+    if (res.overridePlayerPos) {
+      px = res.overridePlayerPos.x;
+      pz = res.overridePlayerPos.z;
+    }
+    if (res.justArrived) {
+      delivered = true;
+      break;
+    }
+  }
+  assert.equal(delivered, true, 'Snowman Taxi must deliver player to exact target coordinates');
+  assert.ok(Math.hypot(taxi.x - 145.5, taxi.z - 62.25) < 1.5);
+
+  // Ultra Graphics quality profile enables peak fidelity on hardware GPU
+  const ultraProfile = resolveGraphicsProfile({
+    quality: 'ultra',
+    resolutionScale: 1.0,
+    devicePixelRatio: 2,
+    isSoftwareGl: false,
+    dynamicDprScale: 1.0,
+  });
+  const lowProfile = resolveGraphicsProfile({
+    quality: 'low',
+    resolutionScale: 1.0,
+    devicePixelRatio: 2,
+    isSoftwareGl: false,
+    dynamicDprScale: 1.0,
+  });
+  assert.ok(ultraProfile.shadowMapSize >= 2048);
+  assert.ok(ultraProfile.bloomEnabled);
+  assert.ok(ultraProfile.pixelRatio > lowProfile.pixelRatio);
+
+  // Spider-Man has multiple selectable superpower options for mobile-vertical HUD
+  const spiderPowers = getHeroPowerOptions('spider_man');
+  assert.ok(spiderPowers.length >= 3, `Expected >= 3 Spider-Man power options, got ${spiderPowers.length}`);
+});
+
+test('Immersive Underwater Ocean, Calm Morning/Night Exposure, Twin Helipad Pad B, Combined Surface/Skyway/Subway Train & Easy Driver Notches, and Instant Lantern Toggle', () => {
+  // 1. Deep undulating ocean seabed & Beer-Lambert underwater atmosphere + 79 marine creatures
+  const deepSeabedY = groundHeightAt(210, 118);
+  assert.ok(deepSeabedY < -13.0, `Expected deep ocean seabed < -13m, got ${deepSeabedY}`);
+
+  const surfaceAtmo = computeUnderwaterAtmosphere(WATER_LEVEL + 1.0, true, 0);
+  const shallowAtmo = computeUnderwaterAtmosphere(WATER_LEVEL - 3.0, true, 0);
+  const deepAtmo = computeUnderwaterAtmosphere(WATER_LEVEL - 12.0, true, 0);
+  assert.equal(surfaceAtmo.submerged, false);
+  assert.equal(shallowAtmo.submerged, true);
+  assert.equal(deepAtmo.submerged, true);
+  assert.ok(deepAtmo.sunIntensityScale < shallowAtmo.sunIntensityScale, 'Beer-Lambert absorption must dim deeper water');
+  assert.ok(deepAtmo.fogDensity > shallowAtmo.fogDensity, 'Deeper ocean water must have denser fog');
+
+  const marineActors = createMarineLifeActors();
+  assert.equal(marineActors.length, 79, 'Expected 79 living marine animals across reefs & trench');
+  const firstFishX = marineActors[0].x;
+  for (let i = 0; i < 20; i++) {
+    stepMarineLifeActors(marineActors, 0.05, i * 0.05, 136, -4, 66, true);
+  }
+  assert.notEqual(marineActors[0].x, firstFishX, 'Marine life actors must swim smoothly');
+
+  // 2. Calm non-overbright Morning & Night palettes and subdued graphics exposure/bloom
+  const morning = computeSkyPalette(TIME_PRESET_HOURS.morning, 'clear', 'spring');
+  assert.ok(morning.sunIntensity <= 0.95, `Morning sunIntensity must not overbrighten, got ${morning.sunIntensity}`);
+  assert.ok(morning.environmentIntensity <= 0.26, `Morning IBL must stay calm, got ${morning.environmentIntensity}`);
+  const highGfx = resolveGraphicsProfile({
+    quality: 'high',
+    resolutionScale: 1.0,
+    devicePixelRatio: 2,
+    isSoftwareGl: false,
+    dynamicDprScale: 1.0,
+  });
+  assert.ok(highGfx.toneMappingExposureBase <= 0.84, `Global exposure must stay calm, got ${highGfx.toneMappingExposureBase}`);
+  assert.ok(highGfx.bloomNightStrength <= 0.16, `Night bloom must stay gentle, got ${highGfx.bloomNightStrength}`);
+
+  // 3. Twin West Wing Helipad (Pad B) is walkable at y=10.4m and holds Gold/Wood VTOL
+  const padBY = walkableHeightWithFloor(VTOL_AIRCRAFT_SPAWN.x, VTOL_AIRCRAFT_SPAWN.z, 10.4);
+  assert.ok(Math.abs(padBY - 10.4) < 0.15, `Twin Helipad Pad B must be walkable at 10.4m, got ${padBY}`);
+
+  // 4. Combined Normal Train traverses Surface, Elevated Sky Viaduct (+7m), and Underground Metro Subway (-7m)
+  let sawSurface = false;
+  let sawElevated = false;
+  let sawSubway = false;
+  for (let i = 0; i < 100; i++) {
+    const profile = getRailwayGradeProfile(i / 100);
+    if (profile.gradeType === 'surface') sawSurface = true;
+    if (profile.gradeType === 'elevated' && profile.y > 5.0) sawElevated = true;
+    if (profile.gradeType === 'subway_tunnel' && profile.y < -5.0) sawSubway = true;
+  }
+  assert.equal(sawSurface, true, 'Combined railway must include Surface tracks');
+  assert.equal(sawElevated, true, 'Combined railway must include Elevated Skyway (+7.4m)');
+  assert.equal(sawSubway, true, 'Combined railway must include Underground Metro Subway (-7.2m)');
+
+  // 5. Easy Train Driver Mode Cruise Notch holds target speed automatically without holding W
+  let driverTrain = createInitialTrainState();
+  driverTrain = { ...driverTrain, speed: 0, speedKmh: 0, phase: 'stopped', doorOpen: 1 };
+  for (let i = 0; i < 60; i++) {
+    driverTrain = stepTrainManualDrive(driverTrain, 0, false, false, 0.05, TRAIN_DRIVER_NOTCH_MPS[2]);
+  }
+  const expectedKmh = Math.round(TRAIN_DRIVER_NOTCH_MPS[2] * 3.6);
+  assert.ok(
+    Math.abs(driverTrain.speedKmh - expectedKmh) <= 3,
+    `Cruise notch must hold ~${expectedKmh} km/h automatically, got ${driverTrain.speedKmh} km/h`
+  );
+  assert.equal(driverTrain.doorOpen, 0, 'Doors must close automatically when cruise notch engages');
+
+  // 6. Instant Personal Lantern ON/OFF snap
+  let lantern = createInitialPlayerLanternState();
+  lantern = togglePlayerLantern(lantern);
+  assert.equal(lantern.isOn, true);
+  assert.equal(lantern.brightness, 1.0);
+  lantern = togglePlayerLantern(lantern);
+  assert.equal(lantern.isOn, false);
+  assert.equal(lantern.brightness, 0);
+});
+
+test('Real Superhero House Secret Tunnel opens without teleporting, connects house & outside via 62.5m ramp, and opens into a literal 1 KM (1,000 m) Mega-Chamber', () => {
+  // 1. Literal 1,000.0 m (1.00 KM) Underground Mega-Chamber dimensions & distance meter
+  assert.equal(VAULT_MEGA_CHAMBER_LENGTH, 1000.0, 'Mega-Chamber must be literally 1,000 meters (1 km) long');
+  assert.equal(VAULT_MEGA_START_Z - VAULT_MEGA_END_Z, 1000.0);
+  assert.equal(isInsideMegaChamber(-20, VAULT_MEGA_START_Z - 500), true);
+  assert.equal(getVaultMegaChamberDistanceM(-20, VAULT_MEGA_START_Z), 0);
+  assert.equal(getVaultMegaChamberDistanceM(-20, VAULT_MEGA_START_Z - 500), 500);
+  assert.equal(getVaultMegaChamberDistanceM(-20, VAULT_MEGA_END_Z), 1000);
+
+  // 2. Continuous physical House Secret Tunnel Ramp descending smoothly from y=0.04m to y=-28.0m
+  const topY = vaultFloorYAt(VAULT_HOME_TUNNEL_X, VAULT_HOME_TUNNEL_MOUTH_Z);
+  const midY = vaultFloorYAt(
+    VAULT_HOME_TUNNEL_X,
+    (VAULT_HOME_TUNNEL_RAMP_TOP_Z + VAULT_HOME_TUNNEL_RAMP_BOTTOM_Z) * 0.5
+  );
+  const botY = vaultFloorYAt(VAULT_HOME_TUNNEL_X, VAULT_HOME_TUNNEL_RAMP_BOTTOM_Z);
+  assert.ok(Math.abs(topY - 0.04) < 0.05, `Expected vestibule floor near 0.04m, got ${topY}`);
+  assert.ok(midY < -10 && midY > -18, `Expected smooth mid-ramp depth between -10m and -18m, got ${midY}`);
+  assert.equal(botY, VAULT_FLOOR_Y, 'Bottom of House Secret Tunnel ramp must meet Mega-Chamber floor at -28m');
+
+  // 3. Zero-teleport surface-to-vault entry & vault-to-surface exit (closed blocks, open allows BOTH yard & living room!)
+  assert.equal(
+    isEnteringHouseSecretTunnelFromSurface(VAULT_HOME_TUNNEL_X, VAULT_HOME_TUNNEL_MOUTH_Z - 1.0, 0.0),
+    false,
+    'Sealed tunnel doors must block entry from outside'
+  );
+  assert.equal(
+    isEnteringHouseSecretTunnelFromSurface(VAULT_HOME_TUNNEL_X, VAULT_HOME_TUNNEL_MOUTH_Z - 1.0, 1.0),
+    true,
+    'Open exterior blast doors must allow walking/driving directly inside'
+  );
+  assert.equal(
+    isEnteringHouseSecretTunnelFromSurface(
+      VAULT_HOME_INTERIOR_DOOR_WORLD.x - 0.6,
+      VAULT_HOME_INTERIOR_DOOR_WORLD.z,
+      1.0
+    ),
+    true,
+    'Open En Illam Interior Secret Wall Door must allow stepping directly into tunnel'
+  );
+  assert.equal(
+    isExitingHouseSecretTunnelToSurface(VAULT_HOME_TUNNEL_X, VAULT_HOME_TUNNEL_MOUTH_Z + 0.1, 1.0),
+    'yard'
+  );
+  assert.equal(
+    isExitingHouseSecretTunnelToSurface(
+      VAULT_HOME_INTERIOR_DOOR_WORLD.x + 0.2,
+      VAULT_HOME_INTERIOR_DOOR_WORLD.z,
+      1.0
+    ),
+    'living_room'
+  );
+
+  // 4. Seamless clamping connects Main Vault -> Connector -> full 1,000 m Mega-Chamber -> House Secret Tunnel Ramp
+  const connMidX = (VAULT_CONNECTOR_MIN_X + VAULT_CONNECTOR_MAX_X) * 0.5;
+  const connPass = clampVaultPosition(connMidX, -50.0, 1.4, true, true);
+  assert.equal(connPass.hitWall, false, 'Connector Avenue must pass cleanly between Main Vault and 1 KM Mega-Chamber');
+  const deepMega = clampVaultPosition(-20.0, VAULT_MEGA_END_Z + 5.0, 1.4, true, true);
+  assert.equal(deepMega.hitWall, false, 'Must be able to travel all the way to 995m inside the 1 KM Mega-Chamber');
+  const blockedClosedDoor = clampVaultPosition(VAULT_HOME_TUNNEL_X, VAULT_HOME_TUNNEL_MOUTH_Z + 0.5, 1.4, true, false);
+  assert.equal(blockedClosedDoor.hitWall, true, 'Closed House Tunnel doors must hold player inside vestibule');
+
+  // 5. Driving Batmobile at high speed inside the 1 KM Mega-Chamber (> 180 km/h) AND physically exiting out the House Secret Tunnel Portal with ZERO teleport!
+  let bat = createInitialBatmobileState();
+  bat = {
+    ...bat,
+    x: -20.0,
+    y: VAULT_FLOOR_Y,
+    z: VAULT_MEGA_START_Z - 40.0,
+    heading: Math.PI, // Facing -Z straight down the 1 KM Mega-Chamber!
+    inVault: true,
+  };
+  let peakKmh = 0;
+  for (let i = 0; i < 80; i++) {
+    const res = stepBatmobileState(bat, 1, 0, true, false, 0.05, 1.0, 1.0);
+    bat = res.state;
+    peakKmh = Math.max(peakKmh, bat.speedKmh);
+  }
+  assert.ok(peakKmh >= 180, `Batmobile must unleash >= 180 km/h down the 1 KM Mega-Chamber, got ${peakKmh} km/h`);
+  assert.ok(bat.z < VAULT_MEGA_START_Z - 150, 'Batmobile must cover > 150m smoothly down the 1 KM chamber');
+
+  // Now drive Batmobile UP the House Secret Tunnel vestibule facing South (+Z, heading = 0) straight out the open exterior portal!
+  bat = {
+    ...bat,
+    x: VAULT_HOME_TUNNEL_X,
+    y: vaultFloorYAt(VAULT_HOME_TUNNEL_X, VAULT_HOME_TUNNEL_MOUTH_Z - 3.5),
+    z: VAULT_HOME_TUNNEL_MOUTH_Z - 3.5,
+    heading: 0, // Facing +Z straight out into En Illam front yard
+    speed: 14,
+    inVault: true,
+  };
+  const prevX = bat.x;
+  let exitedHousePortal = false;
+  for (let i = 0; i < 20; i++) {
+    const res = stepBatmobileState(bat, 1, 0, false, false, 0.05, 1.0, 1.0);
+    bat = res.state;
+    if (res.exitedToSurface) {
+      exitedHousePortal = true;
+      break;
+    }
+  }
+  assert.equal(exitedHousePortal, true, 'Driving Batmobile South out the open House Secret Tunnel Portal must exit to front yard');
+  assert.equal(bat.inVault, false);
+  assert.ok(Math.abs(bat.x - prevX) < 0.5, 'House Secret Tunnel exit must be ZERO-teleport continuous X');
+  assert.ok(
+    Math.abs(bat.z - VAULT_HOME_TUNNEL_MOUTH_Z) < 2.5,
+    `House Secret Tunnel exit must emerge right at portal mouth z=${VAULT_HOME_TUNNEL_MOUTH_Z}, got ${bat.z}`
+  );
+
+  // And driving a Vault Car straight North BACK INTO the open House Secret Tunnel from outside front yard enters with ZERO teleport!
+  let vcar: VaultCarRuntimeState = {
+    ...createInitialHomeVaultState().cars[0],
+    x: VAULT_HOME_TUNNEL_X,
+    y: 0,
+    z: VAULT_HOME_TUNNEL_MOUTH_Z + 2.5,
+    heading: Math.PI, // Facing -Z straight into the open portal!
+    speed: 12,
+    inVault: false,
+  };
+  let reEnteredVault = false;
+  for (let i = 0; i < 20; i++) {
+    const res = stepVaultCarState(vcar, 1, 0, false, false, 0.05, 1.0, 1.0);
+    vcar = res.state;
+    if (res.enteredVault) {
+      reEnteredVault = true;
+      break;
+    }
+  }
+  assert.equal(reEnteredVault, true, 'Driving from outside yard into open House Secret Tunnel must enter underground with ZERO teleport');
+  assert.equal(vcar.inVault, true);
+});
+
+test('Test 66: Mobile full-screen touch movement works anywhere on screen while supporting simultaneous 2nd-finger camera orbit & desktop mouse', () => {
+  // 1. Desktop mouse stays camera-orbit only
+  let st = createInitialScreenTouchState();
+  const mouseDown = beginScreenPointer(st, {
+    pointerId: 1,
+    pointerType: 'mouse',
+    clientX: 600,
+    clientY: 400,
+    allowTouchMove: true,
+    fixedJoystickActive: false,
+  });
+  assert.equal(mouseDown.role, 'camera');
+  assert.equal(mouseDown.state.active, false);
+
+  // 2. Mobile touch anywhere (e.g. upper-right quadrant 310, 220) activates floating movement pad!
+  st = createInitialScreenTouchState();
+  const touchDown = beginScreenPointer(st, {
+    pointerId: 10,
+    pointerType: 'touch',
+    clientX: 310,
+    clientY: 220,
+    allowTouchMove: true,
+    fixedJoystickActive: false,
+  });
+  assert.equal(touchDown.role, 'move');
+  assert.equal(touchDown.state.active, true);
+  st = touchDown.state;
+
+  // Dragging upward & right produces strong positive forward & right movement vectors
+  const drag1 = moveScreenPointer(st, { pointerId: 10, clientX: 345, clientY: 165 });
+  assert.equal(drag1.role, 'move');
+  assert.ok(drag1.state.forward > 0.65, `Expected strong forward movement, got ${drag1.state.forward}`);
+  assert.ok(drag1.state.right > 0.35, `Expected positive right strafe, got ${drag1.state.right}`);
+  st = drag1.state;
+
+  // Simultaneous 2nd finger orbits camera without interrupting movement!
+  const finger2Down = beginScreenPointer(st, {
+    pointerId: 11,
+    pointerType: 'touch',
+    clientX: 180,
+    clientY: 320,
+    allowTouchMove: true,
+    fixedJoystickActive: false,
+  });
+  assert.equal(finger2Down.role, 'camera');
+  st = finger2Down.state;
+  const finger2Move = moveScreenPointer(st, { pointerId: 11, clientX: 220, clientY: 300 });
+  assert.equal(finger2Move.role, 'camera');
+  assert.equal(finger2Move.camDx, 40);
+  assert.equal(finger2Move.camDy, -20);
+  assert.ok(finger2Move.state.forward > 0.65, '2nd-finger orbit must not disrupt active touch movement');
+  st = finger2Move.state;
+
+  // Lifting move finger clears floating thumbpad cleanly
+  const liftMove = endScreenPointer(st, 10);
+  assert.equal(liftMove.active, false);
+  assert.equal(liftMove.forward, 0);
+  assert.equal(liftMove.right, 0);
+});
+
+test('Test 67: Extracted SSJ Orange Rescue Helicopter sits beside En Illam (My House), flies to SSJ Dinosaur Island, and SSJ Expedition Cruiser moors at Marina Pier', () => {
+  // 1. Orange Rescue Helicopter starts right beside En Illam (My House) on dry ground!
+  const heli = createInitialOrangeHeliState();
+  const distFromHome = Math.hypot(
+    ORANGE_HELI_HOME_POS.x - HOME_CENTER.x,
+    ORANGE_HELI_HOME_POS.z - HOME_CENTER.z
+  );
+  assert.ok(distFromHome < 24, `Orange Rescue Helicopter should park right beside En Illam (<24m), got ${distFromHome.toFixed(1)}m`);
+  assert.equal(isWaterAt(heli.x, heli.z), false, 'Orange Rescue Helicopter home pad must sit on dry ground');
+
+  // 2. Takes off, climbs smoothly, and accelerates forward across the unified ocean
+  let flying = heli;
+  for (let i = 0; i < 40; i++) {
+    flying = stepOrangeHeliState(flying, 1.0, 0.0, true, false, true, true, 0.05);
+  }
+  assert.ok(flying.altitudeM > 8, `Expected Orange Helicopter climb > 8m, got ${flying.altitudeM}m`);
+  assert.ok(flying.speedKmh > 60, `Expected high cruise speed > 60 km/h, got ${flying.speedKmh}`);
+  const exit = getOrangeHeliExitPosition(flying);
+  assert.ok(Number.isFinite(exit.x) && Number.isFinite(exit.y) && Number.isFinite(exit.z));
+
+  // 3. Island Helipad sits on dry SSJ Dinosaur Island ground
+  assert.equal(isOnDinosaurIsland(ORANGE_HELI_ISLAND_POS.x, ORANGE_HELI_ISLAND_POS.z), true);
+  assert.equal(isWaterAt(ORANGE_HELI_ISLAND_POS.x, ORANGE_HELI_ISLAND_POS.z), false);
+
+  // 4. SSJ Expedition Cruiser starts moored in navigable unified ocean right beside dry Marina Pier
+  const boats = createInitialBoats();
+  const expBoat = boats.find((b) => b.id === 'ssj_expedition_boat');
+  assert.ok(expBoat, 'Expected extracted ssj_expedition_boat in initial boats');
+  assert.equal(
+    isNavigableBoatWater('ocean', DINOSAUR_MARINA_BOAT_BERTH.x, DINOSAUR_MARINA_BOAT_BERTH.z),
+    true,
+    'SSJ Expedition Cruiser berth must lie in navigable unified ocean water'
+  );
+  const pierMidX = (DINOSAUR_MARINA_PIER_BOUNDS.minX + DINOSAUR_MARINA_PIER_BOUNDS.maxX) * 0.5;
+  const pierMidZ = (DINOSAUR_MARINA_PIER_BOUNDS.minZ + DINOSAUR_MARINA_PIER_BOUNDS.maxZ) * 0.5;
+  assert.equal(isOnDinosaurMarinaPier(pierMidX, pierMidZ), true);
+  assert.equal(isWaterAt(pierMidX, pierMidZ), false, 'Dinosaur Island Marina Timber Pier must be dry & walkable');
+});
+
+test('Test 68: Enormous Jurassic Park Island + Motorized Swinging Gate + Integrated Wildlife Valley + 3-Aircraft Rooftop/Airport + Dedicated Vehicle Garage', () => {
+  // 1. Enormous Jurassic Park Island (>= 244m across) situated far offshore from every other island
+  assert.ok(DINOSAUR_ISLAND_LAND_RADIUS >= 120, `Expected enormous Jurassic Park Island (>=120m radius), got ${DINOSAUR_ISLAND_LAND_RADIUS}`);
+  const distSnowman = Math.hypot(
+    DINOSAUR_ISLAND_CENTER.x - SNOWMAN_ISLAND_CENTER.x,
+    DINOSAUR_ISLAND_CENTER.z - SNOWMAN_ISLAND_CENTER.z
+  );
+  const distHeroTower = Math.hypot(
+    DINOSAUR_ISLAND_CENTER.x - OCEAN_HERO_TOWER_CENTER.x,
+    DINOSAUR_ISLAND_CENTER.z - OCEAN_HERO_TOWER_CENTER.z
+  );
+  assert.ok(distSnowman > 200, `Expected Jurassic Park far from Snowman Island (>200m), got ${distSnowman.toFixed(1)}m`);
+  assert.ok(distHeroTower > 190, `Expected Jurassic Park far from Ocean Hero Tower (>190m), got ${distHeroTower.toFixed(1)}m`);
+
+  // 2. Colossal Motorized Swinging Jurassic Park Gate toggles and auto-swings open smoothly from 0 -> 1
+  let jpState = createInitialDinosaurIslandState();
+  assert.equal(jpState.gateOpenProgress, 0);
+  const gateX = DINOSAUR_ISLAND_CENTER.x + SSJ_ISLAND_LANDMARKS.entranceArch.lx;
+  const gateZ = DINOSAUR_ISLAND_CENTER.z + SSJ_ISLAND_LANDMARKS.entranceArch.lz;
+  for (let i = 0; i < 60; i++) {
+    jpState = stepDinosaurIslandState(jpState, gateX, gateZ + 8, true, 0.05).state;
+  }
+  assert.ok(jpState.gateOpenProgress > 0.95, `Expected automatic approach swing open (>0.95), got ${jpState.gateOpenProgress}`);
+  jpState = toggleJurassicGate(jpState);
+  assert.equal(jpState.gateTargetOpen, false);
+  for (let i = 0; i < 60; i++) {
+    jpState = stepDinosaurIslandState(jpState, gateX, gateZ + 8, true, 0.05).state;
+  }
+  assert.ok(jpState.gateOpenProgress < 0.05, `Expected manual close (<0.05), got ${jpState.gateOpenProgress}`);
+
+  // 3. All 21 Wildlife Sanctuary species (zero snakes) are integrated right onto dry Jurassic Park Island
+  assert.equal(
+    isOnDinosaurIsland(WILDLIFE_FOREST_SANCTUARY_CENTER.x, WILDLIFE_FOREST_SANCTUARY_CENTER.z),
+    true,
+    'Wildlife Sanctuary center must sit directly on Jurassic Park Island'
+  );
+  assert.equal(
+    isWaterAt(WILDLIFE_FOREST_SANCTUARY_CENTER.x, WILDLIFE_FOREST_SANCTUARY_CENTER.z),
+    false,
+    'Wildlife Sanctuary center on Jurassic Park Island must be dry land'
+  );
+
+  // 4. Orange Rescue Helicopter rests cleanly on En Illam External East Rooftop Pad C (y = 10.4m) and NEVER sinks!
+  const padCWalkY = walkableHeightWithFloor(ORANGE_HELI_HOME_POS.x, ORANGE_HELI_HOME_POS.z, 10.4);
+  assert.ok(Math.abs(padCWalkY - 10.4) < 0.15, `Expected walkable En Illam Rooftop Pad C at y=10.4m, got ${padCWalkY}`);
+  let parkedHeli = createInitialOrangeHeliState();
+  assert.ok(Math.abs(parkedHeli.y - 10.4) < 0.1, `Orange Rescue Helicopter should start on Pad C (y=10.4m), got ${parkedHeli.y}`);
+  for (let i = 0; i < 30; i++) {
+    parkedHeli = stepOrangeHeliState(parkedHeli, 0, 0, false, false, false, false, 0.05);
+  }
+  assert.ok(
+    Math.abs(parkedHeli.y - 10.4) < 0.15,
+    `Parked Orange Rescue Helicopter must remain on Pad C (10.4m) without sinking, got ${parkedHeli.y}`
+  );
+
+  // 5. All 3 Airport Aircraft Stands sit inside Dreamline International Airport apron, clear of ATC tower & Gate A2 jet
+  assert.equal(AIRPORT_AIRCRAFT_STANDS.length, 3, 'Must provide all 3 aircraft stands at Dreamline Airport');
+  for (const stand of AIRPORT_AIRCRAFT_STANDS) {
+    assert.equal(isInsideAirport(stand.x, stand.z), true, `Airport stand ${stand.id} must lie inside Airport bounds`);
+    assert.ok(Math.hypot(stand.x - 224, stand.z - -162) > 18, `Airport stand ${stand.id} must clear ATC tower`);
+    assert.ok(Math.hypot(stand.x - 234, stand.z - -125) > 18, `Airport stand ${stand.id} must clear parked Gate A2 jet`);
+  }
+
+  // 6. Dedicated Vehicle Spawning Garage sits on flat dry plaza beside En Illam, >20m clear of railway tracks, and is listed in LOCATIONS
+  const garageLoc = LOCATIONS.find((l) => l.id === 'vehicle_garage');
+  assert.ok(garageLoc, 'Expected vehicle_garage location in World Map LOCATIONS');
+  assert.equal(isWaterAt(VEHICLE_GARAGE_CENTER.x, VEHICLE_GARAGE_CENTER.z), false);
+  assert.ok(
+    distanceToRail(VEHICLE_GARAGE_CENTER.x, VEHICLE_GARAGE_CENTER.z) > 20,
+    `Vehicle Garage must sit clear of all railway tracks (>20m), got ${distanceToRail(VEHICLE_GARAGE_CENTER.x, VEHICLE_GARAGE_CENTER.z).toFixed(1)}m`
+  );
+  assert.ok(
+    Math.abs(groundHeightAt(VEHICLE_GARAGE_SPAWN_BAY.x, VEHICLE_GARAGE_SPAWN_BAY.z)) < 0.2,
+    'Vehicle Garage spawn bay must sit on a flat dry plaza'
+  );
+});
+
+test('OceanLab 3D 8-Wave Gerstner Ocean physics, 16-bit coastal bathymetry & 3D Firefly Photinus kinematics', async () => {
+  const {
+    OCEAN_THEMES,
+    OCEAN_WAVE_SPECTRUM,
+    buildSeabedHeightTextureData,
+    computeOceanWeatherParams,
+    decodeSeabedHeight16,
+    encodeSeabedHeight16,
+    evaluateGerstnerOceanCPU,
+  } = await import('./gerstnerOcean');
+  const { evaluateFireflyKinematics, generateFireflySeeds } = await import('./fireflies');
+
+  // 1. 16-bit RG Seabed heightmap round-trip precision (< 0.01m error across [-24m, +14m])
+  assert.equal(OCEAN_WAVE_SPECTRUM.length, 8, 'OceanLab spectrum must have exactly 8 directional Gerstner waves');
+  for (const h of [-24.0, -12.5, -2.2, 0.0, 4.75, 14.0]) {
+    const [hi, lo] = encodeSeabedHeight16(h);
+    const decoded = decodeSeabedHeight16(hi, lo);
+    assert.ok(
+      Math.abs(decoded - h) < 0.02,
+      `16-bit seabed encoding error too large at h=${h}: decoded=${decoded}`
+    );
+  }
+
+  // 2. Bathymetry texture bakes real DREAMLINE ocean & island relief cleanly
+  const texData = buildSeabedHeightTextureData(32, groundHeightAt, WATER_LEVEL);
+  assert.equal(texData.length, 32 * 32 * 4);
+
+  // 3. Weather & Ocean Basin scaling (clear < rain < thunderstorm < tsunami)
+  const clearP = computeOceanWeatherParams('clear', 'bengal');
+  const rainP = computeOceanWeatherParams('rain', 'bengal');
+  const stormP = computeOceanWeatherParams('thunderstorm', 'bengal');
+  const tsunamiP = computeOceanWeatherParams('tsunami', 'bengal');
+  assert.ok(clearP.amplitude < rainP.amplitude && rainP.amplitude < stormP.amplitude && stormP.amplitude < tsunamiP.amplitude);
+  assert.ok(OCEAN_THEMES.bengal && OCEAN_THEMES.atlantic && OCEAN_THEMES.pacific);
+
+  // 4. Trochoidal Gerstner displacement, unit normal & Jacobian compression
+  let minJ = Infinity;
+  let maxY = -Infinity;
+  let minY = Infinity;
+  for (let i = 0; i < 40; i++) {
+    const s = evaluateGerstnerOceanCPU(190 + i * 3.1, 60 + i * 1.7, 4.2, stormP, -12.0);
+    const nLen = Math.hypot(s.nx, s.ny, s.nz);
+    assert.ok(Math.abs(nLen - 1.0) < 0.001, `Surface normal must be unit length, got ${nLen}`);
+    assert.ok(s.ny > 0.3, `Surface normal must point upward, got ny=${s.ny}`);
+    minJ = Math.min(minJ, s.jacobian);
+    maxY = Math.max(maxY, s.y);
+    minY = Math.min(minY, s.y);
+  }
+  assert.ok(maxY - minY > 0.4, `Expected visible storm wave height span (>0.4m), got ${(maxY - minY).toFixed(2)}m`);
+  assert.ok(minJ < 0.96, `Expected Gerstner crest Jacobian pinching (<0.96), got ${minJ.toFixed(3)}`);
+
+  // 5. Real 3D Firefly flight tangent, wing flutter & Photinus on/off bioluminescent flash
+  const seeds = generateFireflySeeds(64);
+  const sampleSeed = seeds[0];
+  let maxFlash = 0;
+  let minFlash = 1;
+  let minWing = 1;
+  let maxWing = -1;
+  for (let step = 0; step < 80; step++) {
+    const k = evaluateFireflyKinematics(sampleSeed, step * 0.08);
+    maxFlash = Math.max(maxFlash, k.flash);
+    minFlash = Math.min(minFlash, k.flash);
+    minWing = Math.min(minWing, k.wingAngle);
+    maxWing = Math.max(maxWing, k.wingAngle);
+    assert.ok(Number.isFinite(k.vx) && Number.isFinite(k.vy) && Number.isFinite(k.vz));
+  }
+  assert.ok(maxFlash > 0.85, `Expected bright firefly Photinus pulse (>0.85), got ${maxFlash.toFixed(3)}`);
+  assert.ok(minFlash < 0.1, `Expected dark resting phase between firefly flashes (<0.10), got ${minFlash.toFixed(3)}`);
+  assert.ok(minWing < -0.3 && maxWing > 0.3, `Expected fluttering wings oscillating across 0, got [${minWing.toFixed(2)}, ${maxWing.toFixed(2)}]`);
+});
+
+test('Test 70: Resized Grand Dinosaur Island (~470m, bigger than original yet not 1 KM) + 360° Perimeter Wall + Night/Morning Roof Doors + Crystal Lake & Flowing River', async () => {
+  const {
+    DINOSAUR_CRYSTAL_LAKE_CENTER,
+    DINOSAUR_LAKE_WATER_Y,
+    DINOSAUR_PERIMETER_WALL_HEIGHT,
+    DINOSAUR_PERIMETER_WALL_RADIUS,
+    DINOSAUR_RIVER_BRIDGE_LZS,
+    DINOSAUR_ROOF_DOOR_Y,
+    computeJurassicRoofDoorTarget,
+    computeSsjRiverArcLength,
+    isInsideDinoCrystalLake,
+    isOnDinosaurRiverBridge,
+    snapJurassicRoofDoorsForTime,
+    ssjRiverLocalX,
+  } = await import('./dinosaurIsland');
+
+  // 1. Grand Dinosaur Island: bigger than original (~120m), NOT oversized 1 KM (508m)!
+  assert.ok(
+    DINOSAUR_ISLAND_LAND_RADIUS >= 210 && DINOSAUR_ISLAND_LAND_RADIUS <= 280,
+    `Expected grand-but-not-1KM Dinosaur Island (radius 210..280m), got ${DINOSAUR_ISLAND_LAND_RADIUS}m`
+  );
+  assert.ok(DINOSAUR_PERIMETER_WALL_RADIUS >= 200 && DINOSAUR_PERIMETER_WALL_HEIGHT >= 36);
+  assert.ok(DINOSAUR_ROOF_DOOR_Y > DINOSAUR_PERIMETER_WALL_HEIGHT);
+  const spawnGroundY = groundHeightAt(DINOSAUR_ISLAND_CENTER.x, DINOSAUR_ISLAND_CENTER.z + 224);
+  assert.ok(
+    spawnGroundY > 1.2,
+    `Expected elevated dry Dinosaur Island South Promenade (>1.2m above 0), got y=${spawnGroundY.toFixed(2)}m`
+  );
+
+  // 2. Automated Horizontal Upper Roof Doors: CLOSE at night (18:30-05:30), OPEN at morning/day (05:30-18:30)!
+  assert.equal(computeJurassicRoofDoorTarget(22.0), 1, 'Upper roof doors must close at night (22:00)');
+  assert.equal(computeJurassicRoofDoorTarget(2.0), 1, 'Upper roof doors must stay closed before dawn (02:00)');
+  assert.equal(computeJurassicRoofDoorTarget(6.5), 0, 'Upper roof doors must open in the morning (06:30)');
+  assert.equal(computeJurassicRoofDoorTarget(12.0), 0, 'Upper roof doors must stay open at noon (12:00)');
+
+  let state = createInitialDinosaurIslandState(9.0);
+  assert.equal(state.roofDoorCloseProgress, 0, 'Roof doors start wide open in morning');
+  for (let i = 0; i < 80; i++) {
+    state = stepDinosaurIslandState(state, DINOSAUR_ISLAND_CENTER.x, DINOSAUR_ISLAND_CENTER.z, true, 0.05, 22.0).state;
+  }
+  assert.ok(state.roofDoorCloseProgress > 0.98, `Roof doors must glide shut at night, got ${state.roofDoorCloseProgress}`);
+  for (let i = 0; i < 80; i++) {
+    state = stepDinosaurIslandState(state, DINOSAUR_ISLAND_CENTER.x, DINOSAUR_ISLAND_CENTER.z, true, 0.05, 7.0).state;
+  }
+  assert.ok(state.roofDoorCloseProgress < 0.02, `Roof doors must glide wide open at morning, got ${state.roofDoorCloseProgress}`);
+
+  state = snapJurassicRoofDoorsForTime(state, 23.0);
+  assert.equal(state.roofDoorCloseProgress, 1);
+  state = snapJurassicRoofDoorsForTime(state, 8.0);
+  assert.equal(state.roofDoorCloseProgress, 0);
+
+  // 3. Scenic Crystal Lake + continuous Flowing Forest River + 4 Dry Walkable Timber Bridges
+  const lakeWorldX = DINOSAUR_ISLAND_CENTER.x + DINOSAUR_CRYSTAL_LAKE_CENTER.lx;
+  const lakeWorldZ = DINOSAUR_ISLAND_CENTER.z + DINOSAUR_CRYSTAL_LAKE_CENTER.lz;
+  assert.equal(isInsideDinoCrystalLake(lakeWorldX, lakeWorldZ), true);
+  assert.ok(
+    groundHeightAt(lakeWorldX, lakeWorldZ) < DINOSAUR_LAKE_WATER_Y - 1.0,
+    'Crystal Lake bed must be carved cleanly below lake surface'
+  );
+
+  const riverLen = computeSsjRiverArcLength();
+  assert.ok(riverLen >= 400 && riverLen <= 550, `Expected flowing forest river (400..550m), got ${riverLen.toFixed(1)}m`);
+
+  assert.equal(DINOSAUR_RIVER_BRIDGE_LZS.length, 4);
+  for (const bridgeLz of DINOSAUR_RIVER_BRIDGE_LZS) {
+    const bx = DINOSAUR_ISLAND_CENTER.x + ssjRiverLocalX(bridgeLz);
+    const bz = DINOSAUR_ISLAND_CENTER.z + bridgeLz;
+    assert.equal(isOnDinosaurRiverBridge(bx, bz), true, `Expected bridge at lz=${bridgeLz}`);
+    assert.equal(isWaterAt(bx, bz), false, `River bridge at lz=${bridgeLz} must be dry & walkable`);
+    assert.ok(walkableHeightAt(bx, bz) > 2.0, `River bridge deck at lz=${bridgeLz} must rise above river water`);
+  }
+});
+
+test('Test 71: 49cc Petrol Dirt Bike (Orion Mini) physics, kickstand auto-retraction, USD fork braking dive, 2-stroke RPM & exact-location spawning', async () => {
+  const { createInitialDirtBikeState, stepDirtBike } = await import('./dirtBike');
+  const { computeCatalogueSpawnPoint, getCatalogueVehicleById, getCatalogueVehiclesByCategory } = await import('./vehicleCatalogue');
+
+  // 1. Registered in Vehicle Catalogue under bikes and spawns at exact player coordinates
+  const entry = getCatalogueVehicleById('dirt_bike_49cc');
+  assert.equal(entry.id, 'dirt_bike_49cc');
+  assert.equal(entry.category, 'bikes');
+  assert.ok(getCatalogueVehiclesByCategory('bikes').some((v) => v.id === 'dirt_bike_49cc'));
+  const exactSpawn = computeCatalogueSpawnPoint('dirt_bike_49cc', 42.5, -18.25, 1.2);
+  assert.equal(exactSpawn.x, 42.5);
+  assert.equal(exactSpawn.z, -18.25);
+  assert.equal(exactSpawn.heading, 1.2);
+
+  // 2. Starts parked on left kickstand with resting lean & 2-stroke idle RPM (~1850)
+  const bike = createInitialDirtBikeState();
+  assert.equal(bike.kickstandDown, true);
+  assert.ok(bike.leanAngle < -0.05, 'Parked bike must lean toward left kickstand');
+  assert.ok(bike.rpm >= 1700 && bike.rpm <= 2000);
+
+  // 3. Throttling + turning right automatically folds kickstand up, climbs speed/RPM, leans & turns smoothly
+  const startX = bike.x;
+  const startZ = bike.z;
+  const startHeading = bike.heading;
+  for (let i = 0; i < 45; i++) {
+    stepDirtBike(
+      bike,
+      { forward: 1, turn: 0.75, ascend: false, descend: false, brake: false, boost: true },
+      0.04,
+      'clear',
+      true,
+      i * 0.04
+    );
+  }
+  assert.equal(bike.kickstandDown, false, 'Kickstand must fold up automatically when throttling');
+  assert.ok(bike.speedKmh >= 45, `Expected lively 49cc powerband speed (>=45 km/h), got ${bike.speedKmh}`);
+  assert.ok(bike.rpm >= 5500, `Expected high 2-stroke RPM (>=5500), got ${bike.rpm}`);
+  assert.ok(Math.hypot(bike.x - startX, bike.z - startZ) > 10, 'Dirt bike must travel smoothly across terrain');
+  assert.ok(Math.abs(bike.heading - startHeading) > 0.25, 'Handlebar steering must carve turns');
+  assert.ok(Math.abs(bike.leanAngle) > 0.05, 'Dirt bike must lean dynamically when carving turns');
+
+  // 4. Wave disc braking triggers inverted USD front fork dive & slows smoothly
+  const preBrakeSpeed = bike.speed;
+  for (let i = 0; i < 12; i++) {
+    stepDirtBike(
+      bike,
+      { forward: 0, turn: 0, ascend: false, descend: false, brake: true, boost: false },
+      0.04,
+      'clear',
+      true,
+      2.0 + i * 0.04
+    );
+  }
+  assert.ok(bike.speed < preBrakeSpeed * 0.5, 'Wave disc brake must decelerate rapidly');
+  assert.ok(bike.forkCompression > 0.25 && bike.brakeDive > 0.25, 'Front USD forks must dive under disc braking');
+
+  // 5. Dismounting brings bike to a stop and drops kickstand back down
+  for (let i = 0; i < 40; i++) {
+    stepDirtBike(
+      bike,
+      { forward: 0, turn: 0, ascend: false, descend: false, brake: false, boost: false },
+      0.05,
+      'clear',
+      false,
+      3.0 + i * 0.05
+    );
+  }
+  assert.equal(bike.speed, 0);
+  assert.equal(bike.kickstandDown, true);
+});
+
+test('Test 72: Redesigned World Atlas covers full world (including Grand Dinosaur Island), supports zoom/pan bounds, scale bar, and true shaded-relief biome/water sampling', () => {
+  // 1. Invertible projection across extreme corners including Grand Dinosaur Island, Frozen Kingdom & Thar Desert
+  const checkPts = [
+    { x: -244, z: 144 }, // Thar Pyramid
+    { x: -210, z: -180 }, // Frozen Kingdom
+    { x: 0, z: 14 }, // Main Station
+    { x: 560, z: 195 }, // Grand Dinosaur Island Center
+    { x: 780, z: 195 }, // East shore of Grand Dinosaur Island
+  ];
+  for (const pt of checkPts) {
+    const ax = worldToAtlasX(pt.x);
+    const ay = worldToAtlasY(pt.z);
+    assert.ok(ax >= 0 && ax <= ATLAS_BASE_W, `Point (${pt.x}, ${pt.z}) X must fit inside atlas without clamping`);
+    assert.ok(ay >= 0 && ay <= ATLAS_BASE_H, `Point (${pt.x}, ${pt.z}) Z must fit inside atlas without clamping`);
+    assert.ok(Math.abs(atlasToWorldX(ax) - pt.x) < 0.05);
+    assert.ok(Math.abs(atlasToWorldZ(ay) - pt.z) < 0.05);
+  }
+
+  // 2. Zoom & Pan clamping stays strictly within ATLAS_BOUNDS and valid SVG viewBox
+  const extremeCam = clampAtlasCamera({ centerX: 99999, centerZ: -99999, zoom: 99 });
+  assert.ok(extremeCam.zoom <= 6.5 && extremeCam.zoom >= 1.0);
+  const vb = computeAtlasViewBox(extremeCam);
+  assert.ok(vb.vx >= 0 && vb.vy >= 0);
+  assert.ok(vb.vx + vb.vw <= ATLAS_BASE_W + 0.01);
+  assert.ok(vb.vy + vb.vh <= ATLAS_BASE_H + 0.01);
+
+  // 3. All 6 region presets & scale bar produce clean cartographic values
+  assert.equal(ATLAS_REGION_PRESETS.length, 6);
+  const fullScale = computeAtlasScaleBar(1.0, 900);
+  const zoomScale = computeAtlasScaleBar(4.0, 900);
+  assert.ok(fullScale.meters > zoomScale.meters, 'Zooming in must reduce scale bar distance');
+  assert.ok(zoomScale.widthPx >= 46 && zoomScale.widthPx <= 168);
+
+  // 4. Shaded-relief terrain sampler accurately distinguishes Ocean, Dino Island Jungle, Dino Crystal Lake, Frozen Snow & Thar Desert
+  const oceanRgb = sampleAtlasPixelRGB(280, 320); // Open ocean between Exhibition Island & Dino Island
+  const dinoJungleRgb = sampleAtlasPixelRGB(500, 195); // Lush jungle inside Grand Dinosaur Island
+  const dinoLakeRgb = sampleAtlasPixelRGB(560 + 34, 195 - 20); // Crystal Lake inside Dinosaur Island
+  const desertRgb = sampleAtlasPixelRGB(-222, 126); // Thar Golden Desert
+  const snowRgb = sampleAtlasPixelRGB(-180, -140); // Frozen Kingdom Snow
+
+  assert.ok(oceanRgb[2] > oceanRgb[0] + 25, `Open ocean must be marine blue, got ${oceanRgb}`);
+  assert.ok(dinoJungleRgb[1] > dinoJungleRgb[0] + 20, `Dinosaur Island jungle must be green, got ${dinoJungleRgb}`);
+  assert.ok(dinoLakeRgb[2] > dinoLakeRgb[0] + 50, `Dinosaur Crystal Lake must be bright cyan-blue, got ${dinoLakeRgb}`);
+  assert.ok(desertRgb[0] > desertRgb[2] + 40, `Thar Desert must be warm golden ochre, got ${desertRgb}`);
+  assert.ok(snowRgb[0] > 150 && snowRgb[1] > 165 && snowRgb[2] > 175, `Frozen Kingdom must be crisp pale snow, got ${snowRgb}`);
+
+  // 5. Atlas pins cover key landmarks including Dinosaur Island, Vehicle Garage & Wildlife Sanctuary
+  for (const id of ['main_station', 'dinosaur_island', 'dino_grand_gate', 'dino_crystal_lake', 'wildlife_sanctuary', 'vehicle_garage', 'international_airport', 'frozen_kingdom', 'thar_desert']) {
+    assert.ok(ATLAS_PINS.some((p) => p.id === id), `ATLAS_PINS must include ${id}`);
+  }
+  assert.ok(ATLAS_BOUNDS.maxX > DINOSAUR_ISLAND_CENTER.x + DINOSAUR_ISLAND_LAND_RADIUS, 'Atlas must span past east rim of Grand Dinosaur Island');
+});
+
+test('Test 73: 4 Bigger Surrounding Auto-Opening Perimeter Gates + Grand Triangle Explorer Track showcasing all 6 distinct island places', async () => {
+  const {
+    DINOSAUR_PERIMETER_GATES,
+    DINOSAUR_PERIMETER_WALL_RADIUS,
+    DINOSAUR_TRIANGLE_PLACES,
+    DINOSAUR_TRIANGLE_VERTICES,
+    distanceToDinosaurTriangleTrack,
+    sampleDinosaurTriangleTrack,
+  } = await import('./dinosaurIsland');
+
+  // 1. All 4 bigger surrounding perimeter gates sit on the 360° boundary wall and auto-open when approached!
+  assert.equal(DINOSAUR_PERIMETER_GATES.length, 4);
+  for (let gi = 0; gi < DINOSAUR_PERIMETER_GATES.length; gi++) {
+    const g = DINOSAUR_PERIMETER_GATES[gi];
+    const r = Math.hypot(g.lx, g.lz);
+    assert.ok(
+      Math.abs(r - DINOSAUR_PERIMETER_WALL_RADIUS) < 1.0,
+      `Gate ${g.id} must sit cleanly on the perimeter wall radius`
+    );
+    let st = createInitialDinosaurIslandState(12.0);
+    const gx = DINOSAUR_ISLAND_CENTER.x + g.lx;
+    const gz = DINOSAUR_ISLAND_CENTER.z + g.lz;
+    // Approach gate from 18m away -> gate doors must automatically swing wide open!
+    for (let step = 0; step < 30; step++) {
+      st = stepDinosaurIslandState(st, gx, gz + 12, true, 0.05, 12.0).state;
+    }
+    assert.ok(
+      st.perimeterGateProgress[gi] > 0.95,
+      `Gate ${g.id} must automatically swing wide open when entered, got ${st.perimeterGateProgress[gi]}`
+    );
+  }
+
+  // 2. Grand Triangle Track forms a closed 3-vertex triangle inside the perimeter wall & never hits Crystal Lake
+  assert.equal(DINOSAUR_TRIANGLE_VERTICES.length, 3);
+  for (const v of DINOSAUR_TRIANGLE_VERTICES) {
+    assert.ok(
+      Math.hypot(v.lx, v.lz) < DINOSAUR_PERIMETER_WALL_RADIUS - 25,
+      'Triangle vertex must sit comfortably inside the perimeter wall'
+    );
+  }
+  for (let i = 0; i < 60; i++) {
+    const pt = sampleDinosaurTriangleTrack(i / 60);
+    assert.ok(
+      distanceToDinosaurTriangleTrack(pt.x, pt.z) < 0.01,
+      'Sampled triangle track point must lie cleanly on the triangle loop'
+    );
+  }
+
+  // 3. Exploring all 6 stops around the Triangle Track discovers every distinct place & updates HUD live!
+  assert.equal(DINOSAUR_TRIANGLE_PLACES.length, 6);
+  let exploreState = createInitialDinosaurIslandState(12.0);
+  const discoveredNames: string[] = [];
+  for (const place of DINOSAUR_TRIANGLE_PLACES) {
+    const px = DINOSAUR_ISLAND_CENTER.x + place.lx;
+    const pz = DINOSAUR_ISLAND_CENTER.z + place.lz;
+    const res = stepDinosaurIslandState(exploreState, px, pz, true, 0.05, 12.0);
+    exploreState = res.state;
+    assert.equal(exploreState.triangleTrackHud.onTrack, true);
+    assert.equal(exploreState.triangleTrackHud.activePlaceId, place.id);
+    if (res.events.trianglePlaceDiscovered) {
+      discoveredNames.push(res.events.trianglePlaceDiscovered.name);
+    }
+  }
+  assert.equal(discoveredNames.length, 6, 'Exploring the full triangle must discover all 6 distinct places');
+  assert.equal(exploreState.triangleTrackHud.visitedCount, 6);
+  assert.equal(exploreState.triangleTrackHud.totalPlaces, 6);
+});
+
+test('Test 74: Universal exact-location vehicle spawning anywhere + ANY vehicle driving down the Secret Underground Tunnel & back out to daylight', async () => {
+  const { VEHICLE_CATALOGUE, computeCatalogueSpawnPoint } = await import('./vehicleCatalogue');
+  const {
+    VAULT_FLOOR_Y,
+    VAULT_HOME_TUNNEL_MOUTH_Z,
+    VAULT_HOME_TUNNEL_RAMP_BOTTOM_Z,
+    VAULT_HOME_TUNNEL_X,
+    isApproachingHouseTunnelExterior,
+    stepGenericVehicleVaultTunnel,
+    vaultFloorYAt,
+  } = await import('./homeUndergroundVault');
+  const { createInitialDirtBikeState, stepDirtBike } = await import('./dirtBike');
+
+  // 1. EVERY vehicle in VEHICLE_CATALOGUE spawns at exact player coordinates across all regions & underground!
+  const testLocations = [
+    { name: 'Dinosaur Island', x: 560, z: 260, heading: 0.4 },
+    { name: 'Frozen Kingdom', x: -190, z: -150, heading: 2.1 },
+    { name: 'Thar Desert', x: -230, z: 130, heading: -0.7 },
+    { name: 'Underground 1 KM Mega-Chamber', x: 0, z: -320, heading: Math.PI },
+  ];
+  assert.ok(VEHICLE_CATALOGUE.length >= 10, 'Catalogue must contain all world vehicles');
+  for (const entry of VEHICLE_CATALOGUE) {
+    for (const loc of testLocations) {
+      const pt = computeCatalogueSpawnPoint(entry.id, loc.x, loc.z, loc.heading);
+      assert.equal(pt.x, loc.x, `${entry.id} must spawn at exact X at ${loc.name}`);
+      assert.equal(pt.z, loc.z, `${entry.id} must spawn at exact Z at ${loc.name}`);
+      assert.equal(pt.heading, loc.heading, `${entry.id} must inherit player heading at ${loc.name}`);
+    }
+  }
+
+  // 2. Approaching En Illam House Secret Tunnel from exterior yard triggers auto-open blast doors
+  assert.equal(isApproachingHouseTunnelExterior(VAULT_HOME_TUNNEL_X, -4.0), true);
+  assert.equal(isApproachingHouseTunnelExterior(0, 40), false);
+
+  // 3. Drive 49cc Dirt Bike straight from En Illam front yard down the Secret Tunnel into the 1 KM Mega-Chamber & back up!
+  const bike = createInitialDirtBikeState();
+  bike.x = VAULT_HOME_TUNNEL_X;
+  bike.z = -10.5;
+  bike.y = 0.04;
+  bike.heading = Math.PI; // Facing North straight down the tunnel!
+  bike.inVault = false;
+
+  let enteredVaultCount = 0;
+  let reachedMegaFloor = false;
+  for (let i = 0; i < 160; i++) {
+    stepDirtBike(
+      bike,
+      { forward: 1, turn: 0, ascend: false, descend: false, brake: false, boost: true },
+      0.05,
+      'clear',
+      true,
+      i * 0.05,
+      bike.inVault ? vaultFloorYAt : undefined
+    );
+    const tr = stepGenericVehicleVaultTunnel({
+      x: bike.x,
+      z: bike.z,
+      heading: bike.heading,
+      speed: bike.speed,
+      inVault: Boolean(bike.inVault),
+      exitGateProgress: 1,
+      hatchOpenProgress: 1,
+      margin: 1.4,
+    });
+    bike.x = tr.x;
+    bike.z = tr.z;
+    bike.y = tr.y;
+    bike.inVault = tr.inVault;
+    if (tr.enteredVault) enteredVaultCount++;
+    if (bike.inVault && bike.z <= VAULT_HOME_TUNNEL_RAMP_BOTTOM_Z - 4 && Math.abs(bike.y - VAULT_FLOOR_Y) < 0.2) {
+      reachedMegaFloor = true;
+      break;
+    }
+  }
+  assert.equal(enteredVaultCount, 1, 'Dirt Bike must seamlessly enter the Secret Underground Tunnel');
+  assert.equal(bike.inVault, true, 'Dirt Bike must be inVault after driving down the tunnel');
+  assert.equal(reachedMegaFloor, true, `Dirt Bike must reach VAULT_FLOOR_Y (${VAULT_FLOOR_Y}m), got y=${bike.y.toFixed(2)}m at z=${bike.z.toFixed(2)}`);
+
+  // 4. Turn South (heading = 0) and drive straight back up the tunnel ramp out into surface daylight!
+  bike.heading = 0;
+  bike.x = VAULT_HOME_TUNNEL_X;
+  bike.speed = 18;
+  let exitedToSurface = false;
+  for (let i = 0; i < 160; i++) {
+    stepDirtBike(
+      bike,
+      { forward: 1, turn: 0, ascend: false, descend: false, brake: false, boost: true },
+      0.05,
+      'clear',
+      true,
+      10 + i * 0.05,
+      bike.inVault ? vaultFloorYAt : undefined
+    );
+    const tr = stepGenericVehicleVaultTunnel({
+      x: bike.x,
+      z: bike.z,
+      heading: bike.heading,
+      speed: bike.speed,
+      inVault: Boolean(bike.inVault),
+      exitGateProgress: 1,
+      hatchOpenProgress: 1,
+      margin: 1.4,
+    });
+    bike.x = tr.x;
+    bike.z = tr.z;
+    bike.y = tr.y;
+    bike.inVault = tr.inVault;
+    if (tr.exitedToSurface) {
+      exitedToSurface = true;
+      break;
+    }
+  }
+  assert.equal(exitedToSurface, true, 'Dirt Bike must seamlessly drive back up the tunnel out into daylight');
+  assert.equal(bike.inVault, false);
+  assert.ok(bike.z > VAULT_HOME_TUNNEL_MOUTH_Z - 0.2, 'Dirt Bike must emerge at the tunnel mouth in En Illam yard');
+
+  // 5. Also confirm Safari Jeep, Camper Van, Safari Car, and Rural Bus all transition cleanly through the tunnel!
+  for (const margin of [1.9, 2.2, 2.6]) {
+    const enterRes = stepGenericVehicleVaultTunnel({
+      x: VAULT_HOME_TUNNEL_X,
+      z: VAULT_HOME_TUNNEL_MOUTH_Z - 1.5,
+      heading: Math.PI,
+      speed: 10,
+      inVault: false,
+      exitGateProgress: 1,
+      hatchOpenProgress: 1,
+      margin,
+    });
+    assert.equal(enterRes.inVault, true);
+    assert.equal(enterRes.enteredVault, true);
+    const rampMid = stepGenericVehicleVaultTunnel({
+      x: VAULT_HOME_TUNNEL_X,
+      z: -52,
+      heading: Math.PI,
+      speed: 12,
+      inVault: true,
+      exitGateProgress: 1,
+      hatchOpenProgress: 1,
+      margin,
+    });
+    assert.equal(rampMid.inVault, true);
+    assert.ok(rampMid.y < -10 && rampMid.y > VAULT_FLOOR_Y, `Expected mid-ramp descent Y, got ${rampMid.y}`);
+  }
+});
+
+test('75. Aero-Ti Hoverboard Glider: catalogue spawn, twin-turbine boost, retracting skids & underground tunnel flight', () => {
+  // 1. Verify catalogue registration & spawn-at-exact-location contract
+  const entry = VEHICLE_CATALOGUE.find((v) => v.id === 'hover_glider');
+  assert.ok(entry, 'Aero-Ti Hoverboard Glider must be registered in VEHICLE_CATALOGUE');
+  assert.equal(entry.category, 'air_rail');
+  assert.ok(entry.topSpeedLabel.includes('166'), `Expected high-speed turbine rating in topSpeedLabel, got ${entry.topSpeedLabel}`);
+
+  const spawnPt = computeCatalogueSpawnPoint('hover_glider', 42, -88, 0.75);
+  assert.ok(Math.hypot(spawnPt.x - 42, spawnPt.z - -88) < 4.5, 'Glider must spawn right beside the player');
+
+  // 2. Parked state starts with landing skids extended near ground cushion
+  const glider = createInitialHoverGliderState();
+  assert.equal(glider.x, HOVER_GLIDER_SPAWN.x);
+  assert.equal(glider.z, HOVER_GLIDER_SPAWN.z);
+  assert.ok(glider.skidProgress > 0.9, `Parked glider skids should be extended, got ${glider.skidProgress}`);
+
+  // 3. Climb with Boost + Turn -> reaches >135 km/h, banks smoothly, retracts skids cleanly in flight
+  const startY = glider.y;
+  for (let i = 0; i < 160; i++) {
+    stepHoverGlider(
+      glider,
+      { forward: 1, turn: 0.35, boost: true, ascend: true, descend: false, brake: false, cameraPitch: 0.18 },
+      0.03,
+      i * 0.03,
+      true
+    );
+  }
+  assert.ok(glider.speedKmh >= 135, `Expected boosted glider speed >=135 km/h, got ${glider.speedKmh}`);
+  assert.ok(glider.y > startY + 12, `Expected glider to climb high above spawn, got delta ${(glider.y - startY).toFixed(2)}m`);
+  assert.ok(Math.abs(glider.roll) > 0.08, `Expected dynamic carving bank roll, got ${glider.roll}`);
+  assert.ok(glider.skidProgress < 0.2, `In-flight skids should retract (<0.2), got ${glider.skidProgress}`);
+  assert.ok(glider.afterburnerGlow > 0.5, `Boosted twin turbines should glow brightly, got ${glider.afterburnerGlow}`);
+
+  // 4. Verify underground Secret Tunnel & 1 KM Mega-Chamber transit works seamlessly for Hoverboard Glider
+  const enterTunnel = stepGenericVehicleVaultTunnel({
+    x: VAULT_HOME_TUNNEL_X,
+    z: VAULT_HOME_TUNNEL_MOUTH_Z - 1.5,
+    heading: Math.PI,
+    speed: 14,
+    inVault: false,
+    exitGateProgress: 1,
+    hatchOpenProgress: 1,
+    margin: 1.5,
+  });
+  assert.equal(enterTunnel.inVault, true, 'Hoverboard Glider must enter the Secret Underground Tunnel cleanly');
+  assert.equal(enterTunnel.enteredVault, true);
+
+  const undergroundGlider = {
+    ...glider,
+    x: VAULT_HOME_TUNNEL_X,
+    y: VAULT_FLOOR_Y + 1.2,
+    z: VAULT_MEGA_START_Z - 40,
+    inVault: true,
+    vy: 0,
+  };
+  for (let i = 0; i < 40; i++) {
+    stepHoverGlider(
+      undergroundGlider,
+      { forward: 1, turn: 0, boost: false, ascend: true, descend: false, brake: false, cameraPitch: -0.4 },
+      0.04,
+      i * 0.04,
+      true,
+      () => VAULT_FLOOR_Y,
+      VAULT_FLOOR_Y + VAULT_HEIGHT - 2.0
+    );
+  }
+  assert.ok(
+    undergroundGlider.y <= VAULT_FLOOR_Y + VAULT_HEIGHT - 1.9 && undergroundGlider.y >= VAULT_FLOOR_Y + 0.4,
+    `Underground glider altitude must stay clamped inside the 1 KM Mega-Chamber ceiling/floor, got ${undergroundGlider.y}`
+  );
+});
+
+test('76. Universal Camera-Directed 3D Look-to-Fly: Superheroes & ALL flying craft climb/dive without pressing Up/Down buttons', () => {
+  // 1. Pure Look-to-Fly math contract:
+  //    Looking UP (negative camPitch) + W => positive verticalRate (climb)
+  //    Looking LEVEL (inside deadzone) + W => 0 verticalRate (level cruise)
+  //    Looking DOWN (positive camPitch) + W => negative verticalRate (dive)
+  //    Standing still (forward=0) => 0 verticalRate even when looking up/down
+  const climb = computeLookToFlyVerticalRate(-0.58, 1.0);
+  const level = computeLookToFlyVerticalRate(0.18, 1.0);
+  const dive = computeLookToFlyVerticalRate(0.78, 1.0);
+  const idleLookUp = computeLookToFlyVerticalRate(-0.58, 0.0);
+
+  assert.equal(climb.active, true);
+  assert.ok(climb.verticalRate > 8, `Looking skyward + W should climb strongly, got ${climb.verticalRate}`);
+  assert.equal(level.active, false);
+  assert.equal(level.verticalRate, 0, 'Looking level inside deadzone must fly rock-steady level');
+  assert.equal(dive.active, true);
+  assert.ok(dive.verticalRate < -8, `Looking earthward + W should dive strongly, got ${dive.verticalRate}`);
+  assert.equal(idleLookUp.verticalRate, 0, 'Looking up without forward thrust must not drift upward');
+
+  // 2. Hoverboard Glider climbs & dives purely via cameraPitch + forward (ascend=false, descend=false)
+  const glider = createInitialHoverGliderState();
+  const gliderStartY = glider.y;
+  for (let i = 0; i < 90; i++) {
+    stepHoverGlider(
+      glider,
+      { forward: 1, turn: 0, boost: false, ascend: false, descend: false, brake: false, cameraPitch: -0.58 },
+      0.03,
+      i * 0.03,
+      true
+    );
+  }
+  const gliderPeakY = glider.y;
+  assert.ok(gliderPeakY > gliderStartY + 12, `Hover Glider must climb via Look-Up + W, delta=${(gliderPeakY - gliderStartY).toFixed(2)}m`);
+  for (let i = 0; i < 70; i++) {
+    stepHoverGlider(
+      glider,
+      { forward: 1, turn: 0, boost: false, ascend: false, descend: false, brake: false, cameraPitch: 0.78 },
+      0.03,
+      3 + i * 0.03,
+      true
+    );
+  }
+  assert.ok(glider.y < gliderPeakY - 8, `Hover Glider must dive via Look-Down + W, drop=${(gliderPeakY - glider.y).toFixed(2)}m`);
+
+  // 3. VTOL Aircraft lifts off, climbs & dives purely via cameraPitch + forward
+  const vtol = createInitialVtolAircraftState();
+  const vtolStartY = vtol.y;
+  for (let i = 0; i < 100; i++) {
+    stepVtolAircraft(
+      vtol,
+      { forward: 1, turn: 0, boost: false, ascend: false, descend: false, brake: false, cameraPitch: -0.58 },
+      0.03,
+      i * 0.03,
+      'clear',
+      true
+    );
+  }
+  const vtolPeakY = vtol.y;
+  assert.ok(vtolPeakY > vtolStartY + 10, `VTOL must auto-lift & climb via Look-Up + W, delta=${(vtolPeakY - vtolStartY).toFixed(2)}m`);
+  for (let i = 0; i < 70; i++) {
+    stepVtolAircraft(
+      vtol,
+      { forward: 1, turn: 0, boost: false, ascend: false, descend: false, brake: false, cameraPitch: 0.78 },
+      0.03,
+      4 + i * 0.03,
+      'clear',
+      true
+    );
+  }
+  assert.ok(vtol.y < vtolPeakY - 8, `VTOL must dive via Look-Down + W, drop=${(vtolPeakY - vtol.y).toFixed(2)}m`);
+
+  // 4. Orange Rescue Helicopter climbs & dives purely via cameraPitch + forward
+  let heli = createInitialOrangeHeliState();
+  const heliStartY = heli.y;
+  for (let i = 0; i < 90; i++) {
+    heli = stepOrangeHeliState(heli, 1, 0, false, false, false, true, 0.03, undefined, undefined, -0.58);
+  }
+  const heliPeakY = heli.y;
+  assert.ok(heliPeakY > heliStartY + 12, `Orange Helicopter must climb via Look-Up + W, delta=${(heliPeakY - heliStartY).toFixed(2)}m`);
+  for (let i = 0; i < 65; i++) {
+    heli = stepOrangeHeliState(heli, 1, 0, false, false, false, true, 0.03, undefined, undefined, 0.78);
+  }
+  assert.ok(heli.y < heliPeakY - 8, `Orange Helicopter must dive via Look-Down + W, drop=${(heliPeakY - heli.y).toFixed(2)}m`);
+
+  // 5. Tropical Sky Explorer climbs & dives purely via cameraPitch + forward
+  let sky = createInitialSkyExplorerState();
+  const skyStartY = sky.y;
+  for (let i = 0; i < 90; i++) {
+    sky = stepSkyExplorerState(sky, 1, 0, false, false, false, 0.03, undefined, undefined, -0.58);
+  }
+  const skyPeakY = sky.y;
+  assert.ok(skyPeakY > skyStartY + 12, `Sky Explorer must climb via Look-Up + W, delta=${(skyPeakY - skyStartY).toFixed(2)}m`);
+  for (let i = 0; i < 65; i++) {
+    sky = stepSkyExplorerState(sky, 1, 0, false, false, false, 0.03, undefined, undefined, 0.78);
+  }
+  assert.ok(sky.y < skyPeakY - 8, `Sky Explorer must dive via Look-Down + W, drop=${(skyPeakY - sky.y).toFixed(2)}m`);
+
+  // 6. DL-787 Airliner climbs once at takeoff speed & dives via cameraPitch + forward
+  let jet = createInitialAirlinerState();
+  jet = { ...jet, speed: 46, landingGearDown: false, y: AIRPORT_GROUND_Y + 25 };
+  const jetStartY = jet.y;
+  for (let i = 0; i < 60; i++) {
+    jet = stepAirlinerState(jet, 1, 0, false, false, false, 0.03, () => AIRPORT_GROUND_Y, 425, -0.58);
+  }
+  const jetPeakY = jet.y;
+  assert.ok(jetPeakY > jetStartY + 8, `Airliner must climb via Look-Up + W, delta=${(jetPeakY - jetStartY).toFixed(2)}m`);
+  for (let i = 0; i < 55; i++) {
+    jet = stepAirlinerState(jet, 1, 0, false, false, false, 0.03, () => AIRPORT_GROUND_Y, 425, 0.78);
+  }
+  assert.ok(jet.y < jetPeakY - 6, `Airliner must dive via Look-Down + W, drop=${(jetPeakY - jet.y).toFixed(2)}m`);
+});
 
 
 

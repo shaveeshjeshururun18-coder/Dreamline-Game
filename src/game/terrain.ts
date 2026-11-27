@@ -3,8 +3,19 @@ import {
   DINOSAUR_EXPLORER_SPAWN,
   DINOSAUR_HEADLAND_CENTER,
   DINOSAUR_ISLAND_CENTER,
+  DINOSAUR_ISLAND_LAND_RADIUS,
+  DINOSAUR_MARINA_PIER_BOUNDS,
+  DINOSAUR_RIVER_END_LZ,
+  DINOSAUR_RIVER_START_LZ,
   DINOSAUR_STATION_APPROX,
+  dinoCrystalLakeNormDist,
+  getDinosaurRiverBridgeDeckY,
   isInsideDinosaurIslandLand,
+  isOnDinosaurMarinaPier,
+  isOnDinosaurRiverBridge,
+  ssjRiverHalfWidth,
+  ssjRiverLocalX,
+  ssjRiverWaterY,
 } from './dinosaurIsland';
 import {
   AVS_SNOW_HOUSE_BASE_Y,
@@ -51,6 +62,24 @@ import {
   getAirportFloorHeight,
   isInsideAirport,
 } from './airportMetro';
+import {
+  OCEAN_HERO_TOWER_CENTER,
+  OCEAN_HERO_TOWER_DECK_Y,
+  OCEAN_HERO_TOWER_RADIUS,
+  OCEAN_HERO_TOWER_SPAWN,
+  SNOWMAN_ISLAND_CENTER,
+  SNOWMAN_ISLAND_PIER_BOUNDS,
+  SNOWMAN_ISLAND_RADIUS,
+  SNOWMAN_ISLAND_SPAWN,
+  SUBMARINE_EXIT_POS,
+  SUBMARINE_PIER_BOUNDS,
+  getOceanHeroTowerFloorHeight,
+  isInsideOceanHeroTowerLand,
+  isInsideSnowmanIsland,
+  isOnOceanHeroTowerPier,
+  isOnSnowmanIslandPier,
+  isOnSubmarinePier,
+} from './oceanWorldSystems';
 
 export interface Vec2 {
   x: number;
@@ -67,7 +96,7 @@ export interface AabbCollider {
   maxY?: number;
 }
 
-export const WORLD_PLAYABLE_RADIUS = 435;
+export const WORLD_PLAYABLE_RADIUS = 1650;
 export const WATER_LEVEL = -0.35;
 
 export const LAKE_CENTER = { x: 46, z: -26 };
@@ -83,9 +112,16 @@ export const HILL_RADIUS = 38;
 export const HILL_HEIGHT = 11.2;
 
 export const SNOW_PEAK_CENTER = { x: -115, z: -108 };
+/**
+ * 21-Species Wildlife Sanctuary integrated directly into the lush western valley
+ * of Grand Jurassic Park Island (zero snakes, all wildlife roaming alongside dinosaurs!).
+ */
+export const WILDLIFE_FOREST_SANCTUARY_CENTER = { x: 464, z: 181 } as const;
+export const WILDLIFE_SANCTUARY_POND_CENTER = { x: 452, z: 194 } as const;
 export const COAST_CENTER = { x: 102, z: 62 };
 export const WATERFALL_CENTER = { x: -32, z: 112 };
 export const HOME_CENTER = { x: -22, z: -16 };
+export const VEHICLE_GARAGE_PLOT_CENTER = { x: 4, z: -24 } as const;
 export const VILLAGE_CENTER = { x: -42, z: 34 };
 export const MAIN_STATION_CENTER = { x: 0, z: 10 };
 export const CAMPSITE_CENTER = { x: 26, z: -4 };
@@ -120,11 +156,22 @@ export const LOCATIONS: LocationInfo[] = [
     regionId: 'sakura',
     name: 'En Illam · My Home',
     jpName: 'என் இல்லம்',
-    subtitle: 'Two-storey wooden countryside home with a sunset balcony',
+    subtitle: 'Two-storey wooden countryside home with 3-aircraft external sky terrace & secret tunnel',
     x: HOME_CENTER.x,
     z: HOME_CENTER.z,
     teleportX: HOME_CENTER.x,
     teleportZ: HOME_CENTER.z + 9.2,
+  },
+  {
+    id: 'vehicle_garage',
+    regionId: 'sakura',
+    name: 'Dreamline Vehicle Garage',
+    jpName: 'வாகன கேரேஜ்',
+    subtitle: 'Walk-in 3-bay vehicle spawning garage beside En Illam — spawn cars, jeeps, jet skis & aircraft directly on the turntable bay',
+    x: VEHICLE_GARAGE_PLOT_CENTER.x,
+    z: VEHICLE_GARAGE_PLOT_CENTER.z,
+    teleportX: VEHICLE_GARAGE_PLOT_CENTER.x,
+    teleportZ: VEHICLE_GARAGE_PLOT_CENTER.z + 10.0,
   },
   {
     id: 'coastal_town',
@@ -140,9 +187,9 @@ export const LOCATIONS: LocationInfo[] = [
   {
     id: 'dinosaur_island',
     regionId: 'coastal',
-    name: 'SSJ Dinosaur Island',
-    jpName: 'டைனோசர் தீவு',
-    subtitle: 'Offshore sea island linked by the Ocean Railway Bridge — T-Rex breakout arena, AK-47 & Safari Car',
+    name: 'Jurassic Park · Dinosaur Island',
+    jpName: 'ஜுராசிக் பார்க் தீவு',
+    subtitle: 'Grand Jurassic Park jungle island — bigger auto-opening 360° perimeter gates, Triangle Explorer Track showcasing 6 distinct places, automated day/night sky roof doors, Crystal Lake, flowing river & 18 dinosaurs',
     x: DINOSAUR_ISLAND_CENTER.x,
     z: DINOSAUR_ISLAND_CENTER.z,
     teleportX: DINOSAUR_EXPLORER_SPAWN.x,
@@ -158,6 +205,39 @@ export const LOCATIONS: LocationInfo[] = [
     z: EXHIBITION_ISLAND_CENTER.z,
     teleportX: EXHIBITION_PLAZA_SPAWN.x,
     teleportZ: EXHIBITION_PLAZA_SPAWN.z,
+  },
+  {
+    id: 'submarine_dock',
+    regionId: 'coastal',
+    name: 'Kadalkarai Submarine Pier',
+    jpName: 'நீர்மூழ்கி கப்பல் துறை',
+    subtitle: 'Board the deep-sea Kadalkarai Submarine Service for ocean exploration and underwater dives',
+    x: SUBMARINE_EXIT_POS.x,
+    z: SUBMARINE_EXIT_POS.z,
+    teleportX: SUBMARINE_EXIT_POS.x,
+    teleportZ: SUBMARINE_EXIT_POS.z,
+  },
+  {
+    id: 'ocean_hero_tower',
+    regionId: 'coastal',
+    name: 'Ocean Superhero Suits Building',
+    jpName: 'கடல் சூப்பர்ஹீரோ கோபுரம்',
+    subtitle: 'Offshore titanium-and-glass marine pavilion housing all 7 Superhero Suits ready to wear out at sea',
+    x: OCEAN_HERO_TOWER_CENTER.x,
+    z: OCEAN_HERO_TOWER_CENTER.z,
+    teleportX: OCEAN_HERO_TOWER_SPAWN.x,
+    teleportZ: OCEAN_HERO_TOWER_SPAWN.z,
+  },
+  {
+    id: 'snowman_island',
+    regionId: 'coastal',
+    name: 'Snowman Island',
+    jpName: 'பனிமனிதன் தீவு',
+    subtitle: 'Snowy ocean sanctuary with igloos, lighthouse, and the Snowman Jet Ski Ocean Rescue Dock',
+    x: SNOWMAN_ISLAND_CENTER.x,
+    z: SNOWMAN_ISLAND_CENTER.z,
+    teleportX: SNOWMAN_ISLAND_SPAWN.x,
+    teleportZ: SNOWMAN_ISLAND_SPAWN.z,
   },
   {
     id: 'snow_mountains',
@@ -191,6 +271,17 @@ export const LOCATIONS: LocationInfo[] = [
     z: CAVE_ENTRANCES[0].surfaceZ,
     teleportX: CAVE_ENTRANCES[0].surfaceX,
     teleportZ: CAVE_ENTRANCES[0].surfaceZ + 7.5,
+  },
+  {
+    id: 'wildlife_sanctuary',
+    regionId: 'coastal',
+    name: 'Jurassic Wildlife Valley',
+    jpName: 'ஜுராசிக் வனவிலங்கு பள்ளத்தாக்கு',
+    subtitle: '21-species open wildlife sanctuary integrated into the western valley of Jurassic Park Island — elephants, tigers, deer, peacocks & forest pond',
+    x: WILDLIFE_FOREST_SANCTUARY_CENTER.x,
+    z: WILDLIFE_FOREST_SANCTUARY_CENTER.z,
+    teleportX: WILDLIFE_FOREST_SANCTUARY_CENTER.x + 12.0,
+    teleportZ: WILDLIFE_FOREST_SANCTUARY_CENTER.z + 10.0,
   },
   {
     id: 'iceland_gateway',
@@ -299,8 +390,8 @@ export const LOCATIONS: LocationInfo[] = [
     subtitle: 'Terminal 1 departure hall, 26m ATC radar tower, Runway 09/27, underground Metro link & flyable DL-787 Jetliner',
     x: AIRPORT_CENTER.x,
     z: AIRPORT_CENTER.z,
-    teleportX: AIRPORT_SPAWN.x,
-    teleportZ: AIRPORT_SPAWN.z,
+    teleportX: 259,
+    teleportZ: -131,
   },
   {
     id: 'underground_metro',
@@ -349,12 +440,12 @@ export const SCENIC_SPOTS: ScenicSpot[] = [
   {
     id: 'spot_dinosaur_island',
     regionId: 'coastal',
-    name: 'SSJ Dinosaur Island Arena',
-    jpName: 'டைனோசர் தீவு அரங்கம்',
-    description: 'Cross the Ocean Railway Bridge to face the chasing T-Rex, shatter all 4 walls, and drive the Safari Car.',
+    name: 'SSJ Dinosaur Island Sanctuary',
+    jpName: 'டைனோசர் தீவு',
+    description: 'Walk through the Grand SSJ Dinosaur Island Arch to explore the Skeleton Museum, Resort Pool, flowing waterfall river, and 18 prehistoric dinosaurs.',
     x: DINOSAUR_ISLAND_CENTER.x,
     z: DINOSAUR_ISLAND_CENTER.z,
-    radius: 26,
+    radius: 56,
   },
   {
     id: 'spot_exhibition_complex',
@@ -505,10 +596,12 @@ export function oceanShoreX(z: number): number {
 }
 
 export function isOceanAt(x: number, z: number): boolean {
-  // Dinosaur Island, its NW railway headland, and the Ocean Exhibition Complex Island rise cleanly above the sea
+  // Dinosaur Island, its NW railway headland, Exhibition Island, Ocean Hero Suits Building, and Snowman Island rise cleanly above the sea
   if (isInsideDinosaurIslandLand(x, z)) return false;
   if (Math.hypot(x - DINOSAUR_HEADLAND_CENTER.x, z - DINOSAUR_HEADLAND_CENTER.z) < 11.5) return false;
   if (isInsideExhibitionIsland(x, z, 1.5)) return false;
+  if (isInsideOceanHeroTowerLand(x, z, 1.2)) return false;
+  if (isInsideSnowmanIsland(x, z, 1.0)) return false;
   return x > oceanShoreX(z) && z > 2;
 }
 
@@ -631,6 +724,11 @@ export function groundHeightAt(x: number, z: number): number {
   const homeFlat = 1 - smoothstep(13, 24, dHome);
   h = h * (1 - homeFlat) + 0.0 * homeFlat;
 
+  // Flatten Dreamline Vehicle Spawning Garage plaza at (-42, -4) cleanly to y = 0.0
+  const dGarage = Math.hypot(x - VEHICLE_GARAGE_PLOT_CENTER.x, z - VEHICLE_GARAGE_PLOT_CENTER.z);
+  const garageFlat = 1 - smoothstep(13, 22, dGarage);
+  h = h * (1 - garageFlat) + 0.0 * garageFlat;
+
   // Flatten Poongavanam Main Station & Nila Gramam gently
   const dStation = Math.hypot(x - MAIN_STATION_CENTER.x, z - MAIN_STATION_CENTER.z);
   const stationFlat = 1 - smoothstep(14, 34, dStation);
@@ -669,42 +767,152 @@ export function groundHeightAt(x: number, z: number): number {
     h = h * (1 - lakeCarve) + -2.5 * lakeCarve;
   }
 
-  // Kadalkarai Coastal town terrace -> Sandy Beach -> Ocean floor (including sea surrounding Dinosaur Island)
+  // Kadalkarai Coastal town terrace -> Sandy Beach -> Deep Undulating Ocean Seabed (-16m..-19.5m)
   if (x > 60 && z > -4) {
     const coastBlend = smoothstep(60, 82, x) * smoothstep(-4, 18, z);
     const shoreX = oceanShoreX(z);
     let coastH = 0.35;
     if (x > shoreX - 18) {
-      // Smooth sandy beach slope from 0.35m down to -2.2m ocean floor
-      const tBeach = smoothstep(shoreX - 18, shoreX + 12, x);
-      coastH = 0.35 * (1 - tBeach) + -2.2 * tBeach;
+      // Smooth sandy beach slope from 0.35m down to -2.6m shallow shelf
+      const tBeach = smoothstep(shoreX - 18, shoreX + 10, x);
+      coastH = 0.35 * (1 - tBeach) + -2.6 * tBeach;
+      // Continental shelf drop-off into rich deep ocean seabed (-16.2m..-19.2m) for submarine & diving!
+      if (x > shoreX + 6) {
+        const tDrop = smoothstep(shoreX + 6, shoreX + 44, x);
+        const reefUndulation =
+          Math.sin(x * 0.065 + z * 0.05) * 1.15 +
+          Math.cos(x * 0.13 - z * 0.095) * 0.65;
+        const deepFloor = -16.8 + reefUndulation;
+        coastH = coastH * (1 - tDrop) + deepFloor * tDrop;
+      }
     }
     h = h * (1 - coastBlend) + coastH * coastBlend;
   }
 
-  // Offshore SSJ Dinosaur Island rising out of the sea at (166, 78) + NW railway station headland at (150, 57)
+  // Grand Jurassic Park · SSJ Dinosaur Island (~470m diameter) at (560, 195) + WNW railway headland at (346, 130)
   const dDino = Math.hypot(x - DINOSAUR_ISLAND_CENTER.x, z - DINOSAUR_ISLAND_CENTER.z);
-  if (dDino < 36) {
-    const islandMask = 1 - smoothstep(23.5, 34.0, dDino);
-    const rockyRim =
-      smoothstep(18.0, 23.0, dDino) *
-      (1 - smoothstep(23.5, 28.5, dDino)) *
-      (0.55 + Math.max(0, Math.sin(x * 0.24 + z * 0.19)) * 0.72);
+  if (dDino < DINOSAUR_ISLAND_LAND_RADIUS + 26) {
+    const lx = x - DINOSAUR_ISLAND_CENTER.x;
+    const lz = z - DINOSAUR_ISLAND_CENTER.z;
+    const islandMask =
+      1 - smoothstep(DINOSAUR_ISLAND_LAND_RADIUS - 1.5, DINOSAUR_ISLAND_LAND_RADIUS + 18.0, dDino);
+
+    // Rich elevated prehistoric jungle interior (y = 2.0m..4.4m — completely dry above ocean waves!)
+    const rolling =
+      Math.sin(lx * 0.028) * Math.cos(lz * 0.026) * 1.45 +
+      Math.sin((lx + lz) * 0.016) * 0.85 +
+      Math.cos((lx - lz) * 0.045) * 0.35;
+    let targetIslandH = 2.25 + rolling * (1 - smoothstep(175, 224, dDino));
+
+    // Smooth flat ring along the colossal 360° Jurassic perimeter boundary gate wall (r ≈ 212m)
+    const dWallRing = Math.abs(dDino - 212.0);
+    if (dWallRing < 22) {
+      const wallFlat = 1 - smoothstep(10, 22, dWallRing);
+      targetIslandH = targetIslandH * (1 - wallFlat * 0.88) + 1.95 * (wallFlat * 0.88);
+    }
+
+    // Flatten South Grand Gate Promenade, Grand Jurassic Avenue & Central Visitor Center Rotunda cleanly
+    const dGatePlaza = Math.hypot(lx, lz - 216);
+    if (dGatePlaza < 42) {
+      const gateFlat = 1 - smoothstep(22, 42, dGatePlaza);
+      targetIslandH = targetIslandH * (1 - gateFlat) + 1.92 * gateFlat;
+    }
+
+    if (Math.abs(lx) < 20 && lz > 96 && lz < 224) {
+      const aveFlat = 1 - smoothstep(10, 20, Math.abs(lx));
+      targetIslandH = targetIslandH * (1 - aveFlat * 0.85) + 1.96 * (aveFlat * 0.85);
+    }
+
+    const dRotunda = Math.hypot(lx, lz - 112);
+    if (dRotunda < 42) {
+      const rotundaFlat = 1 - smoothstep(24, 42, dRotunda);
+      targetIslandH = targetIslandH * (1 - rotundaFlat * 0.9) + 2.02 * (rotundaFlat * 0.9);
+    }
+
+    // Flatten Helipad, Hostel, Glass Pavilion & Genomic Lab terraces cleanly
+    for (const [plx, plz, rIn, rOut, py] of [
+      [-34, 182, 13, 22, 1.92],
+      [-72, 84, 18, 30, 2.05],
+      [-94, -74, 14, 24, 2.05],
+      [-24, -124, 14, 24, 2.1],
+    ] as const) {
+      const dp = Math.hypot(lx - plx, lz - plz);
+      if (dp < rOut) {
+        const pf = 1 - smoothstep(rIn, rOut, dp);
+        targetIslandH = targetIslandH * (1 - pf) + py * pf;
+      }
+    }
+
+    // Lush Western Wildlife Valley inside Jurassic Park Island + Shimmering Forest Pond (21 wildlife species!)
+    const dWildlife = Math.hypot(
+      x - WILDLIFE_FOREST_SANCTUARY_CENTER.x,
+      z - WILDLIFE_FOREST_SANCTUARY_CENTER.z
+    );
+    if (dWildlife < 48) {
+      const tWild = 1 - smoothstep(28, 48, dWildlife);
+      const meadowRoll = Math.sin(x * 0.048) * Math.cos(z * 0.048) * 0.28;
+      targetIslandH = targetIslandH * (1 - tWild) + (2.05 + meadowRoll) * tWild;
+    }
+    const dWildlifePond = Math.hypot(
+      x - WILDLIFE_SANCTUARY_POND_CENTER.x,
+      z - WILDLIFE_SANCTUARY_POND_CENTER.z
+    );
+    if (dWildlifePond < 13.5) {
+      const tPond = 1 - smoothstep(7.5, 13.5, dWildlifePond);
+      targetIslandH = targetIslandH * (1 - tPond) + (WATER_LEVEL - 1.05) * tPond;
+    }
+
+    // Towering 28m Northern Volcanic Mountain & Waterfall Gorge Cliff at the river headwaters (local 44, -176)
+    const dWfCliff = Math.hypot((lx - 44) * 0.72, (lz + 176) * 0.88);
+    if (dWfCliff < 40) {
+      const cliffMask = 1 - smoothstep(8.0, 38.0, dWfCliff);
+      targetIslandH += cliffMask * 26.5;
+    }
+
+    // Carve the Scenic 76m × 56m Jurassic Crystal Lake basin cleanly below freshwater level (0.85m -> bed -1.75m)
+    const dCrystalLake = dinoCrystalLakeNormDist(x, z);
+    if (dCrystalLake < 1.24) {
+      const lakeCarve = 1 - smoothstep(0.68, 1.24, dCrystalLake);
+      targetIslandH = targetIslandH * (1 - lakeCarve) + -1.75 * lakeCarve;
+    }
+
+    // Carve the continuous Winding Flowing Forest River trough from northern waterfall plunge pool (lz = -170) to southern ocean mouth (lz = +228)
+    if (lz > DINOSAUR_RIVER_START_LZ - 8 && lz < DINOSAUR_RIVER_END_LZ + 8) {
+      const rCx = ssjRiverLocalX(lz);
+      const distRiver = Math.abs(lx - rCx);
+      const riverHalfW = ssjRiverHalfWidth(lz);
+      if (distRiver < riverHalfW + 6.5) {
+        const carve = 1 - smoothstep(riverHalfW * 0.48, riverHalfW + 6.5, distRiver);
+        const bedTarget = ssjRiverWaterY(lz) - 1.85;
+        targetIslandH = targetIslandH * (1 - carve) + bedTarget * carve;
+      }
+    }
+
+    // Smooth coastal taper down to the WNW Railway Station headland
     const dDinoStation = Math.hypot(
       x - DINOSAUR_HEADLAND_CENTER.x,
       z - DINOSAUR_HEADLAND_CENTER.z
     );
-    const stationEase = 1 - smoothstep(8, 16, dDinoStation);
-    const targetIslandH = 0.42 * (1 - stationEase) + 0.22 * stationEase + rockyRim * (1 - stationEase);
+    if (dDinoStation < 34) {
+      const stationEase = 1 - smoothstep(14, 34, dDinoStation);
+      targetIslandH = targetIslandH * (1 - stationEase) + 0.34 * stationEase;
+    }
+
+    // Gentle lush earth coastal embankment down to the ocean shoreline strictly outside the 226m dry promenade
+    if (dDino > 226) {
+      const rimDrop = smoothstep(226, 242, dDino);
+      targetIslandH = targetIslandH * (1 - rimDrop) + -0.8 * rimDrop;
+    }
+
     h = h * (1 - islandMask) + targetIslandH * islandMask;
   }
   const dDinoHeadland = Math.hypot(
     x - DINOSAUR_HEADLAND_CENTER.x,
     z - DINOSAUR_HEADLAND_CENTER.z
   );
-  if (dDinoHeadland < 16.5) {
-    const headlandMask = 1 - smoothstep(8.5, 16.5, dDinoHeadland);
-    h = Math.max(h, -2.2 * (1 - headlandMask) + 0.22 * headlandMask);
+  if (dDinoHeadland < 24.0) {
+    const headlandMask = 1 - smoothstep(12.0, 24.0, dDinoHeadland);
+    h = Math.max(h, -2.2 * (1 - headlandMask) + 0.34 * headlandMask);
   }
 
   // Engineered Ocean Exhibition Complex Island platform rising cleanly out of deep ocean at (204, 256)
@@ -714,6 +922,23 @@ export function groundHeightAt(x: number, z: number): number {
     const dSeawall = Math.hypot(dxEdge, dzEdge);
     const islandFlat = 1 - smoothstep(0.0, 9.0, dSeawall);
     h = h * (1 - islandFlat) + EXHIBITION_DECK_Y * islandFlat;
+  }
+
+  // Offshore Ocean Superhero Suits Building engineered ocean platform at (184, 150)
+  const dHeroTower = Math.hypot(x - OCEAN_HERO_TOWER_CENTER.x, z - OCEAN_HERO_TOWER_CENTER.z);
+  if (dHeroTower < OCEAN_HERO_TOWER_RADIUS + 8) {
+    const heroFlat = 1 - smoothstep(OCEAN_HERO_TOWER_RADIUS - 1.5, OCEAN_HERO_TOWER_RADIUS + 7.5, dHeroTower);
+    h = h * (1 - heroFlat) + OCEAN_HERO_TOWER_DECK_Y * heroFlat;
+  }
+
+  // New Snowman Island rising cleanly out of Kadalkarai Ocean at (258, 118)
+  const dSnowIsland = Math.hypot(x - SNOWMAN_ISLAND_CENTER.x, z - SNOWMAN_ISLAND_CENTER.z);
+  if (dSnowIsland < SNOWMAN_ISLAND_RADIUS + 10) {
+    const snowMask = 1 - smoothstep(SNOWMAN_ISLAND_RADIUS - 4.5, SNOWMAN_ISLAND_RADIUS + 8.5, dSnowIsland);
+    const centerHill = (1 - smoothstep(2.0, 14.0, dSnowIsland)) * 1.45;
+    const dockEase = 1 - smoothstep(4.0, 11.0, Math.hypot(x - SNOWMAN_ISLAND_SPAWN.x, z - SNOWMAN_ISLAND_SPAWN.z));
+    const snowTargetH = 0.65 + centerHill * (1 - dockEase);
+    h = h * (1 - snowMask) + snowTargetH * snowMask;
   }
 
   // Thar Golden Desert Oasis & Pyramid Ruins rolling dunes & oasis basin (western expanse x < -132, z > 10)
@@ -814,6 +1039,17 @@ export function walkableHeightAt(x: number, z: number): number {
     return Math.max(base, 0.78);
   }
 
+  // SSJ Dinosaur Island Marina Wooden Pier extending into the unified ocean
+  if (isOnDinosaurMarinaPier(x, z)) {
+    return Math.max(base, DINOSAUR_MARINA_PIER_BOUNDS.deckY);
+  }
+
+  // 4 Walkable Timber Suspension Bridges spanning the 1 KM Dinosaur Island Flowing River!
+  const dinoBridgeY = getDinosaurRiverBridgeDeckY(x, z);
+  if (dinoBridgeY !== null) {
+    return Math.max(base, dinoBridgeY);
+  }
+
   // Ocean Exhibition Complex Railway Station platform (north edge of Ocean Island)
   if (Math.hypot(x - EXHIBITION_STATION_POS.x, z - (EXHIBITION_STATION_POS.z + 3.5)) < 10.5) {
     return Math.max(base, 0.82);
@@ -847,6 +1083,22 @@ export function walkableHeightAt(x: number, z: number): number {
   // Sovereign of the Tides Timber Boarding Pier extending right from Kadalkarai Shore (x: 103.5..123.0, z: 46.2..51.0)
   if (x >= 103.5 && x <= 123.0 && z >= 46.2 && z <= 51.0) {
     return Math.max(base, 0.36);
+  }
+
+  // Kadalkarai Submarine Service Wooden Pier
+  if (isOnSubmarinePier(x, z)) {
+    return Math.max(base, SUBMARINE_PIER_BOUNDS.deckY);
+  }
+
+  // Ocean Superhero Suits Building deck & west boat pier
+  const heroTowerFloor = getOceanHeroTowerFloorHeight(x, z);
+  if (heroTowerFloor !== null) {
+    return Math.max(base, heroTowerFloor);
+  }
+
+  // Snowman Island Jet Ski Rescue Pier
+  if (isOnSnowmanIslandPier(x, z)) {
+    return Math.max(base, SNOWMAN_ISLAND_PIER_BOUNDS.deckY);
   }
 
   // Thar Desert Emerald Oasis Wooden Jetty
@@ -886,12 +1138,24 @@ export function walkableHeightAt(x: number, z: number): number {
 export function walkableHeightWithFloor(x: number, z: number, currentY: number): number {
   const lx = x - HOME_CENTER.x;
   const lz = z - HOME_CENTER.z;
-  const insideHomeComplex = lx >= -6.6 && lx <= 8.35 && lz >= -6.2 && lz <= 7.8;
+  const insideHomeComplex = lx >= -17.4 && lx <= 17.4 && lz >= -6.2 && lz <= 7.8;
 
   if (insideHomeComplex && currentY > 2.35) {
-    // 1. Rooftop Helipad Deck (circular r = 5.6m centered at local 0,0) + East Skywalk Bridge (y = 10.4m)
+    // 1. Rooftop 3-Aircraft Sky Terrace: Pad A (local 0,0), Pad B (local -11.4,0), Pad C (local +11.4,0), Twin Skybridges & East Skywalk Bridge (y = 10.4m)
     if (currentY > 8.6) {
       if (Math.hypot(lx, lz) <= 5.65) {
+        return 10.4;
+      }
+      if (Math.hypot(lx + 11.4, lz) <= 5.65) {
+        return 10.4;
+      }
+      if (Math.hypot(lx - 11.4, lz) <= 5.65) {
+        return 10.4;
+      }
+      if (lx >= -7.0 && lx <= -4.4 && lz >= -2.1 && lz <= 2.1) {
+        return 10.4;
+      }
+      if (lx >= 4.4 && lx <= 7.0 && lz >= -2.1 && lz <= 2.1) {
         return 10.4;
       }
       if (lx >= 3.8 && lx <= 8.2 && lz >= -4.7 && lz <= -1.7) {
@@ -958,6 +1222,11 @@ export function isWaterAt(x: number, z: number): boolean {
   if (isOnOceanBusCauseway(x, z)) return false;
   if (isOnExhibitionMarinaPier(x, z)) return false;
   if (isInsideExhibitionIsland(x, z, 0.5)) return false;
+  if (isOnSubmarinePier(x, z)) return false;
+  if (isOnOceanHeroTowerPier(x, z) || isInsideOceanHeroTowerLand(x, z, 0.4)) return false;
+  if (isOnSnowmanIslandPier(x, z) || isInsideSnowmanIsland(x, z, -0.5)) return false;
+  if (isOnDinosaurMarinaPier(x, z)) return false;
+  if (isOnDinosaurRiverBridge(x, z)) return false;
   return groundHeightAt(x, z) < WATER_LEVEL - 0.16;
 }
 
@@ -970,6 +1239,14 @@ export function isSwimmableWaterAt(x: number, z: number): boolean {
 }
 
 export function getLocationAt(x: number, z: number): LocationInfo {
+  if (
+    Math.hypot(x - DINOSAUR_ISLAND_CENTER.x, z - DINOSAUR_ISLAND_CENTER.z) <=
+      DINOSAUR_ISLAND_LAND_RADIUS + 10 ||
+    isOnDinosaurMarinaPier(x, z)
+  ) {
+    const dinoLoc = LOCATIONS.find((l) => l.id === 'dinosaur_island');
+    if (dinoLoc) return dinoLoc;
+  }
   let best = LOCATIONS[0];
   let bestDist = Infinity;
   for (const loc of LOCATIONS) {
@@ -1008,19 +1285,23 @@ export function resolvePlayerCollision(
     collided = true;
   }
 
-  // Keep player safely inside balcony, helipad stairs, and rooftop helipad railings when elevated in En Illam!
+  // Keep player safely inside balcony, helipad stairs, and 3-pad rooftop sky terrace railings when elevated in En Illam!
   const prevLx = prevX - HOME_CENTER.x;
   const prevLz = prevZ - HOME_CENTER.z;
-  const wasInsideHome = prevLx >= -6.8 && prevLx <= 8.5 && prevLz >= -6.2 && prevLz <= 8.0;
+  const wasInsideHome = prevLx >= -17.4 && prevLx <= 17.4 && prevLz >= -6.2 && prevLz <= 8.0;
   if (wasInsideHome && currentY > 2.35) {
     const lx = x - HOME_CENTER.x;
     const lz = z - HOME_CENTER.z;
     if (currentY > 8.6) {
-      // On En Illam Rooftop Helipad Deck (r <= 5.35) or East Skywalk Bridge + Stair Top
-      const onDeck = Math.hypot(lx, lz) <= 5.35;
+      // On En Illam 3-Aircraft Rooftop Sky Terrace (Pad A r <= 5.35, Pad B at -11.4 r <= 5.35, Pad C at +11.4 r <= 5.35), Skybridges, or East Stair Top
+      const onDeckA = Math.hypot(lx, lz) <= 5.35;
+      const onDeckB = Math.hypot(lx + 11.4, lz) <= 5.35;
+      const onDeckC = Math.hypot(lx - 11.4, lz) <= 5.35;
+      const onWestBridge = lx >= -6.9 && lx <= -4.5 && lz >= -1.75 && lz <= 1.75;
+      const onEastBridge = lx >= 4.5 && lx <= 6.9 && lz >= -1.75 && lz <= 1.75;
       const onBridgeOrTopStair = lx >= 4.0 && lx <= 7.85 && lz >= -4.35 && lz <= -1.9;
       const headingDownStair = lx >= 6.15 && lx <= 7.85 && lz >= -4.35 && lz <= 6.8;
-      if (!onDeck && !onBridgeOrTopStair && !headingDownStair) {
+      if (!onDeckA && !onDeckB && !onDeckC && !onWestBridge && !onEastBridge && !onBridgeOrTopStair && !headingDownStair) {
         x = prevX;
         z = prevZ;
         collided = true;
